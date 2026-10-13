@@ -11,6 +11,11 @@
 
 ![학습 로드맵](docs/screens/05_roadmap.png)
 
+## 보고서
+
+- 중간보고서(Word): `docs/report/중간보고서_ETF_교육_콘텐츠_추천시스템.docx` — 문제·시나리오, 추천 기법 요약과 한계, 데이터·확보 계획, 시스템 설계·구현 현황, 실험 결과(v1 재현, v2, 선수 가드레일 민감도), 평가 계획, 일정, 부록(API·퀴즈·용어집·재현).
+- 보고서 그림: `docs/report/fig*.png`, 화면 캡처: `docs/screens/*.png`, 민감도 결과: `docs/results/prereq_sensitivity.json`.
+
 ## 빠른 시작
 
 ```bash
