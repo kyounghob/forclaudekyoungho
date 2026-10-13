@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>학습 설계 스튜디오</title>
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -12,7 +13,7 @@
     <span class="brand-mark">E</span>
     <div>
       <div class="brand-name">학습 설계 스튜디오</div>
-      <div class="brand-sub">ETF 교육 콘텐츠 개인화·세그먼트 추천 · <span id="bundle-info">번들 확인 중</span></div>
+      <div class="brand-sub">ETF 교육 콘텐츠 개인화·로드맵 추천 · <span id="bundle-info">번들 확인 중</span></div>
     </div>
   </div>
   <nav class="top-actions">
@@ -24,6 +25,7 @@
         <button data-act="import-json">설계 JSON 가져오기</button>
         <button data-act="export-csv">추천 결과 CSV 내보내기</button>
         <button data-act="export-rec-json">추천 결과 JSON 내보내기</button>
+        <button data-act="export-roadmap">로드맵 JSON 내보내기</button>
       </div>
       <input type="file" id="import-file" accept="application/json" hidden>
     </div>
@@ -34,13 +36,13 @@
 <main class="page">
   <section class="intro">
     <h1>학습 설계</h1>
-    <p class="muted">학습자 조건을 직접 입력하거나 자연어로 초안을 만든 뒤 추천을 계산하세요. 모든 추천은 미리 학습된 모델 번들로 계산하며 요청 중 재학습은 없습니다.</p>
+    <p class="muted">학습자의 투자 목적·성향·지식 수준을 진단하고 → 필수 기초 개념부터 목적별 핵심·심화 개념까지의 로드맵을 만든 뒤 → 다음에 공부할 단원을 추천하고 → 적합한 ETF 유형으로 연결합니다. 모든 계산은 미리 학습된 모델 번들로 하며 요청 중 재학습은 없습니다. 특정 상품의 매수·매도를 권유하지 않습니다.</p>
   </section>
 
   <section class="checklist" id="checklist">
     <button class="checklist-head" id="checklist-toggle">
       <span>설계 입력 체크리스트</span>
-      <span class="muted small" id="checklist-summary">0/7 완료 · 항목 펼쳐 보기</span>
+      <span class="muted small" id="checklist-summary">0/9 완료 · 항목 펼쳐 보기</span>
     </button>
     <ul class="checklist-items" id="checklist-items" hidden></ul>
   </section>
@@ -60,7 +62,7 @@
     </div>
     <div id="existing-picker" class="panel" hidden>
       <div class="row">
-        <input type="text" id="learner-query" placeholder="학습자 번호 또는 키워드(채권, 모바일, 적극 …)">
+        <input type="text" id="learner-query" placeholder="학습자 번호 또는 키워드(연금, 채권, 모바일, 적극 …)">
         <button class="btn" id="learner-search">검색</button>
       </div>
       <div id="learner-results" class="learner-results"></div>
@@ -68,8 +70,8 @@
     <div id="example-grid" class="example-grid"></div>
     <div class="panel">
       <h3>이렇게 적어보세요</h3>
-      <p class="muted small">① 관심 주제 → ② 수준(초급·중급·고급) → ③ 투자 경험·위험성향 → ④ 기기·시간대 → ⑤ 개수 순서로 적으면 됩니다. 따옴표 안에 단원 제목을 적고 "통과"·"완료"를 붙이면 학습 기록으로 읽습니다. 적지 않은 항목은 기본값을 씁니다.</p>
-      <p class="muted small">예시: "ETF 구조와 비용에 관심 있는 초급 학습자야. 투자 경험은 없고 모바일로 저녁에 공부해. 5개 추천해 줘."</p>
+      <p class="muted small">① 투자 목적(연금·노후, 배당·인컴, 장기 지수 투자, 단기 매매, 분산·안정) → ② 관심 주제 → ③ 수준(초급·중급·고급) → ④ 투자 경험·위험성향·투자 기간 → ⑤ 기기·시간대 → ⑥ 개수 순서로 적으면 됩니다. 따옴표 안에 단원 제목을 적고 "통과"·"완료"를 붙이면 학습 기록으로 읽습니다. 적지 않은 항목은 기본값을 씁니다.</p>
+      <p class="muted small">예시: "45세 직장인, 연금저축과 IRP로 노후 준비. 투자 경험 1~3년, 안정 성향, 10년 이상 장기로 모바일 저녁 학습. 초급."</p>
       <textarea id="nl-text" rows="4" placeholder="학습자를 한두 문장으로 설명하세요"></textarea>
       <div class="row">
         <button class="btn primary" id="nl-parse">자연어로 초안 만들기</button>
@@ -85,48 +87,64 @@
 
   <!-- 2 -->
   <section class="step" data-step="2" hidden>
-    <h2>2. 기본 정보</h2>
-    <p class="muted">연령대·소득분위는 세그먼트 변수로 쓰고, 성별은 수집하되 운영 라우터에서 제외합니다. 비워 두면 기본값을 씁니다.</p>
+    <h2>2. 기본 정보와 투자 목적</h2>
+    <p class="muted">투자 목적·투자 기간·위험성향은 로드맵의 단계 구성과 ETF 유형 연결에 쓰입니다. 연령대·소득분위는 세그먼트 변수로 쓰고, 성별은 수집하되 운영 라우터에서 제외합니다. 비워 두면 기본값을 씁니다.</p>
     <div id="existing-profile" class="panel" hidden></div>
-    <div class="form-grid" id="basic-form">
-      <label>학습자 이름(표시용) <input type="text" id="f-label" placeholder="새 학습자"></label>
-      <label>연령 <span class="help" title="연령대 세그먼트(29세 이하·30대·40대·50대·60세 이상)와 생애주기 규칙에 쓰입니다">?</span><input type="number" id="f-age" min="10" max="100" placeholder="기본 35"></label>
-      <label>성별 <span class="help" title="수집은 하지만 운영 라우터와 운영 설정은 성별을 쓰지 않습니다. 7단계의 성별 뒤집기 검사로 확인할 수 있습니다">?</span>
-        <select id="f-gender"><option value="0">남성</option><option value="1">여성</option></select></label>
-      <label>연소득(만원) <span class="help" title="모의 데이터의 5분위 경계로 소득분위를 정합니다. 비우면 중앙값">?</span><input type="number" id="f-income" min="0" step="100" placeholder="기본 중앙값"></label>
-      <label>투자 경험 <select id="f-exp"><option value="0">없음</option><option value="1">1~3년</option><option value="2">3년 이상</option></select></label>
-      <label>위험성향 <select id="f-risk"><option value="0">안정</option><option value="1" selected>중립</option><option value="2">적극</option></select></label>
-      <label>기기 <select id="f-mobile"><option value="1">모바일</option><option value="0">PC</option></select></label>
-      <label>학습 시간대 <select id="f-hour"><option value="4">미상</option><option value="0">출근</option><option value="1">점심</option><option value="2">저녁</option><option value="3">심야</option></select></label>
+    <div id="basic-form">
+      <div class="panel">
+        <h3>투자 목적과 기간</h3>
+        <div class="form-grid">
+          <label>투자 목적 <span class="help" title="목적에 따라 '목적별 핵심 개념' 단계의 단원과 연결되는 ETF 유형이 달라집니다">?</span><select id="f-goal"></select></label>
+          <label>투자 기간 <span class="help" title="단기면 유동성·호가 단원, 장기면 리밸런싱 단원이 심화 단계에 추가됩니다">?</span><select id="f-horizon"></select></label>
+          <label>위험성향 <span class="help" title="안정 성향이면 레버리지·인버스 심화 단원이 로드맵에서 빠지고 고위험 유형은 뒤로 밀립니다">?</span><select id="f-risk"><option value="0">안정</option><option value="1" selected>중립</option><option value="2">적극</option></select></label>
+        </div>
+        <div class="note small" id="goal-note"></div>
+      </div>
+      <div class="form-grid">
+        <label>학습자 이름(표시용) <input type="text" id="f-label" placeholder="새 학습자"></label>
+        <label>연령 <span class="help" title="연령대 세그먼트(29세 이하·30대·40대·50대·60세 이상)와 생애주기 규칙에 쓰입니다">?</span><input type="number" id="f-age" min="10" max="100" placeholder="기본 35"></label>
+        <label>성별 <span class="help" title="수집은 하지만 운영 라우터와 운영 설정은 성별을 쓰지 않습니다. 8단계의 성별 뒤집기 검사로 확인할 수 있습니다">?</span>
+          <select id="f-gender"><option value="0">남성</option><option value="1">여성</option></select></label>
+        <label>연소득(만원) <span class="help" title="모의 데이터의 5분위 경계로 소득분위를 정합니다. 비우면 중앙값">?</span><input type="number" id="f-income" min="0" step="100" placeholder="기본 중앙값"></label>
+        <label>투자 경험 <select id="f-exp"><option value="0">없음</option><option value="1">1~3년</option><option value="2">3년 이상</option></select></label>
+        <label>기기 <select id="f-mobile"><option value="1">모바일</option><option value="0">PC</option></select></label>
+        <label>학습 시간대 <select id="f-hour"><option value="4">미상</option><option value="0">출근</option><option value="1">점심</option><option value="2">저녁</option><option value="3">심야</option></select></label>
+      </div>
     </div>
   </section>
 
   <!-- 3 -->
   <section class="step" data-step="3" hidden>
-    <h2>3. 관심 주제와 수준</h2>
-    <p class="muted">관심 주제는 최대 2개입니다. 수준은 모의 진단 값이며 학습 기록이 쌓이면 퀴즈 결과로 갱신됩니다.</p>
+    <h2>3. 진단: 관심 주제·수준·진단 퀴즈</h2>
+    <p class="muted">관심 주제는 최대 2개입니다. 수준은 직접 고르거나 진단 퀴즈로 정합니다. 맞힌 문항의 단원은 '진단 통과' 기록이 되어 추천 후보에서 빠지고, 틀린 문항은 기록하지 않습니다.</p>
     <div id="topic-chips" class="topic-groups"></div>
     <div class="panel">
       <h3>진단 수준</h3>
       <div class="level-radio" id="level-radio">
         <label><input type="radio" name="placement" value="1" checked> 수준 1 · 기초 <span class="muted small">ETF가 무엇인지부터</span></label>
-        <label><input type="radio" name="placement" value="2"> 수준 2 · 구조·계산 <span class="muted small">NAV·추적오차·비용 계산</span></label>
-        <label><input type="radio" name="placement" value="3"> 수준 3 · 심화·위험 <span class="muted small">레버리지·롤오버·세금</span></label>
+        <label><input type="radio" name="placement" value="2"> 수준 2 · 구조·계산 <span class="muted small">NAV·괴리율·총보수·환헤지 계산</span></label>
+        <label><input type="radio" name="placement" value="3"> 수준 3 · 심화·위험 <span class="muted small">레버리지 복리·롤오버·세금</span></label>
       </div>
-      <details class="quiz">
-        <summary>간단 진단 3문항으로 수준 정하기 (선택)</summary>
-        <label><input type="checkbox" class="dq"> ETF의 NAV와 시장가격이 왜 다를 수 있는지 설명할 수 있다</label>
-        <label><input type="checkbox" class="dq"> 총보수와 매매비용·호가 스프레드의 차이를 안다</label>
-        <label><input type="checkbox" class="dq"> 레버리지 ETF의 음의 복리 효과를 계산해 본 적이 있다</label>
-        <button class="btn small" id="quiz-apply">진단 결과 적용</button>
-      </details>
+    </div>
+    <div class="panel" id="quiz-panel">
+      <div class="step-head">
+        <h3>진단 퀴즈 <span class="muted small" id="quiz-count"></span></h3>
+        <div class="row">
+          <button class="btn primary small" id="quiz-score">채점하기</button>
+          <button class="btn small" id="quiz-apply">진단 결과 적용</button>
+          <button class="btn small ghost" id="quiz-reset">답 지우기</button>
+        </div>
+      </div>
+      <p class="muted small" id="quiz-note"></p>
+      <div id="quiz-result" hidden><div class="badge-line" id="quiz-summary"></div></div>
+      <div id="quiz-list" class="quiz-list"></div>
     </div>
   </section>
 
   <!-- 4 -->
   <section class="step" data-step="4" hidden>
     <h2>4. 학습 기록</h2>
-    <p class="muted">학습 시도마다 한 행입니다. 조회 1·완료 2·퀴즈 통과·저장 3점의 최댓값이 행동 점수가 되고, 퀴즈 통과 단원은 추천 후보에서 빠집니다. 이탈은 비선호로 보지 않습니다.</p>
+    <p class="muted">학습 시도마다 한 행입니다. 조회 1·완료 2·퀴즈 통과·저장 3점의 최댓값이 행동 점수가 되고, 퀴즈 통과 단원(진단 통과 포함)은 추천 후보에서 빠집니다. 이탈은 비선호로 보지 않습니다.</p>
     <div id="existing-history" hidden></div>
     <div id="event-editor">
       <div class="row wrap">
@@ -150,11 +168,30 @@
 
   <!-- 5 -->
   <section class="step" data-step="5" hidden>
-    <h2>5. 추천 설정</h2>
-    <p class="muted">기본값은 검증에서 고른 운영 설정입니다. 비교 목적이면 다른 기법을 강제로 고를 수 있습니다.</p>
+    <div class="step-head">
+      <h2>5. 학습 로드맵</h2>
+      <button class="btn small" id="rm-refresh">다시 계산</button>
+    </div>
+    <p class="muted">진단 → 필수 기초 개념 → 목적별 핵심 개념 → 심화·리스크 → ETF 유형 연결. 각 단원은 선수 단원을 통과해야 열립니다. 추천 엔진은 현재 단계의 학습 가능 단원에 가중치(로드맵 신호)를 주고, 가드레일로 선수 미이수 단원을 거릅니다.</p>
+    <div id="roadmap-status" class="muted small">계산 중…</div>
+    <div id="roadmap-view" hidden>
+      <div class="badge-line" id="rm-badges"></div>
+      <div class="rm-flow" id="rm-flow"></div>
+      <div class="note" id="rm-next"></div>
+      <div id="rm-stages"></div>
+      <div class="legend rm-legend"><span class="l-passed">통과</span><span class="l-avail">학습 가능</span><span class="l-locked">잠김(선수 단원 미이수)</span><span class="l-next">다음 단원</span></div>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section class="step" data-step="6" hidden>
+    <h2>6. 추천 설정</h2>
+    <p class="muted">기본값은 검증에서 고른 운영 설정과 시연용 가드레일입니다. 비교 목적이면 다른 기법을 강제로 고를 수 있습니다.</p>
     <div class="form-grid">
       <label>추천 개수 k <span class="help" title="1~20. 평가는 k=5 기준입니다">?</span><input type="number" id="s-k" min="1" max="20" value="5"></label>
       <label>설정 선택 <span class="help" title="운영 라우터(성별 제외)가 기본입니다. 기법군을 고르면 검증에서 고른 그 기법군의 최적 설정을 씁니다">?</span><select id="s-algorithm"></select></label>
+      <label>선수 단원 미이수 차단 <span class="help" title="로드맵 선수 관계를 가드레일로 씁니다. 끄면 선수 단원을 건너뛴 추천이 섞이고 검사 결과에 참고용으로 표시됩니다">?</span>
+        <select id="s-prereq"><option value="1" selected>차단 (기본)</option><option value="0">차단 없음</option></select></label>
       <label>두 단계 위 차단 <span class="help" title="추정 수준보다 이만큼 이상 높은 단원은 후보에서 제외합니다 (기본 2)">?</span>
         <select id="s-block"><option value="1">한 단계 위부터 차단</option><option value="2" selected>두 단계 위 차단 (기본)</option><option value="3">차단 없음</option></select></label>
       <label>한 단계 위 단원 최대 <span class="help" title="목록에 들어갈 수 있는 한 단계 위 단원 수 (기본 1)">?</span><input type="number" id="s-plus" min="0" max="5" value="1"></label>
@@ -165,19 +202,20 @@
     <div class="note" id="algo-note"></div>
   </section>
 
-  <!-- 6 -->
-  <section class="step" data-step="6" hidden>
+  <!-- 7 -->
+  <section class="step" data-step="7" hidden>
     <div class="step-head">
-      <h2>6. 추천 미리보기</h2>
+      <h2>7. 추천 미리보기</h2>
       <button class="btn primary" id="run-recommend">추천 계산</button>
     </div>
     <div id="rec-status" class="muted small">아직 계산하지 않았습니다.</div>
     <div id="rec-view" hidden>
       <div class="badge-line" id="rec-badges"></div>
+      <div class="note" id="rec-roadmap"></div>
       <div class="map-tools row">
         <span class="muted small">보기 배율</span>
         <button class="btn small ghost" id="zoom-out">−</button><span id="zoom-val">100%</span><button class="btn small ghost" id="zoom-in">+</button>
-        <span class="muted small" style="margin-left:auto">주제 × 수준 배치도 · 열 = 주제 20개, 행 = 수준 3단계</span>
+        <span class="muted small" style="margin-left:auto" id="map-caption">주제 × 수준 배치도</span>
       </div>
       <div class="map-wrap"><div id="topic-map" class="topic-map"></div></div>
       <div class="legend" id="map-legend"></div>
@@ -198,10 +236,10 @@
     </div>
   </section>
 
-  <!-- 7 -->
-  <section class="step" data-step="7" hidden>
-    <h2>7. 시뮬레이션과 what-if</h2>
-    <p class="muted">단원을 통과했다고 가정하거나 세그먼트 입력을 바꿔 추천이 어떻게 달라지는지 봅니다. 성별 뒤집기는 코드 수준의 입력 의존성 점검이며 인과적 공정성 증명이 아닙니다.</p>
+  <!-- 8 -->
+  <section class="step" data-step="8" hidden>
+    <h2>8. 시뮬레이션과 what-if</h2>
+    <p class="muted">단원을 통과했다고 가정하거나 세그먼트 입력을 바꿔 추천과 로드맵 진행률이 어떻게 달라지는지 봅니다. 성별 뒤집기는 코드 수준의 입력 의존성 점검이며 인과적 공정성 증명이 아닙니다.</p>
     <div class="two-col">
       <div class="panel">
         <h3>통과했다고 가정할 단원</h3>
@@ -216,7 +254,7 @@
         <button class="btn primary" id="run-sim">시뮬레이션 실행</button>
       </div>
       <div>
-        <div id="sim-status" class="muted small">6단계에서 추천을 먼저 계산하세요.</div>
+        <div id="sim-status" class="muted small">7단계에서 추천을 먼저 계산하세요.</div>
         <div id="sim-view" hidden>
           <div class="badge-line" id="sim-badges"></div>
           <div class="diff-grid">
@@ -228,9 +266,30 @@
     </div>
   </section>
 
-  <!-- 8 -->
-  <section class="step" data-step="8" hidden>
-    <h2>8. 기법 비교와 오프라인 평가</h2>
+  <!-- 9 -->
+  <section class="step" data-step="9" hidden>
+    <div class="step-head">
+      <h2>9. ETF 유형 연결과 데이터 출처</h2>
+      <div class="row">
+        <label class="chk small"><input type="checkbox" id="types-assume" checked> 8단계 통과 가정 반영</label>
+        <button class="btn small" id="types-refresh">다시 계산</button>
+      </div>
+    </div>
+    <p class="muted">로드맵의 마지막 단계입니다. 목적·성향에 맞는 ETF 유형을 교육용 카드로 보여 주고, 각 유형에 필요한 개념 단원의 통과 여부로 카드가 열립니다. 유형 통계는 KRX 정보데이터시스템 ETF 전종목 기본정보(또는 샘플)에서 계산하며, 개별 상품의 적합성 판단이나 매수 권유가 아닙니다.</p>
+    <div id="types-status" class="muted small">계산 중…</div>
+    <div id="types-view" hidden>
+      <div class="badge-line" id="types-badges"></div>
+      <div class="type-grid" id="types-grid"></div>
+      <h3>공개 데이터·교육 자료 출처</h3>
+      <p class="muted small">단원 자료와 유형 통계의 출처 목록입니다. 기관 개편으로 세부 주소가 바뀔 수 있어 기관 루트와 메뉴 경로를 함께 표시합니다. '확인'은 2026-10 기준 검색으로 확인한 범위입니다.</p>
+      <div id="sources-stats"></div>
+      <div class="table-wrap"><table class="table" id="sources-table"></table></div>
+    </div>
+  </section>
+
+  <!-- 10 -->
+  <section class="step" data-step="10" hidden>
+    <h2>10. 기법 비교와 오프라인 평가</h2>
     <p class="muted">같은 후보·같은 가드레일로 여러 기법의 Top-K를 나란히 보고, 번들에 기록된 오프라인 평가 결과(테스트 주차, 사용자 평균)를 확인합니다.</p>
     <div class="step-head"><h3>이 학습자에 대한 기법 비교</h3><button class="btn" id="run-compare">비교 계산</button></div>
     <div id="compare-view" class="table-wrap"></div>
@@ -238,15 +297,15 @@
     <div id="eval-view">불러오는 중…</div>
   </section>
 
-  <!-- 9 -->
-  <section class="step" data-step="9" hidden>
-    <h2>9. 저장·내보내기</h2>
+  <!-- 11 -->
+  <section class="step" data-step="11" hidden>
+    <h2>11. 저장·내보내기</h2>
     <div class="two-col">
       <div class="panel">
         <h3>설계 저장</h3>
-        <label>설계 이름 <input type="text" id="design-name" placeholder="예: 초급 모바일 학습자 A"></label>
+        <label>설계 이름 <input type="text" id="design-name" placeholder="예: 연금 목적 초급 학습자 A"></label>
         <label>메모 <textarea id="design-memo" rows="3" placeholder="실험 메모, 가정, 확인할 점"></textarea></label>
-        <div class="row">
+        <div class="row wrap">
           <button class="btn primary" id="design-save">서버에 저장</button>
           <button class="btn" id="design-export">JSON 내보내기</button>
           <button class="btn" id="rec-export">추천 결과 CSV</button>
@@ -263,7 +322,7 @@
 
   <nav class="step-nav">
     <button class="btn ghost" id="nav-prev">← 이전</button>
-    <span class="muted small" id="nav-indicator">1/9 · 학습자 아이디어 스케치</span>
+    <span class="muted small" id="nav-indicator">1/11 · 아이디어 스케치</span>
     <button class="btn primary" id="nav-next">다음 →</button>
   </nav>
 </main>

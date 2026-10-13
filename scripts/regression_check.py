@@ -15,7 +15,7 @@ EXPECTED = {"RULE": 0.17123, "Global": 0.17123, "RouterNoGender": 0.17119, "Rout
             "ICF": 0.11112, "CONTENT": 0.09957, "MF": 0.09264, "MF_OBS": 0.07099, "Random": 0.05993, "MLP": 0.05325}
 
 t0 = time.time()
-cfg = TrainConfig()
+cfg = TrainConfig(catalog_version=1, generator_version=1)   # 노트북 원본 세계(60단원·난수 순서 동일)
 ds = Dataset.synthetic(cfg)
 print("summary", ds.summary())
 bundle = train(ds, cfg, out_dir=sys.argv[1] if len(sys.argv) > 1 else None)

@@ -17,7 +17,7 @@ from .quiz import public_questions, score_quiz
 from .roadmap import build_roadmap
 from .sources import load_etf_universe, type_stats
 from .sources.registry import SOURCES, source_info, sources_for_items
-from .taxonomy import ETF_TYPES, TYPE_BY_KEY, goal_label, horizon_label, types_for_goal
+from .taxonomy import ETF_TYPES, ROADMAP_TEMPLATES, TYPE_BY_KEY, goal_label, horizon_label, types_for_goal
 from .data import score_attempts
 from .evaluation import candidate_items, choose_items
 from .features import build_features
@@ -394,7 +394,9 @@ class RecommendationService:
                               operational_router=self.operational_router, operational_algorithm=dict(aid=op.aid, family=op.family,
                               family_label=FAMILY_KO.get(op.family, op.family), name=op.name, formula=explain(op, self.info)),
                               methods=self.method_names(), neural_enabled=self.models.enable_neural, guardrail=self.b.config.guardrail.__dict__,
+                              configurations=len(self.algos), signal_count=len(self.b.signal_meta), quiz_questions=len(public_questions()),
                               goals=GOALS, horizons=HORIZONS, catalog_version=int(self.catalog.version), universe=self.universe_prov,
+                              templates={g: dict(types=t["types"]) for g, t in ROADMAP_TEMPLATES.items()}, type_names={t["key"]: t["name"] for t in ETF_TYPES},
                               dataset=self.b.dataset_summary, labels=LABELS, seg_vars=SEG_VARS, seg_ko=SEG_KO, notice=NOTICE,
                               test_ndcg=self.b.results.set_index("method").ndcg.to_dict()))
 

@@ -1,0 +1,1666 @@
+{
+  "version": "1.0.0",
+  "created_at": "2026-10-13T15:12:52",
+  "config": {
+    "n_learners": 15000,
+    "seed": 42,
+    "effect_scale": 1.0,
+    "gender_effect": 0.3,
+    "val_week": 2,
+    "test_week": 3,
+    "operational_router": "RouterNoGender",
+    "router_lams": [
+      0,
+      20,
+      100,
+      500,
+      3000,
+      1000000000.0
+    ],
+    "router_reps": 2,
+    "bootstrap_n": 500,
+    "train_max_rows": 200000,
+    "n_workers": 2,
+    "guardrail": {
+      "block_gap": 2,
+      "plus_one_max": 1,
+      "exclude_passed": true,
+      "prereq_block": false
+    },
+    "catalog_version": 2,
+    "generator_version": 2
+  },
+  "dataset": {
+    "users": 15000,
+    "items": 63,
+    "weeks": 4,
+    "study_attempts": 108777,
+    "complete": 50257,
+    "quiz_pass": 24187,
+    "save": 12825,
+    "drop": 46772,
+    "attempts_by_week": {
+      "0": 28359,
+      "1": 27706,
+      "2": 26720,
+      "3": 25992
+    },
+    "mastery_label_equals_quiz": true,
+    "distinct_pairs": 96008,
+    "density": 0.1015957671957672,
+    "goals": {
+      "long_term": 3396,
+      "income": 3199,
+      "trading": 3121,
+      "pension": 3011,
+      "diversify": 2273
+    },
+    "horizons": {
+      "mid": 6032,
+      "long": 5883,
+      "short": 3085
+    },
+    "catalog_version": 2,
+    "source": "synthetic"
+  },
+  "dataset_meta": {
+    "seed": 42,
+    "effect_scale": 1.0,
+    "gender_effect": 0.3,
+    "generator_version": 2,
+    "catalog_version": 2,
+    "gender_effect_by_topic": {
+      "ETF 구조": 0.171,
+      "지수": 0.415,
+      "추적오차": 0.072,
+      "비용": -0.456,
+      "분배금": 0.036,
+      "섹터 ETF": 0.033,
+      "채권 ETF": -0.176,
+      "금 ETF": -0.491,
+      "환헤지": -0.021,
+      "레버리지·인버스": -0.575,
+      "리밸런싱": -0.05,
+      "자산배분": -0.005,
+      "해외 ETF": 0.732,
+      "유동성": 0.328,
+      "테마 ETF": 0.267,
+      "원자재 ETF": 0.151,
+      "리츠 ETF": -0.07,
+      "연금계좌 ETF": -0.085,
+      "액티브 ETF": -0.164,
+      "ESG ETF": 0.245,
+      "커버드콜 ETF": 0.419
+    }
+  },
+  "validation": {
+    "mode": "next-week observed quiz-pass; hard-eligible unmastered units",
+    "week": 2,
+    "rows": 6722,
+    "zero_observed_target": 3070,
+    "raw_positive_items": 6101,
+    "eligible_positive_items": 6010,
+    "eligible_min": 34,
+    "eligible_max": 63
+  },
+  "test": {
+    "mode": "next-week observed quiz-pass; hard-eligible unmastered units",
+    "week": 3,
+    "rows": 6438,
+    "zero_observed_target": 2949,
+    "raw_positive_items": 5920,
+    "eligible_positive_items": 5805,
+    "eligible_min": 29,
+    "eligible_max": 63
+  },
+  "configurations": 2631,
+  "family_counts": {
+    "HYBR": 1024,
+    "RULE": 512,
+    "HYB2": 480,
+    "CTX": 216,
+    "HYB3": 192,
+    "SEGPOP": 93,
+    "PERS": 64,
+    "UCF": 27,
+    "ICF": 8,
+    "CONTENT": 6,
+    "MF": 6,
+    "POP": 1,
+    "MF_OBS": 1,
+    "MLP": 1
+  },
+  "signal_count": 154,
+  "selection": {
+    "families": {
+      "POP": 0,
+      "RULE": 455,
+      "CONTENT": 671,
+      "UCF": 698,
+      "ICF": 710,
+      "MF": 714,
+      "MF_OBS": 2629,
+      "MLP": 2630,
+      "Global": 455,
+      "NoDemographics": 1407
+    },
+    "router_lambdas": {
+      "RouterFull": 3000.0,
+      "RouterNoGender": 3000.0,
+      "RouterNoGenderIncome": 3000.0
+    },
+    "operational": "RouterNoGender",
+    "operational_algorithm": 455,
+    "no_gender_configs": 2027,
+    "no_gender_income_configs": 909,
+    "min_leaf_users": 20,
+    "validation_best_ndcg": 0.13768899466083145,
+    "operational_champion_counts": {
+      "423": 21,
+      "455": 2755,
+      "456": 1237,
+      "519": 26,
+      "520": 474,
+      "521": 366,
+      "595": 770,
+      "596": 381,
+      "647": 338,
+      "1407": 70
+    }
+  },
+  "router_tuning": {
+    "RouterFull": [
+      {
+        "lam": 0.0,
+        "mean": 0.12010082043707371,
+        "std": 0.0046867690116714
+      },
+      {
+        "lam": 20.0,
+        "mean": 0.12315860576927662,
+        "std": 0.004667765772273372
+      },
+      {
+        "lam": 100.0,
+        "mean": 0.12883916683495045,
+        "std": 0.005805191010233643
+      },
+      {
+        "lam": 500.0,
+        "mean": 0.13302630186080933,
+        "std": 0.004133711050356911
+      },
+      {
+        "lam": 3000.0,
+        "mean": 0.1361500807106495,
+        "std": 0.005303709253903608
+      },
+      {
+        "lam": 1000000000.0,
+        "mean": 0.13572486490011215,
+        "std": 0.005589283320818308
+      }
+    ],
+    "RouterNoGender": [
+      {
+        "lam": 0.0,
+        "mean": 0.12177436612546444,
+        "std": 0.004248816530967754
+      },
+      {
+        "lam": 20.0,
+        "mean": 0.1256712879985571,
+        "std": 0.004553818708817206
+      },
+      {
+        "lam": 100.0,
+        "mean": 0.12949740327894688,
+        "std": 0.005527314165535669
+      },
+      {
+        "lam": 500.0,
+        "mean": 0.13224007189273834,
+        "std": 0.003666483670976834
+      },
+      {
+        "lam": 3000.0,
+        "mean": 0.1360733024775982,
+        "std": 0.005525865408568175
+      },
+      {
+        "lam": 1000000000.0,
+        "mean": 0.13572486490011215,
+        "std": 0.005589283320818308
+      }
+    ],
+    "RouterNoGenderIncome": [
+      {
+        "lam": 0.0,
+        "mean": 0.12208794243633747,
+        "std": 0.005242245783785143
+      },
+      {
+        "lam": 20.0,
+        "mean": 0.12336191162467003,
+        "std": 0.004579980709891101
+      },
+      {
+        "lam": 100.0,
+        "mean": 0.12564541585743427,
+        "std": 0.004404248475491864
+      },
+      {
+        "lam": 500.0,
+        "mean": 0.12906816601753235,
+        "std": 0.004223127373416552
+      },
+      {
+        "lam": 3000.0,
+        "mean": 0.13143862783908844,
+        "std": 0.005119280585961922
+      },
+      {
+        "lam": 1000000000.0,
+        "mean": 0.12826209887862206,
+        "std": 0.005412874438874871
+      }
+    ]
+  },
+  "training": [
+    {
+      "model": "MF_sampled",
+      "factors": 8,
+      "reg": 0.01,
+      "seed": 42,
+      "positive_rows": 53456,
+      "negative_rows": 160368,
+      "initial_negative_collisions": 19901,
+      "final_negative_collisions": 0,
+      "loss_first": 0.7238371128880382,
+      "loss_last": 0.17967093340100304,
+      "snapshot": "B:42:(15000, 63):2:fa3af53016708cd7e45d"
+    },
+    {
+      "model": "MF_sampled",
+      "factors": 8,
+      "reg": 0.1,
+      "seed": 42,
+      "positive_rows": 53456,
+      "negative_rows": 160368,
+      "initial_negative_collisions": 19901,
+      "final_negative_collisions": 0,
+      "loss_first": 0.7236291582410973,
+      "loss_last": 0.20717193162198624,
+      "snapshot": "B:42:(15000, 63):2:fa3af53016708cd7e45d"
+    },
+    {
+      "model": "MF_sampled",
+      "factors": 16,
+      "reg": 0.01,
+      "seed": 42,
+      "positive_rows": 53456,
+      "negative_rows": 160368,
+      "initial_negative_collisions": 19901,
+      "final_negative_collisions": 0,
+      "loss_first": 0.7117558912187592,
+      "loss_last": 0.10041500964285335,
+      "snapshot": "B:42:(15000, 63):2:fa3af53016708cd7e45d"
+    },
+    {
+      "model": "MF_sampled",
+      "factors": 16,
+      "reg": 0.1,
+      "seed": 42,
+      "positive_rows": 53456,
+      "negative_rows": 160368,
+      "initial_negative_collisions": 19901,
+      "final_negative_collisions": 0,
+      "loss_first": 0.7113162081279429,
+      "loss_last": 0.12078723178513569,
+      "snapshot": "B:42:(15000, 63):2:fa3af53016708cd7e45d"
+    },
+    {
+      "model": "MF_sampled",
+      "factors": 32,
+      "reg": 0.01,
+      "seed": 42,
+      "positive_rows": 53456,
+      "negative_rows": 160368,
+      "initial_negative_collisions": 19901,
+      "final_negative_collisions": 0,
+      "loss_first": 0.6793678789233705,
+      "loss_last": 0.03381056873536474,
+      "snapshot": "B:42:(15000, 63):2:fa3af53016708cd7e45d"
+    },
+    {
+      "model": "MF_sampled",
+      "factors": 32,
+      "reg": 0.1,
+      "seed": 42,
+      "positive_rows": 53456,
+      "negative_rows": 160368,
+      "initial_negative_collisions": 19901,
+      "final_negative_collisions": 0,
+      "loss_first": 0.6797649244711236,
+      "loss_last": 0.048683238902319625,
+      "snapshot": "B:42:(15000, 63):2:fa3af53016708cd7e45d"
+    },
+    {
+      "model": "mf_observed",
+      "training_rows": 56065,
+      "positive": 56065,
+      "zero": 0,
+      "seed": 113,
+      "epochs": 12,
+      "loss_first": 0.4570359723463563,
+      "loss_last": 0.04274869650119943,
+      "state_sha256": "7399dcca3738589d7de4ac867c525d8ace189e3f2b84dacf507eac9c303d8051",
+      "snapshot": "B:42:(15000, 63):2:fa3af53016708cd7e45d"
+    },
+    {
+      "model": "mlp9",
+      "training_rows": 56065,
+      "positive": 12166,
+      "zero": 43899,
+      "seed": 113,
+      "epochs": 12,
+      "loss_first": 0.6510244717205027,
+      "loss_last": 0.3944585278868133,
+      "state_sha256": "4860c1bf09d3925600f30fb68864973ef4a2b0697e10d90d668338d176e421bd",
+      "snapshot": "B:42:(15000, 63):2:fa3af53016708cd7e45d"
+    },
+    {
+      "model": "MF_sampled",
+      "factors": 16,
+      "reg": 0.1,
+      "seed": 42,
+      "positive_rows": 75684,
+      "negative_rows": 227052,
+      "initial_negative_collisions": 36140,
+      "final_negative_collisions": 0,
+      "loss_first": 0.6468743204512913,
+      "loss_last": 0.14225819294321368,
+      "snapshot": "B:42:(15000, 63):3:7e40296d389dd7040be7"
+    },
+    {
+      "model": "mf_observed",
+      "training_rows": 82785,
+      "positive": 82785,
+      "zero": 0,
+      "seed": 113,
+      "epochs": 12,
+      "loss_first": 0.4548048528728835,
+      "loss_last": 0.05765412867873837,
+      "state_sha256": "114fb42b4bd7a5a08891e7992ce0540b7d73ed322db4f7087d63bd4e18dd22cd",
+      "snapshot": "B:42:(15000, 63):3:7e40296d389dd7040be7"
+    },
+    {
+      "model": "mlp9",
+      "training_rows": 82785,
+      "positive": 18267,
+      "zero": 64518,
+      "seed": 113,
+      "epochs": 12,
+      "loss_first": 0.6109698205676899,
+      "loss_last": 0.425973551592807,
+      "state_sha256": "0bbfbfce06c8a831cdc8abf85e2aa3572741f6c5d7432f57c8670a856664edfe",
+      "snapshot": "B:42:(15000, 63):3:7e40296d389dd7040be7"
+    }
+  ],
+  "results": [
+    {
+      "method": "RULE",
+      "ndcg": 0.1356041365274,
+      "diversity": 0.8975613544579062,
+      "hit_diagnostic": 0.255358807082945,
+      "coverage_diagnostic": 1.0,
+      "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.6876048462255359,
+      "users": 6438,
+      "requests": 6438,
+      "difference_vs_global": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "method": "Global",
+      "ndcg": 0.1356041365274,
+      "diversity": 0.8975613544579062,
+      "hit_diagnostic": 0.255358807082945,
+      "coverage_diagnostic": 1.0,
+      "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.6876048462255359,
+      "users": 6438,
+      "requests": 6438,
+      "difference_vs_global": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "method": "RouterNoGender",
+      "ndcg": 0.13427238633534558,
+      "diversity": 0.9108574091332713,
+      "hit_diagnostic": 0.2503883193538366,
+      "coverage_diagnostic": 1.0,
+      "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.6277415346380864,
+      "users": 6438,
+      "requests": 6438,
+      "difference_vs_global": -0.0013317501920543993,
+      "ci_low": -0.0033260505898781703,
+      "ci_high": 0.0008330762568882087
+    },
+    {
+      "method": "RouterFull",
+      "ndcg": 0.13412364481287875,
+      "diversity": 0.9106865486175832,
+      "hit_diagnostic": 0.2503883193538366,
+      "coverage_diagnostic": 1.0,
+      "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.628735632183908,
+      "users": 6438,
+      "requests": 6438,
+      "difference_vs_global": -0.001480491714521247,
+      "ci_low": -0.003446417832337523,
+      "ci_high": 0.0006434596909875638
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "ndcg": 0.12623077411333777,
+      "diversity": 0.9430257844050949,
+      "hit_diagnostic": 0.23967070518794656,
+      "coverage_diagnostic": 0.9682539682539683,
+      "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.6384280832556695,
+      "users": 6438,
+      "requests": 6438,
+      "difference_vs_global": -0.009373362414062216,
+      "ci_low": -0.013534801055740278,
+      "ci_high": -0.005086314212208112
+    },
+    {
+      "method": "NoDemographics",
+      "ndcg": 0.12380859293565573,
+      "diversity": 0.9600963031997515,
+      "hit_diagnostic": 0.23392357875116496,
+      "coverage_diagnostic": 0.9523809523809523,
+      "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.6713264989127058,
+      "users": 6438,
+      "requests": 6438,
+      "difference_vs_global": -0.011795543591744282,
+      "ci_low": -0.016790304257681837,
+      "ci_high": -0.00744465383029254
+    },
+    {
+      "method": "UCF",
+      "ndcg": 0.10609622838735873,
+      "diversity": 0.9443926685305996,
+      "hit_diagnostic": 0.21590556073314693,
+      "coverage_diagnostic": 0.873015873015873,
+      "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.840354147250699,
+      "users": 6438,
+      "requests": 6438,
+      "difference_vs_global": -0.029507908140041273,
+      "ci_low": -0.03472910139509953,
+      "ci_high": -0.024171173176324483
+    },
+    {
+      "method": "RouterNoGender+prereq",
+      "ndcg": 0.1013574519038136,
+      "diversity": 0.997452625038832,
+      "hit_diagnostic": 0.18468468468468469,
+      "coverage_diagnostic": 0.9523809523809523,
+      "short_list_rate": 0.5250077663870767,
+      "prereq_violation_rate": 0.0,
+      "users": 6438,
+      "requests": 6438,
+      "difference_vs_global": -0.03424668462358641,
+      "ci_low": -0.0398529754426842,
+      "ci_high": -0.02775958085250123
+    },
+    {
+      "method": "POP",
+      "ndcg": 0.09507361098176409,
+      "diversity": 0.9942373407890649,
+      "hit_diagnostic": 0.19260639950295122,
+      "coverage_diagnostic": 0.2222222222222222,
+      "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.3996893445169307,
+      "users": 6438,
+      "requests": 6438,
+      "difference_vs_global": -0.04053052554563589,
+      "ci_low": -0.046272426721681824,
+      "ci_high": -0.03479365158324627
+    },
+    {
+      "method": "ICF",
+      "ndcg": 0.08288125458400089,
+      "diversity": 0.9759086672879778,
+      "hit_diagnostic": 0.17287977632805218,
+      "coverage_diagnostic": 1.0,
+      "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.8215284249767009,
+      "users": 6438,
+      "requests": 6438,
+      "difference_vs_global": -0.05272288194339911,
+      "ci_low": -0.059230167873206056,
+      "ci_high": -0.04548971476772984
+    },
+    {
+      "method": "CONTENT",
+      "ndcg": 0.08046502847868257,
+      "diversity": 0.8881640260950606,
+      "hit_diagnostic": 0.16371543957750853,
+      "coverage_diagnostic": 1.0,
+      "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.8152842497670084,
+      "users": 6438,
+      "requests": 6438,
+      "difference_vs_global": -0.055139108048717404,
+      "ci_low": -0.060379393955844164,
+      "ci_high": -0.04929923635079536
+    },
+    {
+      "method": "MLP",
+      "ndcg": 0.0734355854846216,
+      "diversity": 0.9998602050326189,
+      "hit_diagnostic": 0.14554209381795588,
+      "coverage_diagnostic": 1.0,
+      "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.35340167753960855,
+      "users": 6438,
+      "requests": 6438,
+      "difference_vs_global": -0.06216855104277839,
+      "ci_low": -0.06832622031019284,
+      "ci_high": -0.05563423163383262
+    },
+    {
+      "method": "MF_OBS",
+      "ndcg": 0.06979100663111712,
+      "diversity": 0.9806927617272446,
+      "hit_diagnostic": 0.14864864864864866,
+      "coverage_diagnostic": 1.0,
+      "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.6096613855234545,
+      "users": 6438,
+      "requests": 6438,
+      "difference_vs_global": -0.06581312989628288,
+      "ci_low": -0.07258417979008447,
+      "ci_high": -0.06000569201191341
+    },
+    {
+      "method": "MF",
+      "ndcg": 0.06864982974326746,
+      "diversity": 0.9491301646474061,
+      "hit_diagnostic": 0.15113389251320286,
+      "coverage_diagnostic": 1.0,
+      "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.8275551413482448,
+      "users": 6438,
+      "requests": 6438,
+      "difference_vs_global": -0.06695430678413253,
+      "ci_low": -0.07290233185866019,
+      "ci_high": -0.06110134764748962
+    },
+    {
+      "method": "Random",
+      "ndcg": 0.04300255881540808,
+      "diversity": 0.9730351040695869,
+      "hit_diagnostic": 0.10469089779434607,
+      "coverage_diagnostic": 1.0,
+      "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.8653929791860826,
+      "users": 6438,
+      "requests": 6438,
+      "difference_vs_global": -0.0926015777119919,
+      "ci_low": -0.09922687324135461,
+      "ci_high": -0.08635606847764647
+    }
+  ],
+  "group_results": [
+    {
+      "method": "Global",
+      "variable": "gender",
+      "group": 0,
+      "users": 3297,
+      "ndcg": 0.13325392702281996,
+      "ci_low": 0.12510371136543957,
+      "ci_high": 0.14203959842053324
+    },
+    {
+      "method": "Global",
+      "variable": "gender",
+      "group": 1,
+      "users": 3141,
+      "ndcg": 0.13807107085933262,
+      "ci_low": 0.12975595672429338,
+      "ci_high": 0.14763904663459237
+    },
+    {
+      "method": "Global",
+      "variable": "age_band",
+      "group": 0,
+      "users": 1210,
+      "ndcg": 0.14518463908624382,
+      "ci_low": 0.1311933679356325,
+      "ci_high": 0.160156455186254
+    },
+    {
+      "method": "Global",
+      "variable": "age_band",
+      "group": 1,
+      "users": 1879,
+      "ndcg": 0.12577363540392125,
+      "ci_low": 0.11479169514690908,
+      "ci_high": 0.13590250941326487
+    },
+    {
+      "method": "Global",
+      "variable": "age_band",
+      "group": 2,
+      "users": 1933,
+      "ndcg": 0.1322663298344405,
+      "ci_low": 0.12334198341014542,
+      "ci_high": 0.1427115729026225
+    },
+    {
+      "method": "Global",
+      "variable": "age_band",
+      "group": 3,
+      "users": 1058,
+      "ndcg": 0.1358777877148777,
+      "ci_low": 0.12084508858531617,
+      "ci_high": 0.150413564376019
+    },
+    {
+      "method": "Global",
+      "variable": "age_band",
+      "group": 4,
+      "users": 358,
+      "ndcg": 0.17203307757755307,
+      "ci_low": 0.1389041924944219,
+      "ci_high": 0.20493392165909655
+    },
+    {
+      "method": "Global",
+      "variable": "income_q",
+      "group": 0,
+      "users": 1311,
+      "ndcg": 0.14736976570567156,
+      "ci_low": 0.13272271184923362,
+      "ci_high": 0.16179809986412455
+    },
+    {
+      "method": "Global",
+      "variable": "income_q",
+      "group": 1,
+      "users": 1316,
+      "ndcg": 0.1346274195239907,
+      "ci_low": 0.11982040696912694,
+      "ci_high": 0.14904280104400072
+    },
+    {
+      "method": "Global",
+      "variable": "income_q",
+      "group": 2,
+      "users": 1278,
+      "ndcg": 0.13756301200592694,
+      "ci_low": 0.1233442493394405,
+      "ci_high": 0.1521140540555296
+    },
+    {
+      "method": "Global",
+      "variable": "income_q",
+      "group": 3,
+      "users": 1268,
+      "ndcg": 0.12987147349973863,
+      "ci_low": 0.11502998875621087,
+      "ci_high": 0.1419692482914731
+    },
+    {
+      "method": "Global",
+      "variable": "income_q",
+      "group": 4,
+      "users": 1265,
+      "ndcg": 0.1281940128762457,
+      "ci_low": 0.1163045067414609,
+      "ci_high": 0.14123782422318143
+    },
+    {
+      "method": "Global",
+      "variable": "click_tier",
+      "group": 0,
+      "users": 906,
+      "ndcg": 0.12750932077857025,
+      "ci_low": 0.11156173222873253,
+      "ci_high": 0.14347238032971793
+    },
+    {
+      "method": "Global",
+      "variable": "click_tier",
+      "group": 1,
+      "users": 3525,
+      "ndcg": 0.1263666179543493,
+      "ci_low": 0.11731883041454709,
+      "ci_high": 0.13528285685659105
+    },
+    {
+      "method": "Global",
+      "variable": "click_tier",
+      "group": 2,
+      "users": 2007,
+      "ndcg": 0.15548263978521934,
+      "ci_low": 0.1422072593941077,
+      "ci_high": 0.16711126515613053
+    },
+    {
+      "method": "RouterFull",
+      "variable": "gender",
+      "group": 0,
+      "users": 3297,
+      "ndcg": 0.13225575441152862,
+      "ci_low": 0.12431776835603674,
+      "ci_high": 0.14140274402665026
+    },
+    {
+      "method": "RouterFull",
+      "variable": "gender",
+      "group": 1,
+      "users": 3141,
+      "ndcg": 0.13608430532012214,
+      "ci_low": 0.12798382109821618,
+      "ci_high": 0.1447890051046556
+    },
+    {
+      "method": "RouterFull",
+      "variable": "age_band",
+      "group": 0,
+      "users": 1210,
+      "ndcg": 0.14358451769493435,
+      "ci_low": 0.13028293650268025,
+      "ci_high": 0.15881366599748695
+    },
+    {
+      "method": "RouterFull",
+      "variable": "age_band",
+      "group": 1,
+      "users": 1879,
+      "ndcg": 0.1245930998283722,
+      "ci_low": 0.11407433902611716,
+      "ci_high": 0.13667657585071036
+    },
+    {
+      "method": "RouterFull",
+      "variable": "age_band",
+      "group": 2,
+      "users": 1933,
+      "ndcg": 0.13086414641774238,
+      "ci_low": 0.12091333778997265,
+      "ci_high": 0.1412477227989959
+    },
+    {
+      "method": "RouterFull",
+      "variable": "age_band",
+      "group": 3,
+      "users": 1058,
+      "ndcg": 0.1340138623560955,
+      "ci_low": 0.11884284214177424,
+      "ci_high": 0.15083536214588797
+    },
+    {
+      "method": "RouterFull",
+      "variable": "age_band",
+      "group": 4,
+      "users": 358,
+      "ndcg": 0.17009291318068817,
+      "ci_low": 0.13640288590745525,
+      "ci_high": 0.2006150030274326
+    },
+    {
+      "method": "RouterFull",
+      "variable": "income_q",
+      "group": 0,
+      "users": 1311,
+      "ndcg": 0.14483510858006385,
+      "ci_low": 0.12698227222450095,
+      "ci_high": 0.15857465205872645
+    },
+    {
+      "method": "RouterFull",
+      "variable": "income_q",
+      "group": 1,
+      "users": 1316,
+      "ndcg": 0.13572410211919803,
+      "ci_low": 0.12059472702535406,
+      "ci_high": 0.15050610085130287
+    },
+    {
+      "method": "RouterFull",
+      "variable": "income_q",
+      "group": 2,
+      "users": 1278,
+      "ndcg": 0.135758295900441,
+      "ci_low": 0.121737043145868,
+      "ci_high": 0.14960474187860057
+    },
+    {
+      "method": "RouterFull",
+      "variable": "income_q",
+      "group": 3,
+      "users": 1268,
+      "ndcg": 0.1260286938052318,
+      "ci_low": 0.11221920554340335,
+      "ci_high": 0.13747597638986905
+    },
+    {
+      "method": "RouterFull",
+      "variable": "income_q",
+      "group": 4,
+      "users": 1265,
+      "ndcg": 0.12782039024678862,
+      "ci_low": 0.11608448334583657,
+      "ci_high": 0.14045992092002146
+    },
+    {
+      "method": "RouterFull",
+      "variable": "click_tier",
+      "group": 0,
+      "users": 906,
+      "ndcg": 0.12705154409529687,
+      "ci_low": 0.10889370855832506,
+      "ci_high": 0.14115413860437082
+    },
+    {
+      "method": "RouterFull",
+      "variable": "click_tier",
+      "group": 1,
+      "users": 3525,
+      "ndcg": 0.1255892676055954,
+      "ci_low": 0.11721087495512948,
+      "ci_high": 0.1343275827692544
+    },
+    {
+      "method": "RouterFull",
+      "variable": "click_tier",
+      "group": 2,
+      "users": 2007,
+      "ndcg": 0.15230550973854043,
+      "ci_low": 0.13940067772949277,
+      "ci_high": 0.16301316881980749
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "gender",
+      "group": 0,
+      "users": 3297,
+      "ndcg": 0.132393290220028,
+      "ci_low": 0.12465300162097459,
+      "ci_high": 0.14143373093731182
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "gender",
+      "group": 1,
+      "users": 3141,
+      "ndcg": 0.13624480909631412,
+      "ci_low": 0.12814666735883434,
+      "ci_high": 0.14560608314816476
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "age_band",
+      "group": 0,
+      "users": 1210,
+      "ndcg": 0.1429753370593618,
+      "ci_low": 0.12924084444271428,
+      "ci_high": 0.15829895307573832
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "age_band",
+      "group": 1,
+      "users": 1879,
+      "ndcg": 0.1248592345491731,
+      "ci_low": 0.11465714101610572,
+      "ci_high": 0.13701070268479448
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "age_band",
+      "group": 2,
+      "users": 1933,
+      "ndcg": 0.13148216987883887,
+      "ci_low": 0.12142829476316709,
+      "ci_high": 0.14171780146539098
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "age_band",
+      "group": 3,
+      "users": 1058,
+      "ndcg": 0.1340138623560955,
+      "ci_low": 0.11884284214177424,
+      "ci_high": 0.15083536214588797
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "age_band",
+      "group": 4,
+      "users": 358,
+      "ndcg": 0.17009291318068817,
+      "ci_low": 0.13640288590745525,
+      "ci_high": 0.2006150030274326
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "income_q",
+      "group": 0,
+      "users": 1311,
+      "ndcg": 0.1440048441090889,
+      "ci_low": 0.1265779714527715,
+      "ci_high": 0.1578291926603029
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "income_q",
+      "group": 1,
+      "users": 1316,
+      "ndcg": 0.13579935423772296,
+      "ci_low": 0.12039159204483069,
+      "ci_high": 0.15052913647828664
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "income_q",
+      "group": 2,
+      "users": 1278,
+      "ndcg": 0.1357722513014526,
+      "ci_low": 0.12199434588751383,
+      "ci_high": 0.15013909872648384
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "income_q",
+      "group": 3,
+      "users": 1268,
+      "ndcg": 0.12588804696481626,
+      "ci_low": 0.11185952469175182,
+      "ci_high": 0.13743433050584683
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "income_q",
+      "group": 4,
+      "users": 1265,
+      "ndcg": 0.12948643613316405,
+      "ci_low": 0.11779897315621672,
+      "ci_high": 0.1430675624465782
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "click_tier",
+      "group": 0,
+      "users": 906,
+      "ndcg": 0.12716085070454503,
+      "ci_low": 0.11036729428393484,
+      "ci_high": 0.1420244891184574
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "click_tier",
+      "group": 1,
+      "users": 3525,
+      "ndcg": 0.12523494649563735,
+      "ci_low": 0.11674704702606346,
+      "ci_high": 0.13388133208601696
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "click_tier",
+      "group": 2,
+      "users": 2007,
+      "ndcg": 0.15335560841630075,
+      "ci_low": 0.14057619942490257,
+      "ci_high": 0.1643391784997023
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "gender",
+      "group": 0,
+      "users": 3297,
+      "ndcg": 0.12492991107012455,
+      "ci_low": 0.1160162374018184,
+      "ci_high": 0.13313179640186032
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "gender",
+      "group": 1,
+      "users": 3141,
+      "ndcg": 0.1275962454452302,
+      "ci_low": 0.11987297619456204,
+      "ci_high": 0.13694378099593724
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "age_band",
+      "group": 0,
+      "users": 1210,
+      "ndcg": 0.12749737674349676,
+      "ci_low": 0.11454319593288136,
+      "ci_high": 0.14271732954109037
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "age_band",
+      "group": 1,
+      "users": 1879,
+      "ndcg": 0.12494351191035574,
+      "ci_low": 0.11454276819670275,
+      "ci_high": 0.13695125388123025
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "age_band",
+      "group": 2,
+      "users": 1933,
+      "ndcg": 0.12510779202737637,
+      "ci_low": 0.11565060909266718,
+      "ci_high": 0.13495084813468966
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "age_band",
+      "group": 3,
+      "users": 1058,
+      "ndcg": 0.12492703321988562,
+      "ci_low": 0.11217376508740927,
+      "ci_high": 0.14086941365700076
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "age_band",
+      "group": 4,
+      "users": 358,
+      "ndcg": 0.13862255828749048,
+      "ci_low": 0.10670403949547821,
+      "ci_high": 0.1675405649750468
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "income_q",
+      "group": 0,
+      "users": 1311,
+      "ndcg": 0.14121449220777008,
+      "ci_low": 0.12706289745575663,
+      "ci_high": 0.1545295309883905
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "income_q",
+      "group": 1,
+      "users": 1316,
+      "ndcg": 0.12706604957616058,
+      "ci_low": 0.1117190199830564,
+      "ci_high": 0.1397815096782035
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "income_q",
+      "group": 2,
+      "users": 1278,
+      "ndcg": 0.13004487591876338,
+      "ci_low": 0.11743075907172872,
+      "ci_high": 0.14323553224042834
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "income_q",
+      "group": 3,
+      "users": 1268,
+      "ndcg": 0.11702292126973556,
+      "ci_low": 0.10355771023365064,
+      "ci_high": 0.1299669650532629
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "income_q",
+      "group": 4,
+      "users": 1265,
+      "ndcg": 0.11520963448288574,
+      "ci_low": 0.10279464158814694,
+      "ci_high": 0.12885350015020489
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "click_tier",
+      "group": 0,
+      "users": 906,
+      "ndcg": 0.10895353907229167,
+      "ci_low": 0.09328420023272087,
+      "ci_high": 0.1233974357041245
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "click_tier",
+      "group": 1,
+      "users": 3525,
+      "ndcg": 0.12131296385017629,
+      "ci_low": 0.11313930211471263,
+      "ci_high": 0.13075863296639678
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "click_tier",
+      "group": 2,
+      "users": 2007,
+      "ndcg": 0.14266747372710561,
+      "ci_low": 0.12986067952146454,
+      "ci_high": 0.1533307147398657
+    },
+    {
+      "method": "Global",
+      "variable": "goal",
+      "group": "pension",
+      "users": 1265,
+      "ndcg": 0.13425029832205204,
+      "ci_low": 0.11904205921593547,
+      "ci_high": 0.14791398615292026
+    },
+    {
+      "method": "Global",
+      "variable": "goal",
+      "group": "income",
+      "users": 1398,
+      "ndcg": 0.1358322655574896,
+      "ci_low": 0.1231979677626729,
+      "ci_high": 0.15044778967033223
+    },
+    {
+      "method": "Global",
+      "variable": "goal",
+      "group": "long_term",
+      "users": 1494,
+      "ndcg": 0.13788309020238806,
+      "ci_low": 0.12413320627330197,
+      "ci_high": 0.15306608550009806
+    },
+    {
+      "method": "Global",
+      "variable": "goal",
+      "group": "trading",
+      "users": 1319,
+      "ndcg": 0.1318694615177519,
+      "ci_low": 0.11732088014794864,
+      "ci_high": 0.14495066782684737
+    },
+    {
+      "method": "Global",
+      "variable": "goal",
+      "group": "diversify",
+      "users": 962,
+      "ndcg": 0.13863424098997135,
+      "ci_low": 0.12236959155906302,
+      "ci_high": 0.15301097622911755
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "goal",
+      "group": "pension",
+      "users": 1265,
+      "ndcg": 0.13601380872933164,
+      "ci_low": 0.12031977126190034,
+      "ci_high": 0.148596180622431
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "goal",
+      "group": "income",
+      "users": 1398,
+      "ndcg": 0.1335431517671141,
+      "ci_low": 0.12023119429934338,
+      "ci_high": 0.1468046218776938
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "goal",
+      "group": "long_term",
+      "users": 1494,
+      "ndcg": 0.13430322185944168,
+      "ci_low": 0.11996463453078507,
+      "ci_high": 0.14715326047441832
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "goal",
+      "group": "trading",
+      "users": 1319,
+      "ndcg": 0.13020027787250846,
+      "ci_low": 0.11545232001496206,
+      "ci_high": 0.1432442298471361
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "goal",
+      "group": "diversify",
+      "users": 962,
+      "ndcg": 0.1385775977568403,
+      "ci_low": 0.12029194977954966,
+      "ci_high": 0.15390493656587356
+    }
+  ],
+  "qa": [
+    {
+      "test": "metric_ndcg_0",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "metric_hit_0",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "metric_diversity_0",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "metric_ndcg_1",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "metric_hit_1",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "metric_diversity_1",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "topk_fixed_shape",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "topk_padding",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "zero_positive_label_retained",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_income_alias_bypass",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "MF_negative_collision",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "finite_metric_table",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "metric_ranges",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "MLP_actually_trained",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "MLP_has_observed_zeros",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "observed_models_trained_at_validation_and_test_snapshots",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "per_user_interest_broadcast",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "mastery_equals_quiz_pass",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "ordered_study_times",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_POP",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_POP",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_POP",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_POP",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_RULE",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_RULE",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_RULE",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_RULE",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_CONTENT",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_CONTENT",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_CONTENT",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_CONTENT",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_UCF",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_UCF",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_UCF",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_UCF",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_ICF",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_ICF",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_ICF",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_ICF",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_MF",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_MF",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_MF",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_MF",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_MF_OBS",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_MF_OBS",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_MF_OBS",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_MF_OBS",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_MLP",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_MLP",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_MLP",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_MLP",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_Global",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_Global",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_Global",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_Global",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_NoDemographics",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_NoDemographics",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_NoDemographics",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_NoDemographics",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_RouterFull",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_RouterFull",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_RouterFull",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_RouterFull",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_RouterNoGender",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_RouterNoGender",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_RouterNoGender",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_RouterNoGender",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_RouterNoGenderIncome",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_RouterNoGenderIncome",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_RouterNoGenderIncome",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_RouterNoGenderIncome",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_Random",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_Random",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_Random",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_Random",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_RouterNoGender+prereq",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_RouterNoGender+prereq",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_RouterNoGender+prereq",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_RouterNoGender+prereq",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "selection_operational_is_locked",
+      "passed": true,
+      "details": null
+    }
+  ],
+  "neural_enabled": true,
+  "zoo_skipped": 0,
+  "environment": {
+    "python": "3.13.16",
+    "numpy": "2.5.4",
+    "pandas": "3.0.6",
+    "torch": "2.14.1+cu130",
+    "os": "Linux-6.18.44-fc-v114-x86_64-with-glibc2.39"
+  },
+  "implementation_status": "executed prototype; synthetic data unless a real log directory was given"
+}
