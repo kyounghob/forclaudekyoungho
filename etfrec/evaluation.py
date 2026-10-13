@@ -47,6 +47,8 @@ def candidate_items(und_row: np.ndarray, level: int, catalog: Catalog, guard: Gu
     ok = catalog.item_level - int(level) < guard.block_gap
     if guard.exclude_passed:
         ok &= ~und_row
+    if getattr(guard, "prereq_block", False):                       # 선수 단원을 통과하지 않은 단원은 제외
+        ok &= catalog.missing_prereq_count(np.asarray(und_row, bool)[None, :])[0] == 0
     return np.flatnonzero(ok)
 
 

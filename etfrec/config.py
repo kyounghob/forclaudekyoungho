@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 
 K = 5                                   # [교안 7-2] Top-K 평가의 K
 SEED = int(os.environ.get("REC_SEED", "42"))
+CATALOG_VERSION = int(os.environ.get("REC_CATALOG", "2"))     # 1 = 노트북 원본 60단원, 2 = 커버드콜 추가 63단원 + 선수 관계
+GENERATOR_VERSION = int(os.environ.get("REC_GENERATOR", "2")) # 1 = 노트북과 같은 난수 순서, 2 = 투자 목적·선수 관계 반영
 SEG_VARS = ["click_tier", "pref_cluster", "age_band", "income_q", "gender"]   # 세그먼트 계층(위 → 아래)
 SEG_KO = {"click_tier": "학습활동", "pref_cluster": "선호군집", "age_band": "연령대",
           "income_q": "소득분위", "gender": "성별"}
@@ -36,16 +38,24 @@ ICF_GRID = [(lam, c) for lam in (0, 5, 10, 30) for c in (0, 1)]
 MF_GRID = [(f, r) for f in (8, 16, 32) for r in (0.01, 0.1)]
 CONTENT_GRID = [(x, c) for x in ("cat", "txt", "both") for c in (0, 1)]
 
-RULE_PARTS = [("r:pref", 3), ("r:lvl", 2), ("r:life", 2), ("r:inc", 2), ("r:risk", 2), ("r:dev", 1)]
+RULE_PARTS_V1 = [("r:pref", 3), ("r:lvl", 2), ("r:life", 2), ("r:inc", 2), ("r:risk", 2), ("r:dev", 1)]
+RULE_PARTS = RULE_PARTS_V1 + [("r:goal", 2), ("r:roadmap", 2)]   # 투자 목적 일치·로드맵 단계 가산점(프로젝트 확장)
 CTX_NAMES = ["ctx:next", "ctx:lvlfit"]
+
+GOALS = {"pension": "연금·노후 대비", "income": "배당·인컴 수취", "long_term": "장기 자산형성(지수 투자)",
+         "trading": "단기 매매·전술적 투자", "diversify": "분산·안정 추구"}
+GOAL_KEYS = list(GOALS)
+HORIZONS = {"short": "1년 미만", "mid": "1~5년", "long": "5년 이상"}
+HORIZON_KEYS = list(HORIZONS)
 
 
 @dataclass
 class GuardrailConfig:
-    """수준 가드레일. 수업의 확정된 교육 처방이 아니라 이 프로젝트의 시연용 정책이다."""
+    """수준·선수 개념 가드레일. 수업의 확정된 교육 처방이 아니라 이 프로젝트의 시연용 정책이다."""
     block_gap: int = 2          # 추정 수준보다 이만큼 이상 높은 단원은 제외
     plus_one_max: int = 1       # 한 단계 위 단원은 목록에 최대 몇 개
     exclude_passed: bool = True # 퀴즈를 통과한 단원은 후보에서 제외
+    prereq_block: bool = False  # 선수 단원을 통과하지 않은 단원은 제외(평가 기본 꺼짐, 화면 기본 켜짐)
 
 
 @dataclass
@@ -63,3 +73,10 @@ class TrainConfig:
     train_max_rows: int = int(os.environ.get("REC_TRAIN_MAX", "200000"))
     n_workers: int = N_CPU
     guardrail: GuardrailConfig = field(default_factory=GuardrailConfig)
+    catalog_version: int = CATALOG_VERSION
+    generator_version: int = GENERATOR_VERSION
+
+    @property
+    def rule_parts(self):
+        """버전 1(노트북 재현)은 원래 규칙 6개, 버전 2는 목적·로드맵 가산점을 더한 8개."""
+        return RULE_PARTS_V1 if int(self.generator_version) == 1 else RULE_PARTS

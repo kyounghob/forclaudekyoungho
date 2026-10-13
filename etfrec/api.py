@@ -32,6 +32,7 @@ class Guardrail(BaseModel):
     block_gap: int = Field(2, ge=1, le=3)
     plus_one_max: int = Field(1, ge=0, le=5)
     exclude_passed: bool = True
+    prereq_block: bool = True        # 화면 기본: 선수 단원 미이수 단원 제외
 
 
 class Event(BaseModel):
@@ -60,6 +61,9 @@ class Learner(BaseModel):
     hour: int = Field(4, ge=0, le=4)
     events: list[Event] = []
     label: str = "새 학습자"
+    goal: str = "long_term"
+    horizon: str = "mid"
+    diagnosis: Optional[dict] = None
 
 
 class RecommendRequest(BaseModel):
@@ -75,6 +79,25 @@ class RecommendRequest(BaseModel):
 
 class CompareRequest(RecommendRequest):
     methods: Optional[list[str]] = None
+
+
+class RoadmapRequest(BaseModel):
+    learner_id: Optional[int] = None
+    learner: Optional[Learner] = None
+    assume_passed: list[int] = []
+    overrides: Optional[dict] = None
+
+
+class TypesRequest(BaseModel):
+    learner_id: Optional[int] = None
+    learner: Optional[Learner] = None
+    goal: Optional[str] = None
+    risk: Optional[int] = Field(None, ge=0, le=2)
+    assume_passed: list[int] = []
+
+
+class QuizAnswers(BaseModel):
+    answers: dict
 
 
 class ParseRequest(BaseModel):
@@ -97,10 +120,12 @@ class Design(BaseModel):
     payload: dict
 
 
-def _learner_input(req: RecommendRequest) -> Union[int, LearnerInput]:
+def _learner_input(req, allow_none: bool = False):
     if req.learner_id is not None:
         return int(req.learner_id)
     if req.learner is None:
+        if allow_none:
+            return None
         raise HTTPException(422, "learner_id 또는 learner 가운데 하나는 있어야 합니다")
     d = req.learner.model_dump()
     d["events"] = [e if isinstance(e, dict) else e.model_dump() for e in d["events"]]
@@ -168,6 +193,32 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None) -> FastAPI:
     @app.post("/api/recommend-new")
     def recommend_new(req: NewUserRequest):
         return wrap(lambda: svc.recommend_new(req.topics, req.level, req.k, req.mobile))
+
+    @app.post("/api/roadmap")
+    def roadmap(req: RoadmapRequest):
+        return wrap(lambda: svc.roadmap(_learner_input(req), assume_passed=req.assume_passed, overrides=req.overrides))
+
+    @app.post("/api/types")
+    def types(req: TypesRequest):
+        return wrap(lambda: svc.types(_learner_input(req, allow_none=True), goal=req.goal, risk=req.risk, assume_passed=req.assume_passed))
+
+    @app.get("/api/quiz")
+    def quiz():
+        return svc.quiz_questions()
+
+    @app.post("/api/quiz/score")
+    def quiz_score(req: QuizAnswers):
+        return wrap(lambda: svc.quiz_score({str(k): int(v) for k, v in req.answers.items() if v is not None}))
+
+    @app.get("/api/sources")
+    def sources():
+        return svc.sources()
+
+    @app.get("/api/goals")
+    def goals():
+        from .config import GOALS, HORIZONS
+        from .taxonomy import ROADMAP_TEMPLATES
+        return {"goals": GOALS, "horizons": HORIZONS, "templates": {g: dict(types=t["types"]) for g, t in ROADMAP_TEMPLATES.items()}}
 
     @app.post("/api/parse-log")
     def parse_log(req: LogText):

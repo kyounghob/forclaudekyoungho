@@ -40,6 +40,12 @@ RISK_WORDS = [(2, ["공격적", "적극", "고위험", "high risk"]), (0, ["안�
 DEVICE_WORDS = [(1, ["모바일", "스마트폰", "휴대폰", "폰으로", "앱으로", "앱에서"]), (0, ["pc", "데스크톱", "데스크탑", "노트북", "컴퓨터"])]
 HOUR_WORDS = [(0, ["출근", "아침", "오전"]), (1, ["점심"]), (2, ["저녁", "퇴근", "오후"]), (3, ["심야", "밤", "새벽", "자기 전"])]
 GENDER_WORDS = [(1, ["여성", "여자", "여학생"]), (0, ["남성", "남자", "남학생"])]
+GOAL_WORDS = [("pension", ["연금", "노후", "은퇴", "irp", "퇴직"]), ("income", ["배당", "월배당", "인컴", "현금흐름", "분배금 받", "커버드콜"]),
+              ("trading", ["단기 매매", "단타", "트레이딩", "매매", "단기 투자", "레버리지로", "급등주"]),
+              ("diversify", ["분산", "안정적으로", "안전하게", "잃지 않", "방어"]),
+              ("long_term", ["장기", "적립식", "지수 투자", "노후 자산", "자산형성", "꾸준히", "10년"])]
+HORIZON_WORDS = [("short", ["1년 미만", "몇 달", "6개월", "단기간", "단기"]), ("long", ["5년 이상", "10년", "20년", "장기간", "장기", "노후", "은퇴"]),
+                 ("mid", ["1~5년", "3년", "2~3년", "중기", "몇 년"])]
 EXAMPLES = [
     dict(title="기초 입문 예시", text="ETF 구조와 비용에 관심 있는 초급 학습자야. 투자 경험은 없고 모바일로 저녁에 공부해. 5개 추천해 줘."),
     dict(title="수준 2 학습자 예시", text="30대 중급 학습자, 채권 ETF와 자산배분에 관심. 투자 경험 1~3년, 위험성향 중립, PC로 점심시간에 학습."),
@@ -47,6 +53,9 @@ EXAMPLES = [
     dict(title="연금 투자자 예시", text="50대 여성, 연금계좌 ETF와 분배금에 관심. 투자 경험 3년 이상, 안정 성향, 고급 수준."),
     dict(title="해외 투자 예시", text="해외 ETF와 환헤지를 배우고 싶은 40대 남성, 중급, 모바일 출근길 학습, 연소득 6000만원."),
     dict(title="기록 포함 예시", text="추적오차와 리밸런싱에 관심 있는 25세 초급 학습자. 'ETF란 무엇인가'와 '추적오차의 기초'는 퀴즈를 통과했고 '추적오차가 생기는 이유'는 완료만 했어."),
+    dict(title="연금 로드맵 예시", text="45세 직장인, 연금저축과 IRP로 노후 준비를 시작하려고 해. 투자 경험 1~3년, 안정 성향, 10년 이상 장기로 모바일 저녁 학습. 초급."),
+    dict(title="인컴 로드맵 예시", text="월배당으로 현금흐름을 만들고 싶은 38세 중급 학습자. 커버드콜과 리츠에 관심, 중립 성향, 3년 정도 투자, PC 점심시간."),
+    dict(title="단기 매매 로드맵 예시", text="단기 매매로 레버리지 ETF를 써 보려는 27세 적극 성향, 경험 없음, 몇 달 단위 투자, 스마트폰 심야 학습. 3개만."),
 ]
 
 
@@ -86,7 +95,7 @@ def parse_onboarding(text: str, catalog: Catalog) -> dict:
             warnings.append(f"관심 주제가 {len(topics)}개 읽혔습니다. 앞의 2개({topics[0]}, {topics[1]})만 사용했습니다.")
     # 수준·경험·성향·기기·시간대·성별
     for key, table in (("placement", LEVEL_WORDS), ("exp", EXP_WORDS), ("risk", RISK_WORDS), ("mobile", DEVICE_WORDS),
-                       ("hour", HOUR_WORDS), ("gender", GENDER_WORDS)):
+                       ("hour", HOUR_WORDS), ("gender", GENDER_WORDS), ("goal", GOAL_WORDS), ("horizon", HORIZON_WORDS)):
         v, w = _find(t, table)
         if v is not None:
             fields[key] = v; evidence.append(dict(field=key, value=v, matched=w))

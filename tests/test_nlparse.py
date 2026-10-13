@@ -31,6 +31,15 @@ def test_examples_all_parse_something():
         assert parse_onboarding(ex["text"], cat)["fields"]
 
 
+def test_parse_goal_and_horizon():
+    f = parse_onboarding("45세 직장인, 연금저축과 IRP로 노후 준비. 10년 이상 장기로 모바일 저녁 학습.", cat)["fields"]
+    assert f["goal"] == "pension" and f["horizon"] == "long" and f["age"] == 45
+    f = parse_onboarding("월배당으로 현금흐름을 만들고 싶어. 3년 정도 투자", cat)["fields"]
+    assert f["goal"] == "income" and f["horizon"] == "mid"
+    f = parse_onboarding("단기 매매로 레버리지 ETF를 써 보려는 27세 적극 성향, 몇 달 단위", cat)["fields"]
+    assert f["goal"] == "trading" and f["horizon"] == "short" and f["risk"] == 2
+
+
 def test_empty_text_warns():
     p = parse_onboarding("안녕하세요", cat)
     assert not p["fields"] and p["warnings"]

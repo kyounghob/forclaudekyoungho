@@ -19,7 +19,7 @@ import pandas as pd
 
 from . import __version__, neural
 from .catalog import RADIX, Catalog
-from .config import CTX_NAMES, K, RULE_PARTS, SEED, SEG_VARS, GuardrailConfig, TrainConfig
+from .config import CTX_NAMES, GOALS, K, SEED, SEG_VARS, GuardrailConfig, TrainConfig
 from .data import Dataset
 from .evaluation import (bootstrap_ci, evaluate_zoo, hit_at_k, make_select, ndcg_at_k, primary_eval, row_metrics,
                          select_topk, simple_diversity)
@@ -115,7 +115,7 @@ def train(dataset: Dataset, cfg: TrainConfig = None, out_dir: str = None, enable
     logger(f"검증 {cands_val.audit}")
     bank_val = SignalBank(cands_val)
     build_signals(bank_val, ref_val, lb_val, catalog, models)
-    algos = build_zoo(bank_val, RULE_PARTS, CTX_NAMES)
+    algos = build_zoo(bank_val, cfg.rule_parts, CTX_NAMES)
     skipped = list(build_zoo.skipped)
     logger(f"신호 {len(bank_val.sig)}개, 설정 {len(algos)}개 (건너뜀 {len(skipped)}개), {time.time() - t0:.1f}초")
     select_val = make_select(cands_val, lb_val, catalog, K, guard)
@@ -168,13 +168,18 @@ def train(dataset: Dataset, cfg: TrainConfig = None, out_dir: str = None, enable
     rows, predictions, per_user = [], {}, {}
     CATS = catalog.item_topic
 
+    missing_test = catalog.missing_prereq_count(F_test.und[cands_test.user])      # (R, n_items) 테스트 시점 미이수 선수 단원 수
+
     def record(name, sel):
         nd, ht, dv, it = row_metrics(sel, cands_test, CATS)
         nuser = cands_test.per_user(nd); huser = cands_test.per_user(ht); duser = cands_test.per_user(dv)
         per_user[name] = nuser; predictions[name] = it
+        ok = it >= 0
+        viol = (missing_test[np.arange(cands_test.R)[:, None], np.maximum(it, 0)] > 0) & ok
         rows.append(dict(method=name, ndcg=float(nuser.mean()), diversity=float(duser.mean()), hit_diagnostic=float(huser.mean()),
                          coverage_diagnostic=float(np.unique(it[it >= 0]).size / max(cands_test.n_pool, 1)),
-                         short_list_rate=float((np.sum(it >= 0, 1) < K).mean()), users=len(nuser), requests=cands_test.R))
+                         short_list_rate=float((np.sum(it >= 0, 1) < K).mean()),
+                         prereq_violation_rate=float(viol.sum() / max(ok.sum(), 1)), users=len(nuser), requests=cands_test.R))
 
     for name, aid in selectable.items():
         record(name, select_test(score_algo(algos[aid], bank_test, lb_test.nu)))
@@ -187,12 +192,32 @@ def train(dataset: Dataset, cfg: TrainConfig = None, out_dir: str = None, enable
         record(name, sel)
     rng = np.random.default_rng(cfg.seed + 91)
     record("Random", select_test(np.where(cands_test.valid, rng.random(cands_test.cand.shape), -np.inf)))
+    # 선수 개념 가드레일(서빙 기본)을 켠 채로 운영 라우터를 평가한다. 후보에서 빠진 정답은 IDCG에 남겨 불이익을 그대로 받는다.
+    guard_pre = GuardrailConfig(**{**guard.__dict__, "prereq_block": True})
+    cands_pre, lb_pre = primary_eval(cfg.test_week, F_test, LOG, catalog, guard_pre)
+    cands_pre.full_relevant_count = cands_test.rel.sum(1)
+    bank_pre = SignalBank(cands_pre)
+    op_router = routers[cfg.operational_router]
+    champ_pre, _, _ = op_router.route(F_test.codes[cands_pre.user])
+    build_signals(bank_pre, ref_test, lb_pre, catalog, models, needed={sig for c in np.unique(champ_pre) for sig in algos[int(c)].signals})
+    sel_pre = np.full((cands_pre.R, K), -1)
+    for c in np.unique(champ_pre):
+        rr = np.flatnonzero(champ_pre == c)
+        sel_pre[rr] = score_and_select_rows(algos[c], bank_pre, lb_pre, catalog, rr, guard_pre)
+    nd_pre, ht_pre, dv_pre, it_pre = row_metrics(sel_pre, cands_pre, CATS)
+    ok_pre = it_pre >= 0
+    viol_pre = (missing_test[np.arange(cands_pre.R)[:, None], np.maximum(it_pre, 0)] > 0) & ok_pre
+    per_user[cfg.operational_router + "+prereq"] = cands_pre.per_user(nd_pre); predictions[cfg.operational_router + "+prereq"] = it_pre
+    rows.append(dict(method=cfg.operational_router + "+prereq", ndcg=float(cands_pre.per_user(nd_pre).mean()), diversity=float(cands_pre.per_user(dv_pre).mean()),
+                     hit_diagnostic=float(cands_pre.per_user(ht_pre).mean()), coverage_diagnostic=float(np.unique(it_pre[ok_pre]).size / max(cands_test.n_pool, 1)),
+                     short_list_rate=float((ok_pre.sum(1) < K).mean()), prereq_violation_rate=float(viol_pre.sum() / max(ok_pre.sum(), 1)),
+                     users=len(cands_pre.users), requests=cands_pre.R))
     results = pd.DataFrame(rows)
     for idx, row in results.iterrows():
         diff = per_user[row["method"]] - per_user["Global"]; lo, hi = bootstrap_ci(diff, cfg.bootstrap_n, cfg.seed)
         results.loc[idx, "difference_vs_global"] = float(diff.mean()); results.loc[idx, "ci_low"] = lo; results.loc[idx, "ci_high"] = hi
     results = results.sort_values("ndcg", ascending=False).reset_index(drop=True)
-    logger("테스트 결과\n" + results[["method", "ndcg", "diversity", "hit_diagnostic", "difference_vs_global", "ci_low", "ci_high"]].round(5).to_string(index=False))
+    logger("테스트 결과\n" + results[["method", "ndcg", "diversity", "hit_diagnostic", "prereq_violation_rate", "difference_vs_global", "ci_low", "ci_high"]].round(5).to_string(index=False))
     # 운영 설정: 운영 라우터가 테스트 사용자에게 배정한 챔피언 가운데 가장 많이 쓰인 것(전역 1위와 같은 경우가 보통)
     op_champ, _, _ = routers[cfg.operational_router].route(F_test.codes[cands_test.user])
     selection["operational_algorithm"] = int(np.bincount(op_champ).argmax())
@@ -208,6 +233,14 @@ def train(dataset: Dataset, cfg: TrainConfig = None, out_dir: str = None, enable
                 lo, hi = bootstrap_ci(vv[m], 200, cfg.seed)
                 group_rows.append(dict(method=method, variable=variable, group=int(val), users=int(m.sum()), ndcg=float(vv[m].mean()),
                                        ci_low=lo, ci_high=hi))
+    goals_test = np.asarray(F_test.goal, dtype=object)[cands_test.users] if F_test.goal is not None else np.full(len(cands_test.users), "long_term", object)
+    for method in ("Global", "RouterNoGender"):
+        vv = per_user[method]
+        for g in GOALS:
+            m = goals_test == g
+            if m.any():
+                lo, hi = bootstrap_ci(vv[m], 200, cfg.seed)
+                group_rows.append(dict(method=method, variable="goal", group=g, users=int(m.sum()), ndcg=float(vv[m].mean()), ci_low=lo, ci_high=hi))
     group_results = pd.DataFrame(group_rows)
     # 심화·레버리지 콘텐츠 노출률(공정성 점검 확장)
     exposure_rows = []

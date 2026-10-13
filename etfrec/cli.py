@@ -5,6 +5,7 @@
     python -m etfrec recommend --bundle artifacts/bundle_v1 --user 1 [--k 5] [--algorithm RULE]
     python -m etfrec serve --bundle artifacts/bundle_v1 [--host 127.0.0.1] [--port 8000]
     python -m etfrec demo [--n 3000]      # 작은 규모로 학습한 뒤 바로 서버를 띄운다
+    python -m etfrec sources list|check|sync|stats [--out data/sources] [--datagokr-key KEY]
 """
 from __future__ import annotations
 
@@ -18,8 +19,27 @@ from .data import Dataset
 from .util import get_logger, json_safe
 
 
+def cmd_sources(a):
+    from .sources import SOURCES, load_etf_universe, sync_all, type_stats
+    from .sources.sync import check_sources
+    if a.action == "list":
+        for k, v in SOURCES.items():
+            print(f"- {k}: {v['name']} | {v['url'] or '-'} | {v['menu']} | 접근: {v['access']} | 확인: {v['verified']}")
+    elif a.action == "check":
+        for r in check_sources():
+            print(f"{r['status']:40s} {r['name']}")
+    elif a.action == "sync":
+        prov = sync_all(a.out, datagokr_key=a.datagokr_key, bas_dt=a.date)
+        print(json.dumps(prov, ensure_ascii=False, indent=2))
+    elif a.action == "stats":
+        df, prov = load_etf_universe(a.out)
+        print(prov["label"], "| rows", len(df))
+        for t in type_stats(df):
+            print(f"{t['name']:16s} {t['count']:4d}개  환헤지 {t['hedged']:3d}  총보수 중앙값 {t['fee_median']}  예시 {t['examples']}")
+
+
 def cmd_generate(a):
-    cfg = TrainConfig(n_learners=a.n, seed=a.seed, effect_scale=a.effect)
+    cfg = TrainConfig(n_learners=a.n, seed=a.seed, effect_scale=a.effect, catalog_version=a.catalog_version, generator_version=a.generator_version)
     ds = Dataset.synthetic(cfg)
     ds.save_csv(a.out)
     print(json.dumps(ds.summary(), ensure_ascii=False, indent=2))
@@ -28,7 +48,7 @@ def cmd_generate(a):
 
 def cmd_train(a):
     from .pipeline import train
-    cfg = TrainConfig(n_learners=a.n, seed=a.seed, effect_scale=a.effect)
+    cfg = TrainConfig(n_learners=a.n, seed=a.seed, effect_scale=a.effect, catalog_version=a.catalog_version, generator_version=a.generator_version)
     ds = Dataset.from_csv(a.data) if a.data else Dataset.synthetic(cfg)
     bundle = train(ds, cfg, out_dir=a.out, enable_neural=not a.no_neural)
     print("운영 설정:", bundle.algos[bundle.selection["operational_algorithm"]].name)
@@ -64,14 +84,21 @@ def cmd_demo(a):
 def main(argv=None):
     p = argparse.ArgumentParser(prog="etfrec", description="ETF 교육 콘텐츠 개인화·세그먼트 추천 시스템")
     sub = p.add_subparsers(dest="cmd", required=True)
+    def versions(parser):
+        parser.add_argument("--catalog-version", type=int, default=TrainConfig().catalog_version, help="1 = 노트북 원본 60단원, 2 = 63단원+선수 관계")
+        parser.add_argument("--generator-version", type=int, default=TrainConfig().generator_version, help="1 = 노트북 난수 순서, 2 = 목적·선수 관계 반영")
     g = sub.add_parser("generate", help="모의 데이터 생성 → CSV"); g.add_argument("--out", required=True)
     g.add_argument("--n", type=int, default=TrainConfig().n_learners); g.add_argument("--seed", type=int, default=TrainConfig().seed)
-    g.add_argument("--effect", type=float, default=TrainConfig().effect_scale); g.set_defaults(fn=cmd_generate)
+    g.add_argument("--effect", type=float, default=TrainConfig().effect_scale); versions(g); g.set_defaults(fn=cmd_generate)
     t = sub.add_parser("train", help="학습 → 검증 → 선택 → 테스트 → 번들 저장"); t.add_argument("--out", required=True)
     t.add_argument("--data", default=None, help="profiles.csv·study_log.csv·catalog.csv가 있는 폴더(없으면 모의 데이터)")
     t.add_argument("--n", type=int, default=TrainConfig().n_learners); t.add_argument("--seed", type=int, default=TrainConfig().seed)
     t.add_argument("--effect", type=float, default=TrainConfig().effect_scale); t.add_argument("--no-neural", action="store_true")
-    t.set_defaults(fn=cmd_train)
+    versions(t); t.set_defaults(fn=cmd_train)
+    so = sub.add_parser("sources", help="공개 데이터 출처 목록·접근 점검·스냅샷 동기화·유형 통계")
+    so.add_argument("action", choices=["list", "check", "sync", "stats"]); so.add_argument("--out", default=os.path.join("data", "sources"))
+    so.add_argument("--datagokr-key", default=None, help="공공데이터포털 serviceKey (환경변수 DATA_GO_KR_KEY도 가능)")
+    so.add_argument("--date", default=None, help="시세 기준일 YYYYMMDD"); so.set_defaults(fn=cmd_sources)
     r = sub.add_parser("recommend", help="번들로 한 학습자 추천"); r.add_argument("--bundle", required=True)
     r.add_argument("--user", type=int, required=True); r.add_argument("--k", type=int, default=5); r.add_argument("--algorithm", default=None)
     r.set_defaults(fn=cmd_recommend)

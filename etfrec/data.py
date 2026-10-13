@@ -17,10 +17,11 @@ import numpy as np
 import pandas as pd
 
 from .catalog import Catalog
-from .config import TrainConfig
+from .config import GOAL_KEYS, HORIZON_KEYS, TrainConfig
 from .synth import BOOL_COLUMNS, LOG_COLUMNS, make_world
 
 PROFILE_COLUMNS = ["user", "gender", "age", "income", "exp", "risk", "mobile", "interest1", "interest2", "placement"]
+OPTIONAL_PROFILE_COLUMNS = {"goal": "long_term", "horizon": "mid"}   # 없으면 기본값으로 채운다(구버전 CSV 호환)
 
 
 def score_attempts(log: pd.DataFrame) -> pd.DataFrame:
@@ -79,14 +80,25 @@ class Dataset:
         for c in ("interest1", "interest2"):
             self.profiles[c] = resolve_topics(self.profiles[c].values, self.catalog)
         self.profiles["placement"] = self.profiles.placement.clip(1, 3).astype(int)
+        for c, default in OPTIONAL_PROFILE_COLUMNS.items():
+            if c not in self.profiles.columns:
+                self.profiles[c] = default
+            self.profiles[c] = self.profiles[c].fillna(default).astype(str)
+        bad_goal = ~self.profiles.goal.isin(GOAL_KEYS)
+        if bad_goal.any():
+            raise ValueError(f"goal 값은 {GOAL_KEYS} 중 하나여야 합니다: {sorted(self.profiles.goal[bad_goal].unique())[:5]}")
+        bad_h = ~self.profiles.horizon.isin(HORIZON_KEYS)
+        if bad_h.any():
+            raise ValueError(f"horizon 값은 {HORIZON_KEYS} 중 하나여야 합니다")
 
     @classmethod
     def synthetic(cls, cfg: TrainConfig = None, catalog: Catalog = None) -> "Dataset":
         cfg = cfg or TrainConfig()
-        catalog = catalog or Catalog.default(cfg.seed)
-        world = make_world(cfg.n_learners, catalog, seed=cfg.seed, effect=cfg.effect_scale, gender_effect=cfg.gender_effect)
-        meta = dict(seed=cfg.seed, effect_scale=cfg.effect_scale, gender_effect=cfg.gender_effect,
-                    gender_effect_by_topic=dict(zip(catalog.topics, np.round(world["g_eff"], 3).tolist())))
+        catalog = catalog or Catalog.default(cfg.seed, version=cfg.catalog_version)
+        world = make_world(cfg.n_learners, catalog, seed=cfg.seed, effect=cfg.effect_scale, gender_effect=cfg.gender_effect,
+                           version=cfg.generator_version)
+        meta = dict(seed=cfg.seed, effect_scale=cfg.effect_scale, gender_effect=cfg.gender_effect, generator_version=cfg.generator_version,
+                    catalog_version=catalog.version, gender_effect_by_topic=dict(zip(catalog.topics, np.round(world["g_eff"], 3).tolist())))
         return cls(world["profiles"], world["log"], catalog, source="synthetic", meta=meta)
 
     @classmethod
@@ -101,7 +113,7 @@ class Dataset:
         os.makedirs(directory, exist_ok=True)
         self.profiles.to_csv(os.path.join(directory, "profiles.csv"), index=False, encoding="utf-8-sig")
         self.log.to_csv(os.path.join(directory, "study_log.csv"), index=False, encoding="utf-8-sig")
-        self.catalog.to_frame()[["item", "title", "topic", "level", "short"]].to_csv(
+        self.catalog.to_frame()[["item", "title", "topic", "level", "short", "prereqs", "sources"]].to_csv(
             os.path.join(directory, "catalog.csv"), index=False, encoding="utf-8-sig")
         with open(os.path.join(directory, "meta.json"), "w", encoding="utf-8") as f:
             json.dump(dict(source=self.source, meta=self.meta, n_users=self.n_users, rows=len(self.log)), f,
@@ -116,4 +128,6 @@ class Dataset:
                     mastery_label_equals_quiz=bool(np.array_equal(lg.understood, lg.quiz_pass)),
                     distinct_pairs=int(lg.groupby(["user", "item"]).ngroups),
                     density=float(lg.groupby(["user", "item"]).ngroups / (self.n_users * self.catalog.n_items)),
-                    source=self.source)
+                    goals={k: int(v) for k, v in self.profiles.goal.value_counts().items()},
+                    horizons={k: int(v) for k, v in self.profiles.horizon.value_counts().items()},
+                    catalog_version=int(self.catalog.version), source=self.source)

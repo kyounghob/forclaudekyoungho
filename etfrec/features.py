@@ -13,7 +13,7 @@ import pandas as pd
 import scipy.sparse as sp
 
 from .catalog import EXPS, HOURS, LABELS, RISKS, Catalog, onehot
-from .config import CLICK_CUTS, SEG_VARS
+from .config import CLICK_CUTS, GOALS, HORIZONS, SEG_VARS
 
 
 def confidence(r, alpha=2.0):
@@ -67,6 +67,8 @@ class FeatureStore:
     age: np.ndarray
     income: np.ndarray
     income_edges: np.ndarray
+    goal: np.ndarray = None           # (n,) 투자 목적 키
+    horizon: np.ndarray = None        # (n,) 투자 기간 키
     stats: dict = field(default_factory=dict)
 
     @property
@@ -125,8 +127,11 @@ def build_features(profiles: pd.DataFrame, log_before: pd.DataFrame, catalog: Ca
     blocks = dict(age=onehot(age_band, 5), inc=onehot(income_q, 5), gender=onehot(gender, 2), exp=onehot(exp_, 3),
                   risk=onehot(risk, 3), dev=onehot(mobile, 2), hour=onehot(hour, 5), quiz=onehot(bucket(qrate), 4),
                   comp=onehot(bucket(crate), 4), drop=onehot(bucket(drate), 4), level=onehot(level - 1, 3))
+    goal = profiles["goal"].astype(str).values if "goal" in profiles.columns else np.full(n, "long_term")
+    horizon = profiles["horizon"].astype(str).values if "horizon" in profiles.columns else np.full(n, "mid")
     TN = catalog.topics
     users = pd.DataFrame({"학습자": np.arange(n), "성별": np.array(LABELS["gender"])[gender], "연령": age, "연소득(만원)": income,
+                          "투자 목적": [GOALS.get(g, g) for g in goal], "투자 기간": [HORIZONS.get(h, h) for h in horizon],
                           "투자 경험": np.array(EXPS)[exp_], "위험성향": np.array(RISKS)[risk], "기기": np.where(mobile == 1, "모바일", "PC"),
                           "학습 시간대": np.array(HOURS + ["미상"])[hour],
                           "관심 주제": [" · ".join(TN[t] for t in it if 0 <= t < N_TOP) for it in interests],
@@ -137,7 +142,7 @@ def build_features(profiles: pd.DataFrame, log_before: pd.DataFrame, catalog: Ca
     return FeatureStore(week=week, n=n, Rw=Rw, Rw_conf=Rw_conf, nu=views.astype(float), codes=codes, pref=pref, top2=top2,
                         level=level, und=und, blocks=blocks, users=users, ev_user=ev.user.values, ev_item=ev.item.values,
                         interests=interests, risk=risk, mobile=mobile, gender=gender, age=age, income=income,
-                        income_edges=np.asarray(edges),
+                        income_edges=np.asarray(edges), goal=goal, horizon=horizon,
                         stats=dict(views=views, quiz=quiz, quiz_pass=qp, complete=comp, saves=saves, drops=drops, hour=hour))
 
 

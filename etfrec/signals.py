@@ -20,6 +20,7 @@ from .catalog import Catalog, onehot
 from .config import (CONTENT_GRID, ICF_GRID, MAX_REFERENCE_USERS, MF_GRID, SEED, SEG_KO, SEG_LAMS, SEG_VARS,
                      UCF_DEMOS, UCF_GRID)
 from .features import DEMO_USES, FeatureStore, confidence, demo_sets
+from .roadmap import roadmap_priority_rows
 from . import neural
 
 
@@ -135,6 +136,15 @@ class LearnerBatch:
     mobile: np.ndarray               # (R,)
     und: np.ndarray                  # (R, n_items) bool
     blocks: dict                     # 원-핫 블록(행 단위)
+    goal: np.ndarray = None          # (R,) 투자 목적 키
+    horizon: np.ndarray = None       # (R,) 투자 기간 키
+
+    def __post_init__(self):
+        n = len(self.user)
+        if self.goal is None:
+            self.goal = np.full(n, "long_term", dtype=object)
+        if self.horizon is None:
+            self.horizon = np.full(n, "mid", dtype=object)
 
     @property
     def demo(self) -> dict:
@@ -151,7 +161,9 @@ class LearnerBatch:
                    codes=F.codes[users].copy(), Rw=F.Rw[users], Rw_conf=F.Rw_conf[users], nu=F.nu[users].copy(),
                    level=F.level[users].copy(), interests=F.interests[users].copy(), top2=F.top2[users].copy(),
                    risk=F.risk[users].copy(), mobile=F.mobile[users].copy(), und=F.und[users].copy(),
-                   blocks={k: v[users].copy() for k, v in F.blocks.items()})
+                   blocks={k: v[users].copy() for k, v in F.blocks.items()},
+                   goal=(np.asarray(F.goal, dtype=object)[users].copy() if F.goal is not None else None),
+                   horizon=(np.asarray(F.horizon, dtype=object)[users].copy() if F.horizon is not None else None))
 
     def with_codes(self, codes: np.ndarray) -> "LearnerBatch":
         """what-if: 세그먼트 코드를 바꾸면 인구통계 원-핫도 같이 바뀐다."""
@@ -481,4 +493,14 @@ def add_plan_signals(bank: SignalBank, lb: LearnerBatch, catalog: Catalog, need)
                  "이어 배우기(같은 주제 다음 수준)", "1-3", uses=("level", "pref"), raw=True)
     if need("ctx:lvlfit"):
         bank.add("ctx:lvlfit", 1 - np.abs(I_LEVEL[c0] - lv) / 2, "수준 적합도", "1-3", uses=("level",), raw=True)
+    # ---- 프로젝트 확장: 투자 목적 친화도와 단계별 로드맵 우선순위 ----
+    if need("r:goal"):
+        from .synth import affinity_matrix
+        from .config import GOAL_KEYS
+        A = affinity_matrix(catalog)
+        gidx = np.array([GOAL_KEYS.index(g) if g in GOAL_KEYS else 2 for g in lb.goal])
+        bank.add("r:goal", A[gidx[:, None], tp], "투자 목적 일치", "3-2(확장)", uses=("goal",), raw=True)
+    if need("r:roadmap"):
+        pr = roadmap_priority_rows(catalog, list(lb.goal), lb.risk, list(lb.horizon), lb.level, lb.und)
+        bank.add("r:roadmap", pr[np.arange(lb.R)[:, None], c0], "로드맵 단계 우선순위", "1-3(확장)", uses=("goal", "level", "pref"), raw=True)
     return bank

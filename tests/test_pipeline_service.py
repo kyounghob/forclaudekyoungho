@@ -19,14 +19,14 @@ def test_pipeline_outputs(small_bundle):
 
 
 def test_offline_online_parity(small_bundle):
-    """오프라인 평가에서 라우터가 고른 Top-5와 서비스 추천이 같은 사용자에서 일치한다."""
+    """오프라인 평가에서 라우터가 고른 Top-5와 서비스 추천이 같은 사용자에서 일치한다(평가와 같은 가드레일)."""
     svc = RecommendationService(small_bundle)
     users = small_bundle.test_users
     hits = 0
     for row in range(0, len(users), max(1, len(users) // 15)):
         uid = int(users[row])
         expected = [int(i) for i in small_bundle.predictions["RouterNoGender"][row] if i >= 0]
-        got = [it["item"] for it in svc.recommend(uid, k=5, algorithm="RouterNoGender")["items"]]
+        got = [it["item"] for it in svc.recommend(uid, k=5, algorithm="RouterNoGender", guard=small_bundle.config.guardrail)["items"]]
         assert got == expected, (uid, got, expected)
         hits += 1
     assert hits >= 10
@@ -45,6 +45,24 @@ def test_adhoc_learner_and_guardrails(small_bundle):
     assert len({it["topic"] for it in r3["items"]}) == len(r3["items"])
     sim = svc.recommend(li, k=5, assume_passed=[r["items"][0]["item"]])
     assert r["items"][0]["item"] not in [it["item"] for it in sim["items"]]
+    pre = svc.recommend(li, k=5, guard=GuardrailConfig(prereq_block=True))
+    assert all(not it["missing_prereqs"] for it in pre["items"]) and pre["roadmap"]["current_stage"] in ("core", "goal", "advanced", "connect")
+
+
+def test_roadmap_types_quiz_sources_service(small_bundle):
+    svc = RecommendationService(small_bundle)
+    li = LearnerInput(age=45, goal="pension", horizon="long", risk=0, interests=[17], placement=1, events=[dict(item=0, quiz_pass=True)])
+    rm = svc.roadmap(li)
+    assert rm["goal"] == "pension" and rm["current_stage"] == "core" and rm["next_unit"] and rm["stages"][-1]["types"]
+    assert rm["stages"][1]["units"][0]["sources"][0]["name"]
+    ty = svc.types(li)
+    assert ty["cards"][0]["recommended_for_goal"] and ty["cards"][0]["stats"] is not None and ty["universe"]["kind"] in ("sample", "snapshot")
+    lev = next(c for c in ty["cards"] if c["key"] == "leverage_inverse")
+    assert "사전교육" in lev["regulation"] and "불가" in lev["pension"]
+    qs = svc.quiz_questions(); assert len(qs) >= 12
+    sc = svc.quiz_score({qs[0]["id"]: 1}); assert sc["level"] in (1, 2, 3) and "results" in sc
+    assert svc.sources()["sources"] and svc.sources()["type_stats"]
+    ex = svc.recommend(0, k=5); assert ex["learner"]["goal"] in ("pension", "income", "long_term", "trading", "diversify") and "roadmap" in ex
 
 
 def test_gender_flip_invariance_operational(small_bundle):
@@ -79,7 +97,7 @@ def test_api_endpoints(small_bundle, tmp_path):
     app = create_app(small_bundle, designs_dir=str(tmp_path))
     c = TestClient(app)
     assert c.get("/api/health").json()["training_in_request"] is False
-    assert len(c.get("/api/catalog").json()["items"]) == 60
+    assert len(c.get("/api/catalog").json()["items"]) == small_bundle.catalog.n_items
     r = c.post("/api/recommend", json={"learner_id": 1, "k": 5}); assert r.status_code == 200 and len(r.json()["items"]) <= 5
     r = c.post("/api/recommend", json={"learner": {"age": 30, "interests": [1], "placement": 1}, "k": 3}); assert r.status_code == 200
     assert c.post("/api/recommend", json={"learner_id": 1, "k": 0}).status_code == 422
@@ -91,6 +109,12 @@ def test_api_endpoints(small_bundle, tmp_path):
     assert c.post("/api/designs", json={"name": "t1", "payload": {"summary": "x"}}).status_code == 200
     assert c.get("/api/designs/t1").status_code == 200 and c.delete("/api/designs/t1").status_code == 200
     assert c.post("/api/parse-log", json={"csv_text": "item,quiz_pass\n0,1\n"}).json()["events"][0]["item"] == 0
+    assert c.post("/api/roadmap", json={"learner": {"goal": "income", "placement": 2}}).json()["goal"] == "income"
+    assert c.post("/api/types", json={"goal": "trading", "risk": 2}).json()["cards"][0]["key"] == "leverage_inverse"
+    qs = c.get("/api/quiz").json(); assert len(qs) >= 12
+    assert c.post("/api/quiz/score", json={"answers": {qs[0]["id"]: 1}}).status_code == 200
+    assert c.get("/api/sources").json()["universe_rows"] > 0 and "pension" in c.get("/api/goals").json()["goals"]
+    assert c.post("/api/recommend", json={"learner": {"goal": "nope"}, "k": 3}).status_code == 422
 
 
 @pytest.mark.skipif(not os.environ.get("ETFREC_FULL"), reason="전체 규모 재현은 ETFREC_FULL=1 일 때만 (약 2~3분)")
@@ -98,7 +122,7 @@ def test_full_regression_matches_notebook():
     from etfrec.config import TrainConfig
     from etfrec.data import Dataset
     from etfrec.pipeline import train
-    cfg = TrainConfig()
+    cfg = TrainConfig(catalog_version=1, generator_version=1)
     b = train(Dataset.synthetic(cfg), cfg, out_dir=None, log=lambda *a, **k: None)
     got = b.results.set_index("method").ndcg
     expected = {"RULE": 0.17123, "RouterNoGender": 0.17119, "UCF": 0.14268, "POP": 0.11875, "ICF": 0.11112, "CONTENT": 0.09957,

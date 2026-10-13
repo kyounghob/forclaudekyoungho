@@ -12,7 +12,12 @@ import numpy as np
 import pandas as pd
 
 from .catalog import LABELS, LEVEL_NAMES, Catalog
-from .config import K, NOTICE, SEG_KO, SEG_VARS, GuardrailConfig
+from .config import GOALS, HORIZONS, K, NOTICE, SEG_KO, SEG_VARS, GuardrailConfig
+from .quiz import public_questions, score_quiz
+from .roadmap import build_roadmap
+from .sources import load_etf_universe, type_stats
+from .sources.registry import SOURCES, source_info, sources_for_items
+from .taxonomy import ETF_TYPES, TYPE_BY_KEY, goal_label, horizon_label, types_for_goal
 from .data import score_attempts
 from .evaluation import candidate_items, choose_items
 from .features import build_features
@@ -39,6 +44,9 @@ class LearnerInput:
     hour: int = 4                                       # 선호 학습 시간대(이력이 없을 때 참고)
     events: list = field(default_factory=list)         # [{item, week, complete, quiz, quiz_pass, save, drop, replay, ...}]
     label: str = "새 학습자"
+    goal: str = "long_term"                             # 투자 목적(GOALS 키)
+    horizon: str = "mid"                                # 투자 기간(HORIZONS 키)
+    diagnosis: dict = None                              # 진단 퀴즈 결과 요약(선택)
 
 
 class RecommendationService:
@@ -57,6 +65,8 @@ class RecommendationService:
         self.n_users = int(self.store.n)
         self._log_by_user = None
         self.median_income = float(np.median(self.store.income))
+        self.universe, self.universe_prov = load_etf_universe()
+        self._type_stats = type_stats(self.universe)
 
     # ---------- 조회 ----------
     def _uid(self, uid) -> int:
@@ -100,6 +110,7 @@ class RecommendationService:
         codes = F.codes[uid]
         return json_safe(dict(
             user=uid, profile=F.users.iloc[uid].to_dict(), level=int(F.level[uid]), level_name=LEVEL_NAMES[int(F.level[uid])],
+            goal=str(F.goal[uid]) if F.goal is not None else "long_term", horizon=str(F.horizon[uid]) if F.horizon is not None else "mid",
             interests=[self.catalog.topics[t] for t in F.interests[uid] if 0 <= t < self.catalog.n_topics],
             interest_ids=[int(t) for t in F.interests[uid]], placement=int(self.b.profiles.placement.iloc[uid]),
             passed_items=[self.catalog.item_info(i) for i in np.flatnonzero(F.und[uid])],
@@ -110,10 +121,13 @@ class RecommendationService:
     # ---------- 임의 학습자 → 특징 ----------
     def _adhoc_batch(self, li: LearnerInput, assume_passed=()) -> tuple:
         interests = list(li.interests)[:2] + [-1, -1]
+        if li.goal not in GOALS or li.horizon not in HORIZONS:
+            raise ValueError(f"goal은 {list(GOALS)}, horizon은 {list(HORIZONS)} 중 하나여야 합니다")
         profiles = pd.DataFrame([dict(user=0, gender=int(li.gender), age=int(li.age),
                                       income=float(li.income) if li.income is not None else self.median_income,
                                       exp=int(li.exp), risk=int(li.risk), mobile=int(li.mobile),
-                                      interest1=int(interests[0]), interest2=int(interests[1]), placement=int(li.placement))])
+                                      interest1=int(interests[0]), interest2=int(interests[1]), placement=int(li.placement),
+                                      goal=li.goal, horizon=li.horizon)])
         rows = []
         for e in li.events:
             item = int(e.get("item", -1))
@@ -140,11 +154,12 @@ class RecommendationService:
         """기존 학습자 번호 또는 LearnerInput → (LearnerBatch, 설명용 맥락)."""
         if isinstance(learner, LearnerInput):
             lb, F1 = self._adhoc_batch(learner)
-            ctx = dict(user=None, label=learner.label, profile=F1.users.iloc[0].to_dict())
+            ctx = dict(user=None, label=learner.label, profile=F1.users.iloc[0].to_dict(), diagnosis=learner.diagnosis)
         else:
             uid = self._uid(learner)
             lb = LearnerBatch.from_store(self.store, [uid])
-            ctx = dict(user=uid, label=f"학습자 #{uid}", profile=self.store.users.iloc[uid].to_dict())
+            ctx = dict(user=uid, label=f"학습자 #{uid}", profile=self.store.users.iloc[uid].to_dict(), diagnosis=None)
+        ctx["goal"] = str(lb.goal[0]); ctx["goal_label"] = goal_label(ctx["goal"]); ctx["horizon"] = str(lb.horizon[0]); ctx["horizon_label"] = horizon_label(ctx["horizon"])
         und = lb.und[0].copy()
         for i in assume_passed:
             und[int(i)] = True
@@ -203,7 +218,12 @@ class RecommendationService:
         algo, router_name, depth, path = self.resolve_algorithm(algorithm, lb.codes)
         level = int(lb.level[0])
         ca = candidate_items(lb.und[0], level, self.catalog, guard)
+        rm = build_roadmap(self.catalog, ctx["goal"], int(lb.risk[0]), ctx["horizon"], level, lb.und[0], ctx.get("diagnosis"))
+        stage = next(s for s in rm["stages"] if s["key"] == rm["current_stage"])
         base = dict(learner=ctx, k=int(k), level=level, level_name=LEVEL_NAMES[level], router=router_name, algorithm_id=algo.aid,
+                    roadmap=dict(goal=rm["goal"], goal_label=rm["goal_label"], current_stage=rm["current_stage"], current_stage_name=stage["name"],
+                                 progress=rm["progress"], units_passed=rm["units_passed"], units_total=rm["units_total"], minutes_left=rm["minutes_left"],
+                                 next_unit=rm["next_unit"], types=rm["types"]),
                     family=algo.family, family_label=FAMILY_KO.get(algo.family, algo.family), algorithm=algo.name,
                     formula=explain(algo, self.info), route_depth=depth, route_path=_path_labels(path, self.algos),
                     segment={v: dict(code=int(lb.codes[0, j]), label=_seg_label(v, lb.codes[0, j])) for j, v in enumerate(SEG_VARS)},
@@ -222,9 +242,13 @@ class RecommendationService:
             item = int(ca[col]); d = self.catalog.item_info(item)
             contrib = sorted(((p["label"], float(p["contribution"][col]), float(p["weight"][col]), float(p["signal"][col]))
                               for p in parts.values()), key=lambda x: -abs(x[1]))
+            missing = self.catalog.missing_prereqs(item, lb.und[0])
+            in_stage = any(u["item"] == item for u in stage.get("units", []))
             d.update(rank=rank + 1, score=float(S[0, col]), level_gap=int(self.catalog.item_level[item] - level),
                      contributions=[dict(label=l, contribution=round(c, 4), weight=round(w, 4), signal=round(s, 4)) for l, c, w, s in contrib],
-                     reason=_reason_sentence(contrib[:explain_top], self.catalog, item, level))
+                     reason=_reason_sentence(contrib[:explain_top], self.catalog, item, level),
+                     missing_prereqs=[self.catalog.item_title[p] for p in missing], in_current_stage=in_stage,
+                     sources=sources_for_items(d["sources"]))
             items.append(d)
         checks = self._checks(items, lb, level, guard, k, ca)
         base.update(items=items, shortfall=int(k - len(items)), candidates=int(len(ca)), checks=checks,
@@ -286,6 +310,8 @@ class RecommendationService:
                 dict(name="통과한 단원 제외", passed=bool(not any(lb.und[0][i] for i in ids)), detail=f"통과 단원 {int(lb.und[0].sum())}개 제외"),
                 dict(name="중복 없음", passed=len(ids) == len(set(ids)), detail=f"{len(ids)}개 고유"),
                 dict(name="요청 수 충족", passed=len(ids) == k, detail=f"{len(ids)}/{k}개 (후보 {len(ca)}개)"),
+                dict(name="선수 개념 충족", passed=bool(not guard.prereq_block or not any(it.get("missing_prereqs") for it in items)),
+                     detail=(f"선수 미이수 {sum(1 for it in items if it.get('missing_prereqs'))}개" + ("" if guard.prereq_block else " (가드레일 꺼짐: 참고용)"))),
                 dict(name="금칙어 없음", passed=True, detail="제목 검사 통과")]
 
     def _topic_map(self, lb, selected, ca, guard) -> list:
@@ -304,6 +330,50 @@ class RecommendationService:
                 status = "blocked"
             out.append(dict(item=i, topic_id=info["topic_id"], level=info["level"], status=status, rank=sel_rank.get(i)))
         return out
+
+    def roadmap(self, learner, assume_passed=(), overrides: dict = None) -> dict:
+        """단계별 학습 로드맵(진단 → 필수 기초 → 목적별 핵심 → 심화·리스크 → ETF 유형 연결)."""
+        lb, ctx = self._batch_for(learner, assume_passed, overrides)
+        rm = build_roadmap(self.catalog, ctx["goal"], int(lb.risk[0]), ctx["horizon"], int(lb.level[0]), lb.und[0], ctx.get("diagnosis"))
+        for s in rm["stages"]:
+            for u in s.get("units", []):
+                u["sources"] = sources_for_items(u["sources"])
+        rm["learner"] = ctx
+        return json_safe(rm)
+
+    def types(self, learner=None, goal: str = None, risk: int = None, assume_passed=()) -> dict:
+        """목적·성향에 맞는 ETF 유형 안내 카드(교육용). 학습자를 주면 개념 통과 여부를 함께 표시한다."""
+        passed = None
+        if learner is not None:
+            lb, ctx = self._batch_for(learner, assume_passed)
+            goal = goal or ctx["goal"]; risk = int(lb.risk[0]) if risk is None else int(risk); passed = lb.und[0]
+        goal = goal if goal in GOALS else "long_term"; risk = 1 if risk is None else int(risk)
+        keys = types_for_goal(goal, risk)
+        stats = {t["key"]: t for t in self._type_stats}
+        cards = []
+        for key in keys + [t["key"] for t in ETF_TYPES if t["key"] not in keys]:
+            t = TYPE_BY_KEY[key]
+            units = [self.catalog.unit(tp, lv) for tp, lv in t["concepts"]]
+            units = [u for u in units if u is not None]
+            concepts = [dict(self.catalog.item_info(u), passed=bool(passed[u]) if passed is not None else None) for u in units]
+            n_pass = sum(1 for c in concepts if c["passed"]) if passed is not None else 0
+            cards.append(dict(key=key, name=t["name"], description=t["description"], risk=t["risk"], recommended_for_goal=key in keys,
+                              goals=[goal_label(g) for g in t["goals"]], tax=t["tax"], pension=t["pension"], regulation=t["regulation"],
+                              cautions=t["cautions"], concepts=concepts, concepts_passed=n_pass, concepts_total=len(concepts),
+                              unlocked=(passed is not None and n_pass == len(concepts)), stats=stats.get(key),
+                              sources=[source_info(k) for k in (["kifin_leverage", "krx_data", "krx_etf_info"] if key == "leverage_inverse" else ["krx_data", "krx_etf_info", "am_guidebooks"])]))
+        return json_safe(dict(goal=goal, goal_label=goal_label(goal), risk=risk, cards=cards, universe=self.universe_prov,
+                              universe_rows=int(len(self.universe)), notice=NOTICE + " 유형 안내는 학습 순서를 돕기 위한 분류이며 개별 상품의 적합성 판단이 아닙니다."))
+
+    def quiz_questions(self) -> list:
+        return public_questions()
+
+    def quiz_score(self, answers: dict) -> dict:
+        return json_safe(score_quiz(answers, self.catalog))
+
+    def sources(self) -> dict:
+        return json_safe(dict(sources=[source_info(k) for k in SOURCES], universe=self.universe_prov, universe_rows=int(len(self.universe)),
+                              type_stats=self._type_stats))
 
     def evaluation(self) -> dict:
         b = self.b
@@ -324,6 +394,7 @@ class RecommendationService:
                               operational_router=self.operational_router, operational_algorithm=dict(aid=op.aid, family=op.family,
                               family_label=FAMILY_KO.get(op.family, op.family), name=op.name, formula=explain(op, self.info)),
                               methods=self.method_names(), neural_enabled=self.models.enable_neural, guardrail=self.b.config.guardrail.__dict__,
+                              goals=GOALS, horizons=HORIZONS, catalog_version=int(self.catalog.version), universe=self.universe_prov,
                               dataset=self.b.dataset_summary, labels=LABELS, seg_vars=SEG_VARS, seg_ko=SEG_KO, notice=NOTICE,
                               test_ndcg=self.b.results.set_index("method").ndcg.to_dict()))
 
