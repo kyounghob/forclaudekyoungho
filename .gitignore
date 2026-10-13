@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+artifacts/**/bundle.pkl
+artifacts/**/learner_profiles.csv
+artifacts/designs/
+artifacts/demo_bundle/
+data/
+venv/
+.venv/
+*.egg-info/

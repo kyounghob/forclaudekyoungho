@@ -1,0 +1,107 @@
+import os
+
+import numpy as np
+import pytest
+from fastapi.testclient import TestClient
+
+from etfrec.api import create_app
+from etfrec.config import GuardrailConfig
+from etfrec.service import LearnerInput, RecommendationService
+
+
+def test_pipeline_outputs(small_bundle):
+    b = small_bundle
+    assert all(q["passed"] for q in b.qa) and len(b.qa) > 50
+    assert set(b.results.method) >= {"Global", "RouterNoGender", "RouterFull", "POP", "RULE", "CONTENT", "UCF", "ICF", "Random"}
+    assert np.isfinite(b.results[["ndcg", "diversity"]].values).all()
+    assert b.selection["operational_algorithm"] is not None
+    assert len(b.algos) > 1000 and len(b.signal_meta) >= 140
+
+
+def test_offline_online_parity(small_bundle):
+    """오프라인 평가에서 라우터가 고른 Top-5와 서비스 추천이 같은 사용자에서 일치한다."""
+    svc = RecommendationService(small_bundle)
+    users = small_bundle.test_users
+    hits = 0
+    for row in range(0, len(users), max(1, len(users) // 15)):
+        uid = int(users[row])
+        expected = [int(i) for i in small_bundle.predictions["RouterNoGender"][row] if i >= 0]
+        got = [it["item"] for it in svc.recommend(uid, k=5, algorithm="RouterNoGender")["items"]]
+        assert got == expected, (uid, got, expected)
+        hits += 1
+    assert hits >= 10
+
+
+def test_adhoc_learner_and_guardrails(small_bundle):
+    svc = RecommendationService(small_bundle)
+    li = LearnerInput(age=25, interests=[2, 10], placement=1, mobile=1, events=[dict(item=0, quiz_pass=True), dict(item=6, complete=True)])
+    r = svc.recommend(li, k=5)
+    assert len(r["items"]) == 5 and all(c["passed"] for c in r["checks"])
+    assert all(it["level"] - r["level"] < 2 for it in r["items"]) and sum(it["level"] - r["level"] == 1 for it in r["items"]) <= 1
+    assert 0 not in [it["item"] for it in r["items"]]
+    r2 = svc.recommend(li, k=5, guard=GuardrailConfig(plus_one_max=0))
+    assert all(it["level"] == r2["level"] or it["level"] < r2["level"] for it in r2["items"])
+    r3 = svc.recommend(li, k=5, topic_cap=1)
+    assert len({it["topic"] for it in r3["items"]}) == len(r3["items"])
+    sim = svc.recommend(li, k=5, assume_passed=[r["items"][0]["item"]])
+    assert r["items"][0]["item"] not in [it["item"] for it in sim["items"]]
+
+
+def test_gender_flip_invariance_operational(small_bundle):
+    svc = RecommendationService(small_bundle)
+    users = small_bundle.test_users[:40]
+    for uid in users:
+        base = svc.recommend(int(uid), k=5)
+        flip = svc.recommend(int(uid), k=5, overrides={"gender": 1 - base["segment"]["gender"]["code"]})
+        assert [i["item"] for i in base["items"]] == [i["item"] for i in flip["items"]]
+
+
+def test_all_families_serve_adhoc(small_bundle):
+    svc = RecommendationService(small_bundle)
+    li = LearnerInput(age=40, interests=[5], placement=2, events=[dict(item=15, quiz_pass=True), dict(item=16, complete=True)])
+    for fam in small_bundle.selection["families"]:
+        r = svc.recommend(li, k=3, algorithm=fam)
+        assert len(r["items"]) == 3, fam
+
+
+def test_recommend_new_and_errors(small_bundle):
+    svc = RecommendationService(small_bundle)
+    assert len(svc.recommend_new([0, 3], 1, 5)["items"]) == 5
+    with pytest.raises(ValueError):
+        svc.recommend(-1)
+    with pytest.raises(ValueError):
+        svc.recommend(0, k=0)
+    with pytest.raises(ValueError):
+        svc.recommend(0, overrides={"height": 1})
+
+
+def test_api_endpoints(small_bundle, tmp_path):
+    app = create_app(small_bundle, designs_dir=str(tmp_path))
+    c = TestClient(app)
+    assert c.get("/api/health").json()["training_in_request"] is False
+    assert len(c.get("/api/catalog").json()["items"]) == 60
+    r = c.post("/api/recommend", json={"learner_id": 1, "k": 5}); assert r.status_code == 200 and len(r.json()["items"]) <= 5
+    r = c.post("/api/recommend", json={"learner": {"age": 30, "interests": [1], "placement": 1}, "k": 3}); assert r.status_code == 200
+    assert c.post("/api/recommend", json={"learner_id": 1, "k": 0}).status_code == 422
+    assert c.post("/api/recommend", json={"k": 5}).status_code == 422
+    assert c.get("/api/learners/999999").status_code == 422
+    assert c.post("/api/parse", json={"text": "채권 ETF 초급 모바일"}).json()["fields"]["interests"]
+    assert c.post("/api/compare", json={"learner_id": 1, "k": 5, "methods": ["RULE", "UCF"]}).status_code == 200
+    assert len(c.get("/api/evaluation").json()["results"]) >= 10
+    assert c.post("/api/designs", json={"name": "t1", "payload": {"summary": "x"}}).status_code == 200
+    assert c.get("/api/designs/t1").status_code == 200 and c.delete("/api/designs/t1").status_code == 200
+    assert c.post("/api/parse-log", json={"csv_text": "item,quiz_pass\n0,1\n"}).json()["events"][0]["item"] == 0
+
+
+@pytest.mark.skipif(not os.environ.get("ETFREC_FULL"), reason="전체 규모 재현은 ETFREC_FULL=1 일 때만 (약 2~3분)")
+def test_full_regression_matches_notebook():
+    from etfrec.config import TrainConfig
+    from etfrec.data import Dataset
+    from etfrec.pipeline import train
+    cfg = TrainConfig()
+    b = train(Dataset.synthetic(cfg), cfg, out_dir=None, log=lambda *a, **k: None)
+    got = b.results.set_index("method").ndcg
+    expected = {"RULE": 0.17123, "RouterNoGender": 0.17119, "UCF": 0.14268, "POP": 0.11875, "ICF": 0.11112, "CONTENT": 0.09957,
+                "MF": 0.09264, "MF_OBS": 0.07099, "Random": 0.05993, "MLP": 0.05325}
+    for k, v in expected.items():
+        assert abs(got[k] - v) < 5e-5, (k, got[k], v)
