@@ -62,7 +62,8 @@ def sample_horizon(rg: np.random.Generator, goal) -> np.ndarray:
 
 
 def make_world(n: int, catalog: Catalog, seed: int = SEED, effect: float = EFFECT_SCALE,
-               gender_effect: float = GENDER_EFFECT, n_weeks: int = N_WEEKS, version: int = GENERATOR_VERSION) -> dict:
+               gender_effect: float = GENDER_EFFECT, n_weeks: int = N_WEEKS, version: int = GENERATOR_VERSION,
+               goal_effect: float = GOAL_EFFECT, prereq_penalty: float = PREREQ_PENALTY) -> dict:
     """학습자 n명의 프로필과 n_weeks주 학습 로그를 만든다."""
     r = np.random.default_rng(seed)
     v2 = int(version) >= 2
@@ -105,7 +106,7 @@ def make_world(n: int, catalog: Catalog, seed: int = SEED, effect: float = EFFEC
     g_eff = np.random.default_rng(seed + 7).normal(0, gender_effect, N_TOP)
     B += effect * np.where(gender[:, None] == 1, 0.5, -0.5) * g_eff
     if v2:
-        B += GOAL_EFFECT * affinity_matrix(catalog)[goal]        # 목적이 주제 선호를 기울인다
+        B += goal_effect * affinity_matrix(catalog)[goal]        # 목적이 주제 선호를 기울인다
     p = np.exp(B); p /= p.sum(1, keepdims=True)
     th = r.gamma(20 * p); theta = th / th.sum(1, keepdims=True)
     interests = np.argsort(-(np.log(theta + 1e-9) + r.gumbel(size=theta.shape)), 1)[:, :2]   # 온보딩 관심 주제 2개
@@ -146,7 +147,7 @@ def make_world(n: int, catalog: Catalog, seed: int = SEED, effect: float = EFFEC
             pen = 0.0
             if v2:                                                 # 선수 단원을 모르면 완료·통과가 어렵다
                 missing = np.minimum(((~understood[uu]).astype(np.int32) * P_T[:, ii].T).sum(1), 2)
-                pen = PREREQ_PENALTY * missing
+                pen = prereq_penalty * missing
             comp = r.random(len(uu)) < sgm(0.8 + 0.8 * diligence[uu] - 1.4 * gap - pen)
             quiz = comp & (r.random(len(uu)) < 0.7)
             qpass = quiz & (r.random(len(uu)) < sgm(1.5 + 0.6 * diligence[uu] - 1.8 * gap - pen))

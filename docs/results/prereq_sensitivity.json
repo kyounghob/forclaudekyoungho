@@ -1,0 +1,149 @@
+[
+ {
+  "prereq_penalty": 0.8,
+  "users": 1277,
+  "validation_best": 0.1416113350439963,
+  "operational": "아이템 CF(λ=10, confidence) ⊕ 규칙[관심 주제+수준 일치+소득 구간 주제+위험성향 주제+모바일·짧은 콘텐츠] (α_u, λ=30)",
+  "seconds": 45.6,
+  "Global": {
+   "ndcg": 0.1069063435467762,
+   "prereq_violation_rate": 0.6722004698512137,
+   "short_list_rate": 0.0,
+   "diversity": 0.9230227094753328,
+   "ci_low": 0.0,
+   "ci_high": 0.0
+  },
+  "RouterNoGender": {
+   "ndcg": 0.10012067725540402,
+   "prereq_violation_rate": 0.6798747063429914,
+   "short_list_rate": 0.0,
+   "diversity": 0.9418950665622554,
+   "ci_low": -0.016183130751619618,
+   "ci_high": 0.002865102607839608
+  },
+  "RouterNoGender+prereq": {
+   "ndcg": 0.08420397276491977,
+   "prereq_violation_rate": 0.0,
+   "short_list_rate": 0.5215348472983555,
+   "diversity": 0.9981466979900808,
+   "ci_low": -0.03137820840092704,
+   "ci_high": -0.010404975435528192
+  },
+  "POP": {
+   "ndcg": 0.08778568040034879,
+   "prereq_violation_rate": 0.5378230227094754,
+   "short_list_rate": 0.0,
+   "diversity": 0.9998433829287392,
+   "ci_low": -0.028647098805713863,
+   "ci_high": -0.007279998745026133
+  },
+  "UCF": {
+   "ndcg": 0.09784413809232265,
+   "prereq_violation_rate": 0.8413469068128426,
+   "short_list_rate": 0.0,
+   "diversity": 0.9499608457321849,
+   "ci_low": -0.024031894552262234,
+   "ci_high": 0.0025613467430931807
+  },
+  "quiz_pass": 4721,
+  "attempts": 21562
+ },
+ {
+  "prereq_penalty": 2.0,
+  "users": 1277,
+  "validation_best": 0.13951684649415264,
+  "operational": "규칙[관심 주제+투자 목적 일치+로드맵 단계 우선순위](base=연령대+소득분위)",
+  "seconds": 37.2,
+  "Global": {
+   "ndcg": 0.11815662441183117,
+   "prereq_violation_rate": 0.3639780736100235,
+   "short_list_rate": 0.0,
+   "diversity": 0.9476898981989039,
+   "ci_low": 0.0,
+   "ci_high": 0.0
+  },
+  "RouterNoGender": {
+   "ndcg": 0.11370204893242092,
+   "prereq_violation_rate": 0.4106499608457322,
+   "short_list_rate": 0.0,
+   "diversity": 0.931010180109632,
+   "ci_low": -0.00927408482110144,
+   "ci_high": 0.00010935882476436664
+  },
+  "RouterNoGender+prereq": {
+   "ndcg": 0.121459541879449,
+   "prereq_violation_rate": 0.0,
+   "short_list_rate": 0.6844166014095536,
+   "diversity": 0.999190811798486,
+   "ci_low": -0.002450806774445797,
+   "ci_high": 0.008338634080481576
+  },
+  "POP": {
+   "ndcg": 0.11143095301059426,
+   "prereq_violation_rate": 0.22662490211433045,
+   "short_list_rate": 0.0,
+   "diversity": 0.9999216914643697,
+   "ci_low": -0.012022323792629458,
+   "ci_high": -0.00014987810996801106
+  },
+  "UCF": {
+   "ndcg": 0.0610492755291894,
+   "prereq_violation_rate": 0.7498825371965544,
+   "short_list_rate": 0.0,
+   "diversity": 0.9563038371182461,
+   "ci_low": -0.07182216387989662,
+   "ci_high": -0.04702973545491934
+  },
+  "quiz_pass": 2215,
+  "attempts": 21562
+ },
+ {
+  "prereq_penalty": 4.0,
+  "users": 1277,
+  "validation_best": 0.15129124674741093,
+  "operational": "규칙[관심 주제+로드맵 단계 우선순위](base=연령대+소득분위)",
+  "seconds": 35.1,
+  "Global": {
+   "ndcg": 0.1248985314813817,
+   "prereq_violation_rate": 0.32325763508222394,
+   "short_list_rate": 0.0,
+   "diversity": 0.9586530931871576,
+   "ci_low": 0.0,
+   "ci_high": 0.0
+  },
+  "RouterNoGender": {
+   "ndcg": 0.12534737720560699,
+   "prereq_violation_rate": 0.3157400156617071,
+   "short_list_rate": 0.0,
+   "diversity": 0.9623335943617856,
+   "ci_low": -0.0017692061808250394,
+   "ci_high": 0.003280862460453103
+  },
+  "RouterNoGender+prereq": {
+   "ndcg": 0.13360171893329204,
+   "prereq_violation_rate": 0.0,
+   "short_list_rate": 0.7525450274079875,
+   "diversity": 1.0,
+   "ci_low": 0.004577414721251491,
+   "ci_high": 0.014539571478742706
+  },
+  "POP": {
+   "ndcg": 0.12042261045579916,
+   "prereq_violation_rate": 0.22960062646828505,
+   "short_list_rate": 0.0,
+   "diversity": 1.0,
+   "ci_low": -0.0103747100755505,
+   "ci_high": 0.003366650016012963
+  },
+  "UCF": {
+   "ndcg": 0.058418275985940044,
+   "prereq_violation_rate": 0.7158966327329679,
+   "short_list_rate": 0.0,
+   "diversity": 0.9563821456538762,
+   "ci_low": -0.07714651084569153,
+   "ci_high": -0.054913575879049936
+  },
+  "quiz_pass": 1339,
+  "attempts": 21562
+ }
+]

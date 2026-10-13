@@ -75,6 +75,8 @@ class TrainConfig:
     guardrail: GuardrailConfig = field(default_factory=GuardrailConfig)
     catalog_version: int = CATALOG_VERSION
     generator_version: int = GENERATOR_VERSION
+    goal_effect: float = 0.8        # 생성기 v2: 목적 친화도가 주제 선호 로짓에 더해지는 크기
+    prereq_penalty: float = 0.8     # 생성기 v2: 미이수 선수 단원 1개당 완료·통과 로짓 감소(최대 2개)
 
     @property
     def rule_parts(self):

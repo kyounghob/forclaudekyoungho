@@ -346,7 +346,7 @@
     $("#rec-view").hidden = false;
     const allOk = r.checks.every(c => c.passed); const rm = r.roadmap || {};
     $("#rec-badges").innerHTML = `<span class="badge ${allOk ? "ok" : "bad"}">${allOk ? "가드레일 검사 통과" : "검사 실패 있음"}</span><span class="badge">후보 ${r.candidates ?? 0}개</span><span class="badge">추정 수준 ${r.level} · ${LEVEL_NAME[r.level]}</span><span class="badge">${r.router ? "라우터 " + r.router : "설정 강제"}</span><span class="badge">#${r.algorithm_id} ${esc(r.family_label)}</span>` +
-      (rm.current_stage_name ? `<span class="badge">로드맵 ${esc(rm.current_stage_name)} · ${pct(rm.progress)}</span>` : "") + (r.shortfall ? `<span class="badge warn">${r.shortfall}개 부족</span>` : "");
+      (rm.current_stage_name ? `<span class="badge">로드맵 ${esc(rm.current_stage_name)} · ${pct(rm.progress)}</span>` : "") + (r.shortfall ? `<span class="badge warn">${(r.candidates ?? 0) < r.k ? `가드레일 통과 후보 ${r.candidates}개뿐 · ` : ""}${r.shortfall}개 부족</span>` : "");
     $("#rec-roadmap").innerHTML = rm.next_unit ? `<b>로드맵</b> ${esc(rm.goal_label)} · 현재 단계 <b>${esc(rm.current_stage_name)}</b> · 진행률 ${pct(rm.progress)} (${rm.units_passed}/${rm.units_total}) · 남은 학습 약 ${rm.minutes_left}분 · 다음 단원: ${esc(rm.next_unit.title)}<span class="muted small"> · 연결 유형: ${(rm.types || []).map(k => esc(META.type_names[k] || k)).join(", ")}</span>`
       : `<b>로드맵</b> ${esc(rm.goal_label || "")} · 로드맵 단원을 모두 통과했습니다. 연결 유형: ${(rm.types || []).map(k => esc(META.type_names[k] || k)).join(", ")}`;
     renderMap(r.topic_map, "#topic-map");

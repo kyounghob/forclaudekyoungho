@@ -309,7 +309,8 @@ class RecommendationService:
                      detail=f"{int(np.sum(lv - level == 1))}개 ≤ {guard.plus_one_max}개"),
                 dict(name="통과한 단원 제외", passed=bool(not any(lb.und[0][i] for i in ids)), detail=f"통과 단원 {int(lb.und[0].sum())}개 제외"),
                 dict(name="중복 없음", passed=len(ids) == len(set(ids)), detail=f"{len(ids)}개 고유"),
-                dict(name="요청 수 충족", passed=len(ids) == k, detail=f"{len(ids)}/{k}개 (후보 {len(ca)}개)"),
+                dict(name="요청 수 충족", passed=len(ids) == min(k, len(ca)),
+                     detail=f"{len(ids)}/{k}개 (후보 {len(ca)}개)" + (" · 가드레일을 통과한 후보가 요청 수보다 적어 가능한 만큼만 추천" if len(ca) < k else "")),
                 dict(name="선수 개념 충족", passed=bool(not guard.prereq_block or not any(it.get("missing_prereqs") for it in items)),
                      detail=(f"선수 미이수 {sum(1 for it in items if it.get('missing_prereqs'))}개" + ("" if guard.prereq_block else " (가드레일 꺼짐: 참고용)"))),
                 dict(name="금칙어 없음", passed=True, detail="제목 검사 통과")]

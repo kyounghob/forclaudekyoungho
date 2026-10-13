@@ -96,7 +96,7 @@ class Dataset:
         cfg = cfg or TrainConfig()
         catalog = catalog or Catalog.default(cfg.seed, version=cfg.catalog_version)
         world = make_world(cfg.n_learners, catalog, seed=cfg.seed, effect=cfg.effect_scale, gender_effect=cfg.gender_effect,
-                           version=cfg.generator_version)
+                           version=cfg.generator_version, goal_effect=cfg.goal_effect, prereq_penalty=cfg.prereq_penalty)
         meta = dict(seed=cfg.seed, effect_scale=cfg.effect_scale, gender_effect=cfg.gender_effect, generator_version=cfg.generator_version,
                     catalog_version=catalog.version, gender_effect_by_topic=dict(zip(catalog.topics, np.round(world["g_eff"], 3).tolist())))
         return cls(world["profiles"], world["log"], catalog, source="synthetic", meta=meta)
