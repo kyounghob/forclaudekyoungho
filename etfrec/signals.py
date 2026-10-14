@@ -17,7 +17,7 @@ import numpy as np
 import scipy.sparse as sp
 
 from .catalog import Catalog, onehot
-from .config import (CONTENT_GRID, ICF_GRID, MAX_REFERENCE_USERS, MF_GRID, SEED, SEG_KO, SEG_LAMS, SEG_VARS,
+from .config import (BPR_GRID, CONTENT_GRID, ICF_GRID, MAX_REFERENCE_USERS, MF_GRID, SEED, SEG_KO, SEG_LAMS, SEG_VARS,
                      UCF_DEMOS, UCF_GRID)
 from .features import DEMO_USES, FeatureStore, confidence, demo_sets
 from .roadmap import roadmap_priority_rows
@@ -180,16 +180,51 @@ def snapshot_key(F: FeatureStore, prefix: str = "B", seed: int = SEED) -> str:
     return f"{prefix}:{seed}:{R.shape}:{F.week}:{h.hexdigest()[:20]}"
 
 
-def supervised_from_log(log_before, cap: int = 200000, seed: int = SEED) -> dict:
-    """관측된 학습 시도 행만으로 MF·MLP 라벨을 만든다(퀴즈 통과 = 1)."""
+def next_week_pairs(log_before, n_items: int, seed: int = SEED, neg: int = 3, cap: int = 400000) -> dict:
+    """목표 정렬 학습 쌍(확장): 학습 주 w마다 (사용자 u, w에 처음 통과한 단원 i, w가 끝날 때까지 통과하지 않은 단원 j).
+    평가 정답(다음 주에 고르고 통과한 미통과 단원)과 같은 정의를 학습 주들에 적용한다. 평가 주의 기록은 쓰지 않는다."""
+    lg = log_before[log_before.quiz_pass.astype(bool)]
+    empty = dict(u=np.zeros(0, np.int64), i=np.zeros(0, np.int64), j=np.zeros(0, np.int64), w=np.zeros(0, np.int64),
+                 positives=0, label="first quiz-pass in training week w vs. units not passed by end of w")
+    if len(lg) == 0:
+        return empty
+    first = lg.groupby(["user", "item"]).week.min().reset_index()            # 사용자·단원별 첫 통과 주
+    fkeys = first.user.values.astype(np.int64) * n_items + first.item.values.astype(np.int64)
+    order = np.argsort(fkeys); fk = fkeys[order]; fw = first.week.values.astype(np.int64)[order]
+
+    def first_week(keys):
+        idx = np.minimum(np.searchsorted(fk, keys), len(fk) - 1)
+        return np.where(fk[idx] == keys, fw[idx], np.iinfo(np.int64).max)
+
+    rng = np.random.default_rng(seed + 29)
+    pu = first.user.values.astype(np.int64); pi = first.item.values.astype(np.int64); pw = first.week.values.astype(np.int64)
+    nu, ni, nw = np.repeat(pu, neg), np.repeat(pi, neg), np.repeat(pw, neg)
+    nj = rng.integers(0, n_items, len(nu))
+    bad = first_week(nu * n_items + nj) <= nw                                 # j가 w까지 통과된 단원이면 음성이 아니다
+    for _ in range(30):
+        if not bad.any():
+            break
+        nj[bad] = rng.integers(0, n_items, int(bad.sum()))
+        bad = first_week(nu * n_items + nj) <= nw
+    keep = ~bad
+    nu, ni, nj, nw = nu[keep], ni[keep], nj[keep], nw[keep]
+    if len(nu) > cap:
+        ix = np.sort(rng.choice(len(nu), cap, replace=False)); nu, ni, nj, nw = nu[ix], ni[ix], nj[ix], nw[ix]
+    return dict(u=nu, i=ni, j=nj, w=nw, positives=int(len(pu)), label=empty["label"])
+
+
+def supervised_from_log(log_before, cap: int = 200000, seed: int = SEED, n_items: int = None) -> dict:
+    """관측된 학습 시도 행만으로 MF·MLP 라벨을 만든다(퀴즈 통과 = 1). 목표 정렬 쌍(next_pairs)도 함께 만든다."""
     u = log_before.user.values; i = log_before.item.values; y = log_before.quiz_pass.astype(np.float32).values
     score = np.minimum(log_before.score.values / 3., 1).astype(np.float32)
     original = len(u)
+    n_items = int(n_items if n_items is not None else (int(i.max()) + 1 if len(i) else 0))
+    pairs = next_week_pairs(log_before, n_items, seed) if n_items else None
     if len(u) > cap:
         ix = np.sort(np.random.default_rng(seed + 23).choice(len(u), cap, replace=False))
         u, i, y, score = u[ix], i[ix], y[ix], score[ix]
     return dict(u=u.astype(np.int64), i=i.astype(np.int64), y=y, score=score, label="quiz-pass during observed study attempt",
-                source_rows=int(original), used_rows=int(len(u)), seed=seed + 23)
+                source_rows=int(original), used_rows=int(len(u)), seed=seed + 23, next_pairs=pairs)
 
 
 @dataclass
@@ -240,6 +275,7 @@ class ModelStore:
 
     def __init__(self, enable_neural: bool = True):
         self.mf = {}
+        self.mf_bpr = {}
         self.observed = {}
         self.audit = []
         self.enable_neural = enable_neural and neural.HAS_TORCH
@@ -256,13 +292,26 @@ class ModelStore:
             self.mf[key] = (P, Q)
         return self.mf[key]
 
+    def get_mf_bpr(self, ref: Reference, f: int, reg: float):
+        """BPR 쌍별 손실 MF(확장). 같은 반응 행렬의 양성 쌍으로 학습하고 미관측은 '양성보다 뒤'로만 본다."""
+        key = (ref.snapshot_key, f, reg)
+        if key not in self.mf_bpr:
+            coo = ref.Rw.tocoo()
+            P, Q, _, audit = neural.train_mf_bpr(coo.row, coo.col, ref.n_users, ref.n_items, k=f, reg=reg)
+            Q[ref.item_support == 0] = 0.0
+            audit.update(snapshot=ref.snapshot_key)
+            self.audit.append(audit)
+            self.mf_bpr[key] = (P, Q)
+        return self.mf_bpr[key]
+
     def get_observed(self, ref: Reference, kind: str) -> neural.ObservedWeights:
         key = (ref.snapshot_key, kind)
         if key not in self.observed:
             sup = ref.supervised
             if sup is None or len(sup["u"]) == 0:
                 raise ValueError("관측 학습 라벨이 필요합니다")
-            w = neural.fit_observed_model(sup["u"], sup["i"], sup["y"], sup["score"], ref.n_users, ref.n_items, kind, seed=SEED)
+            w = neural.fit_observed_model(sup["u"], sup["i"], sup["y"], sup["score"], ref.n_users, ref.n_items, kind, seed=SEED,
+                                          pairs=sup.get("next_pairs") if kind == "mlp9_next" else None)
             w.audit.update(snapshot=ref.snapshot_key)
             self.audit.append(w.audit)
             self.observed[key] = w
@@ -273,7 +322,7 @@ class ModelStore:
 class SignalBank:
     """신호 = (행 × 후보) 점수표. 행마다 후보 안에서 min-max 정규화해 저장한다.
     [교안 3-3] personal_norm = personal_score / max_personal 처럼 척도를 맞춰야 가중합이 의미를 가진다."""
-    CF_PREFIXES = ("icf:", "ucf:", "mf:")
+    CF_PREFIXES = ("icf:", "ucf:", "mf:", "mfbpr:")
 
     def __init__(self, cands: CandidateBatch, item_support: np.ndarray = None):
         self.cands = cands
@@ -435,8 +484,20 @@ def build_signals(bank: SignalBank, ref: Reference, lb: LearnerBatch, catalog: C
         for r in np.flatnonzero(~known):                            # 새 학습자: ALS 한 단계로 잠재 벡터 추정(확장)
             Pq[r] = neural.fold_in_user(Q, lb.Rw[r].toarray().ravel(), reg=reg)
         bank.add(nm, (Pq[:, None, :] * Q[cand]).sum(-1), f"행렬분해(f={f}, reg={reg})", "6-1·6-2; 음성 표본 확장 9-3", uses=("clicks",))
-    # ---- [교안 6-2·9-3] 관측 점수 MF·MLP ----
-    for name in ("mf_observed", "mlp9"):
+    # ---- 확장: BPR 쌍별 손실 MF(암묵 피드백의 순위 학습; 미관측 = 거절이 아니라 '양성보다 뒤') ----
+    for f, reg in BPR_GRID:
+        nm = f"mfbpr:{f}:{reg}"
+        if not need(nm) or not models.enable_neural:
+            continue
+        P, Q = models.get_mf_bpr(ref, f, reg)
+        Pq = np.zeros((R_, P.shape[1]))
+        known = lb.user >= 0
+        Pq[known] = P[lb.user[known]]
+        for r in np.flatnonzero(~known):                            # 새 학습자: 고정 Q에 대한 릿지 접기(근사)
+            Pq[r] = neural.fold_in_user(Q, lb.Rw[r].toarray().ravel(), reg=reg)
+        bank.add(nm, (Pq[:, None, :] * Q[cand]).sum(-1), f"BPR 행렬분해(f={f}, reg={reg})", "6-2(확장: 쌍별 순위 손실)", uses=("clicks",))
+    # ---- [교안 6-2·9-3] 관측 점수 MF·MLP (+ 확장: 쌍별 손실 MLP) ----
+    for name in ("mf_observed", "mlp9", "mlp9_bpr", "mlp9_bpru", "mlp9_next"):
         if not need(name) or not models.enable_neural:
             continue
         model = models.get_observed(ref, name)
@@ -456,8 +517,12 @@ def build_signals(bank: SignalBank, ref: Reference, lb: LearnerBatch, catalog: C
             pdense = p.toarray() if sp.issparse(p) else np.asarray(p)
             fallback = np.einsum("rd,rcd->rc", pdense, Xd_[cand], optimize=True)
             scores = np.where(cold, fallback, scores)
-        bank.add(name, scores, "Embedding + MLP (9-3)" if name == "mlp9" else "관측 점수 MF (6-2)",
-                 "9-2/9-3" if name == "mlp9" else "6-2", uses=("clicks", "pref"))
+        label = {"mlp9": "Embedding + MLP (9-3)", "mlp9_bpr": "Embedding + MLP, 쌍별 손실·관측 음성(확장)",
+                 "mlp9_bpru": "Embedding + MLP, 쌍별 손실·미관측 음성(확장)", "mlp9_next": "Embedding + MLP, 목표 정렬(다음 주 통과) 쌍별(확장)",
+                 "mf_observed": "관측 점수 MF (6-2)"}[name]
+        lecture = {"mlp9": "9-2/9-3", "mlp9_bpr": "9-3(확장)", "mlp9_bpru": "9-3(확장: 표준 BPR)", "mlp9_next": "9-3(확장: 목표 정렬)",
+                   "mf_observed": "6-2"}[name]
+        bank.add(name, scores, label, lecture, uses=("clicks", "pref"))
     add_plan_signals(bank, lb, catalog, need)
     if verbose:
         print(f"  신호 {len(bank.sig)}개 계산: {time.time() - t0:.1f}초")

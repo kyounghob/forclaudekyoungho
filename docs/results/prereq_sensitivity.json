@@ -1,149 +1,149 @@
 [
  {
   "prereq_penalty": 0.8,
-  "users": 1277,
-  "validation_best": 0.1416113350439963,
-  "operational": "아이템 CF(λ=10, confidence) ⊕ 규칙[관심 주제+수준 일치+소득 구간 주제+위험성향 주제+모바일·짧은 콘텐츠] (α_u, λ=30)",
-  "seconds": 45.6,
+  "users": 1284,
+  "validation_best": 0.14536075295664372,
+  "operational": "규칙[관심 주제+수준 일치+소득 구간 주제+모바일·짧은 콘텐츠+투자 목적 일치+로드맵 단계 우선순위](base=연령대+소득분위)",
+  "seconds": 30.8,
+  "quiz_pass": 4756,
+  "attempts": 21634,
   "Global": {
-   "ndcg": 0.1069063435467762,
-   "prereq_violation_rate": 0.6722004698512137,
+   "ndcg": 0.12730044205217103,
+   "prereq_violation_rate": 0.5475077881619937,
    "short_list_rate": 0.0,
-   "diversity": 0.9230227094753328,
+   "diversity": 0.9116822429906541,
    "ci_low": 0.0,
    "ci_high": 0.0
   },
   "RouterNoGender": {
-   "ndcg": 0.10012067725540402,
-   "prereq_violation_rate": 0.6798747063429914,
+   "ndcg": 0.12730044205217103,
+   "prereq_violation_rate": 0.5475077881619937,
    "short_list_rate": 0.0,
-   "diversity": 0.9418950665622554,
-   "ci_low": -0.016183130751619618,
-   "ci_high": 0.002865102607839608
+   "diversity": 0.9116822429906541,
+   "ci_low": 0.0,
+   "ci_high": 0.0
   },
   "RouterNoGender+prereq": {
-   "ndcg": 0.08420397276491977,
+   "ndcg": 0.10067778182226894,
    "prereq_violation_rate": 0.0,
-   "short_list_rate": 0.5215348472983555,
-   "diversity": 0.9981466979900808,
-   "ci_low": -0.03137820840092704,
-   "ci_high": -0.010404975435528192
+   "short_list_rate": 0.5264797507788161,
+   "diversity": 0.9977933541017652,
+   "ci_low": -0.03765652069319428,
+   "ci_high": -0.015698058982231877
   },
   "POP": {
-   "ndcg": 0.08778568040034879,
-   "prereq_violation_rate": 0.5378230227094754,
+   "ndcg": 0.10135918307002677,
+   "prereq_violation_rate": 0.37258566978193147,
    "short_list_rate": 0.0,
-   "diversity": 0.9998433829287392,
-   "ci_low": -0.028647098805713863,
-   "ci_high": -0.007279998745026133
+   "diversity": 1.0,
+   "ci_low": -0.03669037999385368,
+   "ci_high": -0.016997720776049836
   },
   "UCF": {
-   "ndcg": 0.09784413809232265,
-   "prereq_violation_rate": 0.8413469068128426,
+   "ndcg": 0.10325037249432138,
+   "prereq_violation_rate": 0.7627725856697819,
    "short_list_rate": 0.0,
-   "diversity": 0.9499608457321849,
-   "ci_low": -0.024031894552262234,
-   "ci_high": 0.0025613467430931807
-  },
-  "quiz_pass": 4721,
-  "attempts": 21562
+   "diversity": 0.9603582554517135,
+   "ci_low": -0.03596227121597698,
+   "ci_high": -0.013188841553165187
+  }
  },
  {
   "prereq_penalty": 2.0,
-  "users": 1277,
-  "validation_best": 0.13951684649415264,
-  "operational": "규칙[관심 주제+투자 목적 일치+로드맵 단계 우선순위](base=연령대+소득분위)",
-  "seconds": 37.2,
+  "users": 1284,
+  "validation_best": 0.14031019893224447,
+  "operational": "아이템 CF(λ=10, confidence) ⊕ 규칙[관심 주제+투자 목적 일치+로드맵 단계 우선순위] (α_u, λ=30)",
+  "seconds": 28.1,
+  "quiz_pass": 2280,
+  "attempts": 21634,
   "Global": {
-   "ndcg": 0.11815662441183117,
-   "prereq_violation_rate": 0.3639780736100235,
+   "ndcg": 0.13005246549547916,
+   "prereq_violation_rate": 0.3309968847352025,
    "short_list_rate": 0.0,
-   "diversity": 0.9476898981989039,
+   "diversity": 0.9521028037383178,
    "ci_low": 0.0,
    "ci_high": 0.0
   },
   "RouterNoGender": {
-   "ndcg": 0.11370204893242092,
-   "prereq_violation_rate": 0.4106499608457322,
+   "ndcg": 0.13005246549547916,
+   "prereq_violation_rate": 0.3309968847352025,
    "short_list_rate": 0.0,
-   "diversity": 0.931010180109632,
-   "ci_low": -0.00927408482110144,
-   "ci_high": 0.00010935882476436664
+   "diversity": 0.9521028037383178,
+   "ci_low": 0.0,
+   "ci_high": 0.0
   },
   "RouterNoGender+prereq": {
-   "ndcg": 0.121459541879449,
+   "ndcg": 0.12817726371388796,
    "prereq_violation_rate": 0.0,
-   "short_list_rate": 0.6844166014095536,
-   "diversity": 0.999190811798486,
-   "ci_low": -0.002450806774445797,
-   "ci_high": 0.008338634080481576
+   "short_list_rate": 0.6993769470404985,
+   "diversity": 0.999766355140187,
+   "ci_low": -0.005923942851351209,
+   "ci_high": 0.0024563281485621125
   },
   "POP": {
-   "ndcg": 0.11143095301059426,
-   "prereq_violation_rate": 0.22662490211433045,
+   "ndcg": 0.12871167862880836,
+   "prereq_violation_rate": 0.23146417445482867,
    "short_list_rate": 0.0,
-   "diversity": 0.9999216914643697,
-   "ci_low": -0.012022323792629458,
-   "ci_high": -0.00014987810996801106
+   "diversity": 1.0,
+   "ci_low": -0.008771383254556352,
+   "ci_high": 0.004471494887488291
   },
   "UCF": {
-   "ndcg": 0.0610492755291894,
-   "prereq_violation_rate": 0.7498825371965544,
+   "ndcg": 0.08040067586097216,
+   "prereq_violation_rate": 0.7004672897196261,
    "short_list_rate": 0.0,
-   "diversity": 0.9563038371182461,
-   "ci_low": -0.07182216387989662,
-   "ci_high": -0.04702973545491934
-  },
-  "quiz_pass": 2215,
-  "attempts": 21562
+   "diversity": 0.962772585669782,
+   "ci_low": -0.059285296027125615,
+   "ci_high": -0.03817968941425895
+  }
  },
  {
   "prereq_penalty": 4.0,
-  "users": 1277,
-  "validation_best": 0.15129124674741093,
-  "operational": "규칙[관심 주제+로드맵 단계 우선순위](base=연령대+소득분위)",
-  "seconds": 35.1,
+  "users": 1284,
+  "validation_best": 0.15644012817106498,
+  "operational": "규칙[관심 주제](base=전체)",
+  "seconds": 26.6,
+  "quiz_pass": 1479,
+  "attempts": 21634,
   "Global": {
-   "ndcg": 0.1248985314813817,
-   "prereq_violation_rate": 0.32325763508222394,
+   "ndcg": 0.14830963215207044,
+   "prereq_violation_rate": 0.2425233644859813,
    "short_list_rate": 0.0,
-   "diversity": 0.9586530931871576,
+   "diversity": 0.9809190031152648,
    "ci_low": 0.0,
    "ci_high": 0.0
   },
   "RouterNoGender": {
-   "ndcg": 0.12534737720560699,
-   "prereq_violation_rate": 0.3157400156617071,
+   "ndcg": 0.14830963215207044,
+   "prereq_violation_rate": 0.2425233644859813,
    "short_list_rate": 0.0,
-   "diversity": 0.9623335943617856,
-   "ci_low": -0.0017692061808250394,
-   "ci_high": 0.003280862460453103
+   "diversity": 0.9809190031152648,
+   "ci_low": 0.0,
+   "ci_high": 0.0
   },
   "RouterNoGender+prereq": {
-   "ndcg": 0.13360171893329204,
+   "ndcg": 0.1509457334849471,
    "prereq_violation_rate": 0.0,
-   "short_list_rate": 0.7525450274079875,
+   "short_list_rate": 0.7570093457943925,
    "diversity": 1.0,
-   "ci_low": 0.004577414721251491,
-   "ci_high": 0.014539571478742706
+   "ci_low": -0.0020555265784768166,
+   "ci_high": 0.00704553842463242
   },
   "POP": {
-   "ndcg": 0.12042261045579916,
-   "prereq_violation_rate": 0.22960062646828505,
+   "ndcg": 0.14767292134216134,
+   "prereq_violation_rate": 0.22741433021806853,
    "short_list_rate": 0.0,
    "diversity": 1.0,
-   "ci_low": -0.0103747100755505,
-   "ci_high": 0.003366650016012963
+   "ci_low": -0.00538376351112987,
+   "ci_high": 0.004323869731723284
   },
   "UCF": {
-   "ndcg": 0.058418275985940044,
-   "prereq_violation_rate": 0.7158966327329679,
+   "ndcg": 0.08872242076313837,
+   "prereq_violation_rate": 0.6529595015576324,
    "short_list_rate": 0.0,
-   "diversity": 0.9563821456538762,
-   "ci_low": -0.07714651084569153,
-   "ci_high": -0.054913575879049936
-  },
-  "quiz_pass": 1339,
-  "attempts": 21562
+   "diversity": 0.9616043613707166,
+   "ci_low": -0.07096996774077984,
+   "ci_high": -0.04785718068136997
+  }
  }
 ]

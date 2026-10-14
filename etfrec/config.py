@@ -36,6 +36,7 @@ UCF_GRID = [(k, d, w) for k in (20, 50, 100)
                           ("age+inc+gender", (0.2, 0.5)), ("all", (0.2, 0.5))] for w in ws]
 ICF_GRID = [(lam, c) for lam in (0, 5, 10, 30) for c in (0, 1)]
 MF_GRID = [(f, r) for f in (8, 16, 32) for r in (0.01, 0.1)]
+BPR_GRID = list(MF_GRID)                     # 확장: BPR 쌍별 손실 행렬분해 — 표본 MF와 같은 격자(공정한 튜닝 예산)
 CONTENT_GRID = [(x, c) for x in ("cat", "txt", "both") for c in (0, 1)]
 
 RULE_PARTS_V1 = [("r:pref", 3), ("r:lvl", 2), ("r:life", 2), ("r:inc", 2), ("r:risk", 2), ("r:dev", 1)]

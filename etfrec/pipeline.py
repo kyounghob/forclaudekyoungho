@@ -27,6 +27,7 @@ from .features import FeatureStore, feature_store
 from .router import ShrinkRouter, tune_router
 from .signals import CandidateBatch, LearnerBatch, ModelStore, Reference, SignalBank, build_signals, supervised_from_log
 from .util import get_logger, json_safe
+from .privacy import privacy_audit
 from .zoo import Algo, algo_uses, build_zoo, score_algo
 
 BUNDLE_FILE = "bundle.pkl"
@@ -62,6 +63,7 @@ class Bundle:
     zoo_skipped: list = field(default_factory=list)
     test_users: np.ndarray = None       # predictions의 행 순서(오프라인·온라인 일치 검사용)
     exposure: pd.DataFrame = None
+    privacy: dict = None                # k-익명성·최소화 점검(etfrec.privacy)
 
     @property
     def family_counts(self):
@@ -74,7 +76,7 @@ class Bundle:
             configurations=len(self.algos), family_counts=self.family_counts, signal_count=len(self.signal_meta),
             selection=self.selection, router_tuning=self.router_tuning, training=self.models.audit,
             results=self.results.to_dict("records"), group_results=self.group_results.to_dict("records"), qa=self.qa,
-            neural_enabled=self.models.enable_neural, zoo_skipped=len(self.zoo_skipped),
+            neural_enabled=self.models.enable_neural, zoo_skipped=len(self.zoo_skipped), privacy=self.privacy,
             environment=dict(python=platform.python_version(), numpy=np.__version__, pandas=pd.__version__,
                              torch=getattr(neural.torch, "__version__", None) if neural.HAS_TORCH else None, os=platform.platform()),
             implementation_status="executed prototype; synthetic data unless a real log directory was given"))
@@ -108,7 +110,7 @@ def train(dataset: Dataset, cfg: TrainConfig = None, out_dir: str = None, enable
     # --- 1단계: 검증(테스트 데이터는 적합·선택에 쓰지 않는다) ---
     F_val = feature_store(profiles, LOG, catalog, cfg.val_week)
     cands_val, lb_val = primary_eval(cfg.val_week, F_val, LOG, catalog, guard)
-    sup_val = supervised_from_log(LOG[LOG.week < cfg.val_week], cfg.train_max_rows, cfg.seed)
+    sup_val = supervised_from_log(LOG[LOG.week < cfg.val_week], cfg.train_max_rows, cfg.seed, n_items=catalog.n_items)
     ref_val = Reference.from_store(F_val, catalog, RADIX, sup_val)
     models = ModelStore(enable_neural)
     logger(f"데이터 {dataset.summary()}")
@@ -139,7 +141,7 @@ def train(dataset: Dataset, cfg: TrainConfig = None, out_dir: str = None, enable
         router_tunes[name] = tune.to_dict("records")
         logger(f"{name}: λ={lam:g}, 노드 {[len(x['keys']) for x in routers[name].levels]}")
     selectable = {}
-    for family in ("POP", "RULE", "CONTENT", "UCF", "ICF", "MF", "MF_OBS", "MLP"):
+    for family in ("POP", "RULE", "CONTENT", "UCF", "ICF", "MF", "MF_BPR", "MF_OBS", "MLP", "MLP_BPR", "MLP_BPRU", "MLP_NEXT"):
         ids = np.array([a.aid for a in algos if a.family == family])
         if len(ids):
             selectable[family] = int(ids[np.argmax(M_val[:, ids].mean(0))])
@@ -154,7 +156,7 @@ def train(dataset: Dataset, cfg: TrainConfig = None, out_dir: str = None, enable
     # --- 2단계: 테스트(선택된 설정만) ---
     F_test = feature_store(profiles, LOG, catalog, cfg.test_week)
     cands_test, lb_test = primary_eval(cfg.test_week, F_test, LOG, catalog, guard)
-    sup_test = supervised_from_log(LOG[LOG.week < cfg.test_week], cfg.train_max_rows, cfg.seed)
+    sup_test = supervised_from_log(LOG[LOG.week < cfg.test_week], cfg.train_max_rows, cfg.seed, n_items=catalog.n_items)
     ref_test = Reference.from_store(F_test, catalog, RADIX, sup_test)
     needed_aids = set(selectable.values())
     for rt in routers.values():
@@ -165,21 +167,28 @@ def train(dataset: Dataset, cfg: TrainConfig = None, out_dir: str = None, enable
     build_signals(bank_test, ref_test, lb_test, catalog, models, needed=need_sig)
     logger(f"테스트 {cands_test.audit}")
     select_test = make_select(cands_test, lb_test, catalog, K, guard)
-    rows, predictions, per_user = [], {}, {}
+    rows, predictions, per_user, active_users = [], {}, {}, {}
     CATS = catalog.item_topic
 
     missing_test = catalog.missing_prereq_count(F_test.und[cands_test.user])      # (R, n_items) 테스트 시점 미이수 선수 단원 수
+    # 다음 주 정답이 하나라도 있는 '활성' 사용자. 노트북 규칙(정답 없는 사용자 = NDCG 0 포함)과 표준 규칙(제외)을 둘 다 보고한다.
+    active_test = cands_test.per_user(cands_test.rel.sum(1).astype(float)) > 0
+    active_users[cfg.operational_router] = active_test
 
-    def record(name, sel):
-        nd, ht, dv, it = row_metrics(sel, cands_test, CATS)
-        nuser = cands_test.per_user(nd); huser = cands_test.per_user(ht); duser = cands_test.per_user(dv)
+    def record(name, sel, cands=None, active=None):
+        cands = cands_test if cands is None else cands
+        active = active_test if active is None else active
+        nd, ht, dv, it = row_metrics(sel, cands, CATS)
+        nuser = cands.per_user(nd); huser = cands.per_user(ht); duser = cands.per_user(dv)
         per_user[name] = nuser; predictions[name] = it
         ok = it >= 0
-        viol = (missing_test[np.arange(cands_test.R)[:, None], np.maximum(it, 0)] > 0) & ok
+        viol = (missing_test[np.arange(cands.R)[:, None], np.maximum(it, 0)] > 0) & ok
         rows.append(dict(method=name, ndcg=float(nuser.mean()), diversity=float(duser.mean()), hit_diagnostic=float(huser.mean()),
+                         ndcg_active=float(nuser[active].mean()) if active.any() else 0.0,
+                         hit_active=float(huser[active].mean()) if active.any() else 0.0, active_users=int(active.sum()),
                          coverage_diagnostic=float(np.unique(it[it >= 0]).size / max(cands_test.n_pool, 1)),
                          short_list_rate=float((np.sum(it >= 0, 1) < K).mean()),
-                         prereq_violation_rate=float(viol.sum() / max(ok.sum(), 1)), users=len(nuser), requests=cands_test.R))
+                         prereq_violation_rate=float(viol.sum() / max(ok.sum(), 1)), users=len(nuser), requests=cands.R))
 
     for name, aid in selectable.items():
         record(name, select_test(score_algo(algos[aid], bank_test, lb_test.nu)))
@@ -204,20 +213,18 @@ def train(dataset: Dataset, cfg: TrainConfig = None, out_dir: str = None, enable
     for c in np.unique(champ_pre):
         rr = np.flatnonzero(champ_pre == c)
         sel_pre[rr] = score_and_select_rows(algos[c], bank_pre, lb_pre, catalog, rr, guard_pre)
-    nd_pre, ht_pre, dv_pre, it_pre = row_metrics(sel_pre, cands_pre, CATS)
-    ok_pre = it_pre >= 0
-    viol_pre = (missing_test[np.arange(cands_pre.R)[:, None], np.maximum(it_pre, 0)] > 0) & ok_pre
-    per_user[cfg.operational_router + "+prereq"] = cands_pre.per_user(nd_pre); predictions[cfg.operational_router + "+prereq"] = it_pre
-    rows.append(dict(method=cfg.operational_router + "+prereq", ndcg=float(cands_pre.per_user(nd_pre).mean()), diversity=float(cands_pre.per_user(dv_pre).mean()),
-                     hit_diagnostic=float(cands_pre.per_user(ht_pre).mean()), coverage_diagnostic=float(np.unique(it_pre[ok_pre]).size / max(cands_test.n_pool, 1)),
-                     short_list_rate=float((ok_pre.sum(1) < K).mean()), prereq_violation_rate=float(viol_pre.sum() / max(ok_pre.sum(), 1)),
-                     users=len(cands_pre.users), requests=cands_pre.R))
+    active_pre = cands_pre.per_user(np.asarray(cands_pre.full_relevant_count, float)) > 0
+    record(cfg.operational_router + "+prereq", sel_pre, cands=cands_pre, active=active_pre)
     results = pd.DataFrame(rows)
     for idx, row in results.iterrows():
         diff = per_user[row["method"]] - per_user["Global"]; lo, hi = bootstrap_ci(diff, cfg.bootstrap_n, cfg.seed)
         results.loc[idx, "difference_vs_global"] = float(diff.mean()); results.loc[idx, "ci_low"] = lo; results.loc[idx, "ci_high"] = hi
+        act = active_pre if row["method"].endswith("+prereq") else active_test
+        if len(diff) == len(act) and act.any():
+            lo_a, hi_a = bootstrap_ci(diff[act], cfg.bootstrap_n, cfg.seed)
+            results.loc[idx, "difference_vs_global_active"] = float(diff[act].mean()); results.loc[idx, "ci_low_active"] = lo_a; results.loc[idx, "ci_high_active"] = hi_a
     results = results.sort_values("ndcg", ascending=False).reset_index(drop=True)
-    logger("테스트 결과\n" + results[["method", "ndcg", "diversity", "hit_diagnostic", "prereq_violation_rate", "difference_vs_global", "ci_low", "ci_high"]].round(5).to_string(index=False))
+    logger("테스트 결과\n" + results[["method", "ndcg", "ndcg_active", "diversity", "hit_diagnostic", "prereq_violation_rate", "difference_vs_global", "ci_low", "ci_high"]].round(5).to_string(index=False))
     # 운영 설정: 운영 라우터가 테스트 사용자에게 배정한 챔피언 가운데 가장 많이 쓰인 것(전역 1위와 같은 경우가 보통)
     op_champ, _, _ = routers[cfg.operational_router].route(F_test.codes[cands_test.user])
     selection["operational_algorithm"] = int(np.bincount(op_champ).argmax())
@@ -230,17 +237,14 @@ def train(dataset: Dataset, cfg: TrainConfig = None, out_dir: str = None, enable
             c = F_test.codes[cands_test.users, SEG_VARS.index(variable)]
             for val in np.unique(c):
                 m = c == val
-                lo, hi = bootstrap_ci(vv[m], 200, cfg.seed)
-                group_rows.append(dict(method=method, variable=variable, group=int(val), users=int(m.sum()), ndcg=float(vv[m].mean()),
-                                       ci_low=lo, ci_high=hi))
+                group_rows.append(_group_row(method, variable, int(val), vv, m, active_test, cfg.seed))
     goals_test = np.asarray(F_test.goal, dtype=object)[cands_test.users] if F_test.goal is not None else np.full(len(cands_test.users), "long_term", object)
     for method in ("Global", "RouterNoGender"):
         vv = per_user[method]
         for g in GOALS:
             m = goals_test == g
             if m.any():
-                lo, hi = bootstrap_ci(vv[m], 200, cfg.seed)
-                group_rows.append(dict(method=method, variable="goal", group=g, users=int(m.sum()), ndcg=float(vv[m].mean()), ci_low=lo, ci_high=hi))
+                group_rows.append(_group_row(method, "goal", g, vv, m, active_test, cfg.seed))
     group_results = pd.DataFrame(group_rows)
     # 심화·레버리지 콘텐츠 노출률(공정성 점검 확장)
     exposure_rows = []
@@ -254,19 +258,31 @@ def train(dataset: Dataset, cfg: TrainConfig = None, out_dir: str = None, enable
                 exposure_rows.append(dict(method=method, variable=variable, group=int(val), users=int(m.sum()),
                                           advanced_share=float(adv[m].sum() / max(ok[m].sum(), 1))))
     qa = run_qa(cands_test, catalog, results, predictions, F_test, models, selection, dataset, allowed_ngi, uses, lb_test)
+    privacy = privacy_audit(F_test.codes, SEG_VARS, profiles)
     bundle = Bundle(version=__version__, created_at=time.strftime("%Y-%m-%dT%H:%M:%S"), config=cfg, catalog=catalog, store=F_test,
                     reference=ref_test, models=models, algos=algos, signal_meta=signal_meta, selection=selection, routers=routers,
                     router_tuning=router_tunes, results=results, group_results=group_results, validation_jobs=jobs,
                     predictions=predictions, per_user=per_user, qa=qa, dataset_summary=dataset.summary(),
                     validation_audit=cands_val.audit, test_audit=cands_test.audit, dataset_meta=dataset.meta, profiles=profiles,
                     log=LOG[LOG.week < cfg.test_week].reset_index(drop=True), zoo_skipped=skipped,
-                    test_users=cands_test.user.copy(), exposure=pd.DataFrame(exposure_rows))
+                    test_users=cands_test.user.copy(), exposure=pd.DataFrame(exposure_rows), privacy=privacy)
     logger(f"QA {len(qa)}건 통과, 총 {time.time() - t0:.1f}초")
     if out_dir:
         bundle.save(out_dir)
         bundle.exposure.to_csv(os.path.join(out_dir, "advanced_exposure.csv"), index=False, encoding="utf-8-sig")
         logger(f"번들 저장: {os.path.abspath(out_dir)}")
     return bundle
+
+
+def _group_row(method, variable, group, vv, m, active, seed) -> dict:
+    """집단별 NDCG: 전체 기준(정답 없는 사용자 = 0 포함)과 활성 기준(정답 ≥1 사용자만)을 함께 기록한다.
+    활성 비율이 집단마다 다르면 두 기준의 집단 순서가 달라질 수 있으므로(예: 학습활동) 둘 다 보고한다."""
+    lo, hi = bootstrap_ci(vv[m], 200, seed)
+    ma = m & active
+    lo_a, hi_a = bootstrap_ci(vv[ma], 200, seed) if ma.sum() > 1 else (float("nan"), float("nan"))
+    return dict(method=method, variable=variable, group=group, users=int(m.sum()), ndcg=float(vv[m].mean()), ci_low=lo, ci_high=hi,
+                active_users=int(ma.sum()), active_share=float(ma.sum() / max(m.sum(), 1)),
+                ndcg_active=float(vv[ma].mean()) if ma.any() else float("nan"), ci_low_active=lo_a, ci_high_active=hi_a)
 
 
 def score_and_select_rows(algo: Algo, bank: SignalBank, lb: LearnerBatch, catalog: Catalog, rows, guard: GuardrailConfig):
@@ -305,12 +321,32 @@ def run_qa(cands_test, catalog, results, predictions, F_test, models, selection,
     if models.enable_neural:
         check("MLP_actually_trained", any(x["model"] == "mlp9" and x["training_rows"] > 0 for x in models.audit))
         check("MLP_has_observed_zeros", all(x.get("zero", 1) > 0 for x in models.audit if x["model"] == "mlp9"))
+        for kind in ("mlp9_bpr", "mlp9_bpru", "mlp9_next"):
+            rows_k = [x for x in models.audit if x["model"] == kind]
+            if rows_k:
+                check(f"{kind}_pairs_at_two_snapshots", all(x.get("pairs", 0) > 0 for x in rows_k) and len({x.get("snapshot") for x in rows_k}) >= 2)
+        bpr = [x for x in models.audit if x["model"] == "MF_BPR"]
+        if bpr:
+            check("MF_BPR_trained_at_two_snapshots", len({x.get("snapshot") for x in bpr}) >= 2 and all(x["final_negative_collisions"] == 0 for x in bpr))
         check("observed_models_trained_at_validation_and_test_snapshots",
               len({x.get("snapshot") for x in models.audit if x["model"] in ("mf_observed", "mlp9")}) >= 2)
     a = np.array([0, 1, 2, 0, 1, 2]); inter = np.array([[0], [1]])
     correct = (a[None, :, None] == inter[:, None, :]).any(-1)
     check("per_user_interest_broadcast", not np.array_equal(correct[0], correct[1]))
     check("mastery_equals_quiz_pass", np.array_equal(dataset.log.understood.values, dataset.log.quiz_pass.values))
+    lg = dataset.log
+    check("event_logic_drop_excludes_complete", not bool((lg["drop"].astype(bool) & lg.complete.astype(bool)).any()),
+          "이탈과 완료는 같은 시도에서 동시에 참일 수 없다")
+    check("event_logic_quiz_pass_requires_quiz_and_complete",
+          bool((lg.quiz_pass.astype(bool) <= lg.quiz.astype(bool)).all() and (lg.quiz.astype(bool) <= lg.complete.astype(bool)).all()),
+          "퀴즈 통과 ⊆ 퀴즈 시도 ⊆ 완료")
+    if "ndcg_active" in results.columns:
+        ok_id = np.allclose(results.ndcg_active.values * results.active_users.values, results.ndcg.values * results.users.values, atol=1e-9)
+        check("ndcg_active_identity", ok_id, "활성 사용자 NDCG × 활성 수 = 전체 NDCG × 전체 수 (정답 없는 사용자는 모든 방법에서 0)")
+        check("active_users_identical_across_methods", results.active_users.nunique() == 1,
+              "모든 방법이 같은 활성 사용자 집합으로 평가되어야 두 기준의 순위가 같다")
+        check("active_rank_preserved", list(results.sort_values(["ndcg", "method"], ascending=[False, True]).method)
+              == list(results.sort_values(["ndcg_active", "method"], ascending=[False, True]).method), "전체·활성 기준의 방법 순위가 같다")
     check("ordered_study_times", bool((dataset.log.groupby(["user", "week"])["minute"].apply(lambda x: np.all(np.diff(x.values) >= 0))).all()))
     lv_rows = lb_test.level
     for name, it in predictions.items():

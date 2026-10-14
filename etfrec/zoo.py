@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .config import CONTENT_GRID, ICF_GRID, MF_GRID, SEG_LAMS, SEG_VARS, UCF_GRID
+from .config import BPR_GRID, CONTENT_GRID, ICF_GRID, MF_GRID, SEG_LAMS, SEG_VARS, UCF_GRID
 from .signals import SEG_V_ALL, SignalBank, seg_label, seg_name
 
 
@@ -30,10 +30,13 @@ class Algo:
 
 FAMILY_KO = {"POP": "인기", "SEGPOP": "세그먼트 인기", "PERS": "개인화 인기", "RULE": "규칙 점수", "CONTENT": "콘텐츠",
              "UCF": "사용자 CF", "ICF": "아이템 CF", "MF": "행렬분해", "HYB2": "CF+세그먼트", "HYB3": "CF+콘텐츠+세그먼트",
-             "HYBR": "CF+규칙", "CTX": "맥락 보정", "MLP": "MLP (9주차)", "MF_OBS": "관측 점수 MF"}
+             "HYBR": "CF+규칙", "CTX": "맥락 보정", "MLP": "MLP (9주차)", "MF_OBS": "관측 점수 MF",
+             "MF_BPR": "행렬분해(BPR 쌍별 손실)", "MLP_BPR": "MLP (쌍별·관측 음성)", "MLP_BPRU": "MLP (쌍별·미관측 음성)",
+             "MLP_NEXT": "MLP (목표 정렬: 다음 주 통과)"}
 FAMILY_LECTURE = {"POP": "3-1", "SEGPOP": "3-1·5-3", "PERS": "3-3", "RULE": "3-2", "CONTENT": "4-1·4-2·4-3", "UCF": "5-1",
                   "ICF": "5-2·5-3", "MF": "6-1·6-2", "HYB2": "5-3", "HYB3": "5-3·4-3", "HYBR": "5-3·3-2", "CTX": "5-3",
-                  "MLP": "9-2/9-3", "MF_OBS": "6-2"}
+                  "MLP": "9-2/9-3", "MF_OBS": "6-2", "MF_BPR": "6-2(확장: BPR)", "MLP_BPR": "9-3(확장: 쌍별)",
+                  "MLP_BPRU": "9-3(확장: 표준 BPR)", "MLP_NEXT": "9-3(확장: 목표 정렬)"}
 CF_CORE = ["icf:10:1", "mf:16:0.01", "ucf:50:all:0.2"]
 CONTENT_CORE = "cnt:both:1"
 KEY_V = [(), ("age_band",), ("income_q",), ("gender",), ("age_band", "income_q"), ("age_band", "gender"),
@@ -83,6 +86,9 @@ def build_zoo(bank: SignalBank, rule_parts, ctx_names) -> list:
     for f, r in MF_GRID:
         if f"mf:{f}:{r}" in bank:
             add("MF", lab(f"mf:{f}:{r}"), [(f"mf:{f}:{r}", ("c", 1.0))])
+    for f, r in BPR_GRID:
+        if f"mfbpr:{f}:{r}" in bank:
+            add("MF_BPR", lab(f"mfbpr:{f}:{r}"), [(f"mfbpr:{f}:{r}", ("c", 1.0))])
     # 6) [교안 5-3] final_score = alpha * cf_score + (1 - alpha) * content_score — content 자리에 세그먼트 인기 32종
     for cf in CF_CORE:
         for V in priors:
@@ -122,7 +128,7 @@ def build_zoo(bank: SignalBank, rule_parts, ctx_names) -> list:
                         if cf in bank and cx in bank:
                             add("CTX", f"{lab(cx)} β={b} + {lab(cf)} ⊕ [{g}·콘텐츠 + {1 - g:.1f}·세그먼트 인기[{seg_label(V)}]]",
                                 base + [(cx, ("c", b))], V, ctx=cx, cf=cf, beta=b, gamma=g)
-    for nm, fam in [("mf_observed", "MF_OBS"), ("mlp9", "MLP")]:
+    for nm, fam in [("mf_observed", "MF_OBS"), ("mlp9", "MLP"), ("mlp9_bpr", "MLP_BPR"), ("mlp9_bpru", "MLP_BPRU"), ("mlp9_next", "MLP_NEXT")]:
         if nm in bank:
             add(fam, lab(nm), [(nm, ("c", 1.0))])
     build_zoo.skipped = skipped

@@ -39,7 +39,8 @@ await shot("02_basic", false);
 // 3단계: 진단 퀴즈 — 처음 10문항은 정답, 나머지는 1번 보기
 await step(3);
 await page.waitForSelector(".qcard");
-const answers = { q01: 1, q02: 1, q03: 1, q04: 1, q05: 2, q06: 1, q07: 1, q08: 2, q09: 1, q10: 1, q11: 1, q12: 1, q13: 1, q14: 1, q15: 1, q16: 1 };
+// 모두 정답, q12만 오답(채점 화면에 오답 해설이 보이도록). 정답 위치는 quiz.py에서 보기 4개에 고르게 나뉘어 있다.
+const answers = { q01: 0, q02: 3, q03: 2, q04: 0, q05: 2, q06: 3, q07: 1, q08: 2, q09: 3, q10: 0, q11: 1, q12: 0, q13: 0, q14: 1, q15: 2, q16: 1, q17: 0, q18: 2, q19: 3, q20: 1 };
 for (const [q, v] of Object.entries(answers)) await page.check(`input[name="quiz-${q}"][value="${v}"]`);
 await page.click("#quiz-score");
 await page.waitForSelector("#quiz-result:not([hidden])");

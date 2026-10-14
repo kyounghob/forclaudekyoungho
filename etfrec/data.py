@@ -4,7 +4,8 @@ CSV 스키마(운영 로그를 연결할 때 그대로 맞추면 된다)
     profiles.csv  user, gender(0/1), age, income(만원), exp(0~2), risk(0~2), mobile(0/1),
                   interest1, interest2(주제 이름 또는 번호), placement(1~3)
     study_log.csv user, item, week, day, hour, minute, complete, quiz, quiz_pass, save, drop, replay
-                  (score·understood 열이 없으면 행동 점수 규칙으로 만든다)
+                  (한 행 = 한 번의 학습 시도, 불리언 열은 그 시도의 다중 플래그. 퀴즈 통과 ⇒ 퀴즈 ⇒ 완료, 이탈 ⇒ 미완료로
+                   정규화하고 고친 행 수를 summary.event_repairs 에 남긴다. score·understood 열이 없으면 행동 점수 규칙으로 만든다)
     catalog.csv   item, title, topic, level, short
 """
 from __future__ import annotations
@@ -32,6 +33,22 @@ def score_attempts(log: pd.DataFrame) -> pd.DataFrame:
     log["score"] = np.maximum.reduce([np.ones(len(log)), 2 * log.complete.values, 3 * log.quiz_pass.values, 3 * log.save.values])
     log["understood"] = log.quiz_pass
     return log
+
+
+def normalize_event_flags(log: pd.DataFrame) -> tuple:
+    """한 시도(행)의 플래그 논리를 맞춘다: 퀴즈 통과 ⇒ 퀴즈 시도 ⇒ 완료, 이탈 ⇒ 미완료(완료 증거가 있으면 이탈을 끈다).
+    모의 생성기는 구성상 이미 만족하므로 바뀌는 행이 없고, 운영 로그를 연결할 때 고친 행 수를 보고한다(학습 QA가 최종 확인)."""
+    log = log.copy()
+    for c in BOOL_COLUMNS:
+        log[c] = log[c].astype(bool)
+    rep = dict(quiz_from_pass=int((log.quiz_pass & ~log.quiz).sum()))
+    log["quiz"] = log.quiz | log.quiz_pass
+    rep["complete_from_quiz"] = int((log.quiz & ~log.complete).sum())
+    log["complete"] = log.complete | log.quiz
+    rep["drop_cleared_by_complete"] = int((log["drop"] & log.complete).sum())
+    log["drop"] = log["drop"] & ~log.complete
+    rep["rows_changed"] = int(sum(rep.values()))
+    return log, rep
 
 
 def resolve_topics(values, catalog: Catalog) -> np.ndarray:
@@ -69,7 +86,8 @@ class Dataset:
             raise ValueError(f"study_log에 {missing} 열이 없습니다")
         if not np.array_equal(self.profiles.user.values, np.arange(self.n_users)):
             raise ValueError("profiles.user는 0부터 연속된 번호여야 합니다(외부 ID는 user_id 열로 따로 두세요)")
-        if "score" not in self.log.columns or "understood" not in self.log.columns:
+        self.log, self.event_repairs = normalize_event_flags(self.log)
+        if "score" not in self.log.columns or "understood" not in self.log.columns or self.event_repairs["rows_changed"]:
             self.log = score_attempts(self.log)
         bad_item = (self.log.item < 0) | (self.log.item >= self.catalog.n_items)
         if bad_item.any():
@@ -122,8 +140,14 @@ class Dataset:
     def summary(self) -> dict:
         lg = self.log
         return dict(users=int(self.n_users), items=int(self.catalog.n_items), weeks=int(lg.week.max() + 1),
-                    study_attempts=int(len(lg)), complete=int(lg.complete.sum()), quiz_pass=int(lg.quiz_pass.sum()),
-                    save=int(lg.save.sum()), drop=int(lg["drop"].sum()),
+                    study_attempts=int(len(lg)), complete=int(lg.complete.sum()), quiz_attempted=int(lg.quiz.sum()), quiz_pass=int(lg.quiz_pass.sum()),
+                    save=int(lg.save.sum()), drop=int(lg["drop"].sum()), replay=int(lg.replay.sum()),
+                    not_complete=int((~lg.complete.astype(bool)).sum()),
+                    # 이벤트 열은 한 시도의 다중 플래그라 합이 시도 수를 넘는다. 논리 제약은 아래 세 값이 0이어야 한다.
+                    drop_and_complete=int((lg["drop"].astype(bool) & lg.complete.astype(bool)).sum()),
+                    pass_without_quiz=int((lg.quiz_pass.astype(bool) & ~lg.quiz.astype(bool)).sum()),
+                    quiz_without_complete=int((lg.quiz.astype(bool) & ~lg.complete.astype(bool)).sum()),
+                    event_repairs=getattr(self, "event_repairs", None),
                     attempts_by_week={int(k): int(v) for k, v in lg.groupby("week").size().items()},
                     mastery_label_equals_quiz=bool(np.array_equal(lg.understood, lg.quiz_pass)),
                     distinct_pairs=int(lg.groupby(["user", "item"]).ngroups),

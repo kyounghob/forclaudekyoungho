@@ -128,6 +128,15 @@ class RecommendationService:
                                       exp=int(li.exp), risk=int(li.risk), mobile=int(li.mobile),
                                       interest1=int(interests[0]), interest2=int(interests[1]), placement=int(li.placement),
                                       goal=li.goal, horizon=li.horizon)])
+        log = self._adhoc_log(li)
+        F1 = build_features(profiles, log, self.catalog, self.serve_week, income_edges=self.store.income_edges)
+        if li.hour < 4 and len(log) == 0:
+            F1.blocks["hour"][0] = 0; F1.blocks["hour"][0, li.hour] = 1
+        lb = LearnerBatch.from_store(F1, [0], as_reference_users=False)
+        return lb, F1
+
+    def _adhoc_log(self, li: LearnerInput) -> pd.DataFrame:
+        """임의 학습자의 이벤트 → 학습 로그(한 이벤트 = 한 시도). 퀴즈 통과 ⇒ 퀴즈 ⇒ 완료, 이탈 ⇒ 미완료로 맞춘다."""
         rows = []
         for e in li.events:
             item = int(e.get("item", -1))
@@ -139,16 +148,12 @@ class RecommendationService:
                 row[c] = bool(e.get(c, False))
             row["quiz"] = row["quiz"] or row["quiz_pass"]
             row["complete"] = row["complete"] or row["quiz"]
+            row["drop"] = row["drop"] and not row["complete"]          # 이탈 ⇒ 미완료(생성기·데이터 정규화와 같은 규칙)
             rows.append(row)
         log = pd.DataFrame(rows, columns=LOG_COLUMNS) if rows else pd.DataFrame({c: pd.Series(dtype="int64") for c in LOG_COLUMNS})
         for c in ("complete", "quiz", "quiz_pass", "save", "drop", "replay"):
             log[c] = log[c].astype(bool)
-        log = score_attempts(log)
-        F1 = build_features(profiles, log, self.catalog, self.serve_week, income_edges=self.store.income_edges)
-        if li.hour < 4 and len(rows) == 0:
-            F1.blocks["hour"][0] = 0; F1.blocks["hour"][0, li.hour] = 1
-        lb = LearnerBatch.from_store(F1, [0], as_reference_users=False)
-        return lb, F1
+        return score_attempts(log)
 
     def _batch_for(self, learner, assume_passed=(), overrides=None) -> tuple:
         """기존 학습자 번호 또는 LearnerInput → (LearnerBatch, 설명용 맥락)."""
@@ -385,7 +390,7 @@ class RecommendationService:
                               validation_by_family=jobs.groupby("family").ndcg.agg(["max", "mean", "count"]).reset_index().to_dict("records"),
                               selection=b.selection, qa=b.qa, dataset=b.dataset_summary, validation_audit=b.validation_audit,
                               test_audit=b.test_audit, family_counts=b.family_counts, training=b.models.audit,
-                              router_tuning=b.router_tuning, neural_enabled=b.models.enable_neural, created_at=b.created_at,
+                              router_tuning=b.router_tuning, neural_enabled=b.models.enable_neural, created_at=b.created_at, privacy=getattr(b, "privacy", None),
                               configurations=len(b.algos), signal_count=len(b.signal_meta)))
 
     def meta(self) -> dict:

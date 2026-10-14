@@ -88,7 +88,7 @@ def build_roadmap(catalog: Catalog, goal: str, risk: int, horizon: str, level: i
                 left_min += info["minutes"]
             units.append(dict(item=i, item_id=info["item_id"], title=info["title"], topic=info["topic"], level=info["level"], status=status,
                               minutes=info["minutes"], missing_prereqs=[catalog.item_title[p] for p in missing], sources=info["sources"],
-                              concepts=info["concepts"]))
+                              concepts=info["concepts"], lesson=info.get("lesson")))
             if current is None and status == "available" and next_unit is None:
                 next_unit = i
         done = n_pass == len(units)

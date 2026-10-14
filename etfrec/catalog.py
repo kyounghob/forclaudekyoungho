@@ -1,7 +1,7 @@
 """학습 단원 카탈로그: 주제 × 수준 3단계의 단원과 콘텐츠 특징, 선수 관계, 출처.
 
 - 버전 1: 노트북 원본(주제 20개 = 60단원). 노트북 기록과의 일치 검사에만 쓴다.
-- 버전 2(기본): 커버드콜·인컴 주제를 더한 21개 주제 = 63단원, 단원 간 선수 관계, 공개 교육 자료 출처 참조.
+- 버전 2(기본): 커버드콜·절세 계좌(ISA) 주제를 더한 22개 주제 = 66단원, 세제 단원 제목 보강, 단원 간 선수 관계, 공개 교육 자료 출처 참조.
 운영에서는 ``Catalog.from_csv``로 ``item,title,topic,level,short[,prereqs,sources]`` 열을 가진 CSV를 읽는다.
 """
 from __future__ import annotations
@@ -14,6 +14,7 @@ import scipy.sparse as sp
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 from .config import BANNED_WORDS, CATALOG_VERSION, SEED
+from .lessons import lesson as _lesson
 
 TOPICS_V1 = [
     ("ETF 구조", ["ETF란 무엇인가", "ETF 가격은 어떻게 정해지나: NAV와 괴리율", "설정·환매와 유동성공급자(LP)의 역할"]),
@@ -37,13 +38,18 @@ TOPICS_V1 = [
     ("액티브 ETF", ["액티브 ETF란", "액티브 ETF와 패시브 ETF 비교", "액티브 ETF의 비교지수와 상관계수"]),
     ("ESG ETF", ["ESG ETF란", "ESG 평가 방법과 한계", "ESG 지수와 그린워싱 위험"]),
 ]
-TOPICS_V2 = TOPICS_V1 + [
+# 버전 2 제목 보강(세제 내용, 중간 점검 지적 반영). 버전 1 제목은 노트북 재현을 위해 그대로 둔다.
+V2_TITLE_OVERRIDES = {("해외 ETF", 3): "해외 ETF 세금: 과표기준가·보유기간과세와 양도소득세",
+                      ("연금계좌 ETF", 2): "IRP·연금저축의 ETF 투자 규칙과 위험자산 70% 한도",
+                      ("레버리지·인버스", 3): "변동성 장세의 레버리지 위험과 거래 요건(사전교육·기본예탁금)"}
+TOPICS_V2 = [(t, [V2_TITLE_OVERRIDES.get((t, l + 1), u) for l, u in enumerate(units)]) for t, units in TOPICS_V1] + [
     ("커버드콜 ETF", ["커버드콜 ETF란", "옵션 프리미엄과 분배금의 원천", "커버드콜의 상승 제한과 총수익 비교"]),
+    ("절세 계좌", ["ISA 계좌란: 비과세 한도와 분리과세", "ISA 유형·납입 한도·의무가입 기간", "ISA 만기 자금의 연금계좌 전환과 절세 순서"]),
 ]
 GROUP4 = {"ETF 기초형": ["ETF 구조", "지수", "추적오차", "비용", "유동성"],
           "성장·테마형": ["섹터 ETF", "해외 ETF", "테마 ETF", "액티브 ETF", "ESG ETF", "레버리지·인버스"],
           "안정·인컴형": ["채권 ETF", "분배금", "리츠 ETF", "금 ETF", "원자재 ETF", "커버드콜 ETF"],
-          "자산배분·연금형": ["자산배분", "리밸런싱", "연금계좌 ETF", "환헤지"]}
+          "자산배분·연금형": ["자산배분", "리밸런싱", "연금계좌 ETF", "환헤지", "절세 계좌"]}
 LABELS = {"click_tier": ["신규(조회 0)", "보통(1~9)", "많음(10+)"], "pref_cluster": list(GROUP4),
           "age_band": ["29세 이하", "30대", "40대", "50대", "60세 이상"],
           "income_q": ["소득 1분위(하위 20%)", "소득 2분위", "소득 3분위", "소득 4분위", "소득 5분위(상위 20%)"],
@@ -53,7 +59,7 @@ EXPS, RISKS, HOURS = ["없음", "1~3년", "3년 이상"], ["안정", "중립", "
 LEVEL_NAMES = {1: "기초", 2: "구조·계산", 3: "심화·위험"}
 
 # 규칙·공정성 점검에 쓰는 주제 묶음
-LIFE_OLD_TOPICS = ["채권 ETF", "분배금", "연금계좌 ETF", "자산배분", "리츠 ETF"]
+LIFE_OLD_TOPICS = ["채권 ETF", "분배금", "연금계좌 ETF", "자산배분", "리츠 ETF", "절세 계좌"]
 LIFE_YOUNG_TOPICS = ["섹터 ETF", "해외 ETF", "테마 ETF", "ETF 구조"]
 INC_HIGH_TOPICS = ["해외 ETF", "연금계좌 ETF", "환헤지", "자산배분"]
 INC_LOW_TOPICS = ["비용", "ETF 구조", "분배금"]
@@ -89,6 +95,8 @@ CROSS_PREREQS = {
     ("ESG ETF", 1): [("지수", 1)],
     ("커버드콜 ETF", 1): [("분배금", 1), ("지수", 1)],
     ("커버드콜 ETF", 3): [("레버리지·인버스", 2)],
+    ("절세 계좌", 1): [("분배금", 1)],
+    ("절세 계좌", 3): [("연금계좌 ETF", 3)],
 }
 # 단원 ↔ 공개 교육 자료 출처(etfrec.sources.registry의 키). 레버리지·인버스는 금융투자교육원 사전교육을 필수로 안내한다.
 TOPIC_SOURCES = {
@@ -101,18 +109,24 @@ TOPIC_SOURCES = {
     "유동성": ["krx_etf_info", "krx_data"], "테마 ETF": ["am_guidebooks"], "원자재 ETF": ["am_guidebooks", "kcie_alt_school"],
     "리츠 ETF": ["kcie_alt_school", "am_guidebooks"], "연금계좌 ETF": ["kcie_pension_school", "am_guidebooks"],
     "액티브 ETF": ["krx_etf_info", "am_guidebooks"], "ESG ETF": ["am_guidebooks"], "커버드콜 ETF": ["am_guidebooks", "kcie_etf_school"],
+    "절세 계좌": ["kcie_pension_school", "kcie_life_school", "am_guidebooks"],
 }
-# 단원이 다루는 핵심 개념(용어집·ETF 유형 연결에 쓴다)
+# 단원이 다루는 핵심 개념(용어집·ETF 유형 연결에 쓴다). 버전 2에서 제목을 보강한 단원은 V2_CONCEPT_EXTRA를 앞에 붙인다.
 UNIT_CONCEPTS = {
     ("ETF 구조", 1): ["상장지수펀드", "거래소 매매"], ("ETF 구조", 2): ["NAV", "괴리율"], ("ETF 구조", 3): ["설정·환매", "LP"],
     ("비용", 1): ["총보수"], ("비용", 2): ["호가 스프레드", "매매비용"], ("비용", 3): ["총비용비율"],
     ("환헤지", 1): ["환노출"], ("환헤지", 2): ["환헤지(H)"], ("환헤지", 3): ["헤지 비용"],
-    ("레버리지·인버스", 1): ["레버리지", "인버스"], ("레버리지·인버스", 2): ["일일 복리", "음의 복리"], ("레버리지·인버스", 3): ["변동성 끌림"],
-    ("분배금", 1): ["분배금"], ("분배금", 3): ["배당소득세"], ("연금계좌 ETF", 2): ["편입 가능 ETF"], ("연금계좌 ETF", 3): ["세액공제", "과세이연"],
+    ("레버리지·인버스", 1): ["레버리지", "인버스"], ("레버리지·인버스", 2): ["일일 복리", "음의 복리"],
+    ("분배금", 1): ["분배금"], ("분배금", 3): ["배당소득세"], ("연금계좌 ETF", 3): ["세액공제", "과세이연"],
     ("해외 ETF", 1): ["국내상장 해외 ETF"], ("해외 ETF", 3): ["양도소득세", "손익통산"], ("원자재 ETF", 2): ["롤오버"], ("원자재 ETF", 3): ["콘탱고"],
+    ("연금계좌 ETF", 2): ["편입 가능 ETF"], ("레버리지·인버스", 3): ["변동성 끌림"],
+    ("절세 계좌", 1): ["ISA", "비과세 한도 200/400만원", "9.9% 분리과세"], ("절세 계좌", 2): ["납입 한도 연 2,000만원", "의무가입 3년"],
+    ("절세 계좌", 3): ["연금계좌 전환", "추가 세액공제 최대 300만원", "절세 계좌 순서"],
     ("커버드콜 ETF", 1): ["커버드콜"], ("커버드콜 ETF", 2): ["옵션 프리미엄"], ("커버드콜 ETF", 3): ["상승 제한"],
     ("유동성", 2): ["호가 스프레드"], ("유동성", 3): ["괴리율"], ("채권 ETF", 2): ["금리 민감도"], ("채권 ETF", 3): ["듀레이션"],
 }
+V2_CONCEPT_EXTRA = {("해외 ETF", 3): ["과표기준가", "보유기간과세"], ("연금계좌 ETF", 2): ["위험자산 70% 한도"],
+                    ("레버리지·인버스", 3): ["사전교육", "기본예탁금", "모의거래"]}
 
 
 @dataclass
@@ -192,7 +206,9 @@ class Catalog:
         return (~passed_rows).astype(np.int32) @ self.prereq_matrix.T.astype(np.int32)
 
     def concepts(self, item: int) -> list:
-        return list(UNIT_CONCEPTS.get((self.topics[self.item_topic[item]], int(self.item_level[item])), []))
+        key = (self.topics[self.item_topic[item]], int(self.item_level[item]))
+        extra = V2_CONCEPT_EXTRA.get(key, []) if int(self.version) >= 2 else []
+        return list(extra) + list(UNIT_CONCEPTS.get(key, []))
 
     @classmethod
     def default(cls, seed: int = SEED, version: int = CATALOG_VERSION) -> "Catalog":
@@ -242,7 +258,8 @@ class Catalog:
                     level_name=LEVEL_NAMES[int(self.item_level[i])], short=bool(self.item_short[i]),
                     group=self.group_names[self.topic_group[self.item_topic[i]]], prereqs=list(self.prereqs.get(i, [])),
                     sources=list(self.sources.get(i, [])), concepts=self.concepts(i),
-                    minutes=8 if self.item_short[i] else 15)
+                    minutes=8 if self.item_short[i] else 15,
+                    lesson=_lesson(self.topics[self.item_topic[i]], int(self.item_level[i]), self.version))
 
 
 def onehot(codes, k: int) -> np.ndarray:

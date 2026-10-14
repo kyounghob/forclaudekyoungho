@@ -5,7 +5,7 @@
     python -m etfrec recommend --bundle artifacts/bundle_v1 --user 1 [--k 5] [--algorithm RULE]
     python -m etfrec serve --bundle artifacts/bundle_v1 [--host 127.0.0.1] [--port 8000]
     python -m etfrec demo [--n 3000]      # 작은 규모로 학습한 뒤 바로 서버를 띄운다
-    python -m etfrec sources list|check|sync|stats [--out data/sources] [--datagokr-key KEY]
+    python -m etfrec sources list|check|sync|stats [--out data/sources] [--krx-csv 내려받은.csv] [--krx-key KEY] [--datagokr-key KEY]
 """
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def cmd_sources(a):
         for r in check_sources():
             print(f"{r['status']:40s} {r['name']}")
     elif a.action == "sync":
-        prov = sync_all(a.out, datagokr_key=a.datagokr_key, bas_dt=a.date)
+        prov = sync_all(a.out, datagokr_key=a.datagokr_key, bas_dt=a.date, krx_csv=a.krx_csv, krx_key=a.krx_key)
         print(json.dumps(prov, ensure_ascii=False, indent=2))
     elif a.action == "stats":
         df, prov = load_etf_universe(a.out)
@@ -98,7 +98,9 @@ def main(argv=None):
     so = sub.add_parser("sources", help="공개 데이터 출처 목록·접근 점검·스냅샷 동기화·유형 통계")
     so.add_argument("action", choices=["list", "check", "sync", "stats"]); so.add_argument("--out", default=os.path.join("data", "sources"))
     so.add_argument("--datagokr-key", default=None, help="공공데이터포털 serviceKey (환경변수 DATA_GO_KR_KEY도 가능)")
-    so.add_argument("--date", default=None, help="시세 기준일 YYYYMMDD"); so.set_defaults(fn=cmd_sources)
+    so.add_argument("--date", default=None, help="시세 기준일 YYYYMMDD")
+    so.add_argument("--krx-csv", default=None, help="KRX 정보데이터시스템에서 직접 내려받은 'ETF 전종목 기본정보' CSV 경로(자동 화면 호출은 하지 않음)")
+    so.add_argument("--krx-key", default=None, help="KRX Open API 인증키(환경변수 KRX_OPEN_API_KEY도 가능)"); so.set_defaults(fn=cmd_sources)
     r = sub.add_parser("recommend", help="번들로 한 학습자 추천"); r.add_argument("--bundle", required=True)
     r.add_argument("--user", type=int, required=True); r.add_argument("--k", type=int, default=5); r.add_argument("--algorithm", default=None)
     r.set_defaults(fn=cmd_recommend)

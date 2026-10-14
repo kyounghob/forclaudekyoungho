@@ -1,4 +1,4 @@
-"""스냅샷 동기화와 적재. 실제 수집이 안 되는 환경에서는 샘플 스냅샷을 쓰고 그 사실을 provenance에 남긴다."""
+"""스냅샷 동기화와 적재. 자동 수집은 공식 API만 쓰고, 실제 수집이 안 되는 환경에서는 샘플 스냅샷을 쓰고 그 사실을 provenance에 남긴다."""
 from __future__ import annotations
 
 import json
@@ -34,17 +34,38 @@ def check_sources(timeout: int = 8) -> list:
     return out
 
 
-def sync_all(out_dir: str = DEFAULT_DIR, datagokr_key: str = None, bas_dt: str = None, timeout: int = 20) -> dict:
-    """KRX ETF 전종목 기본정보와(키가 있으면) 공공데이터포털 ETF 시세를 받아 저장한다."""
+def sync_all(out_dir: str = DEFAULT_DIR, datagokr_key: str = None, bas_dt: str = None, timeout: int = 20,
+             krx_csv: str = None, krx_key: str = None) -> dict:
+    """공개 데이터 스냅샷을 만든다. 자동 수집은 공식 API(KRX Open API·공공데이터포털)만 쓰고, ETF 전종목 기본정보는
+    이용자가 정보데이터시스템에서 직접 내려받은 CSV(``krx_csv``)를 정규화해 저장한다(화면용 JSON 엔드포인트 호출 없음)."""
     os.makedirs(out_dir, exist_ok=True)
-    prov = dict(synced_at=time.strftime("%Y-%m-%dT%H:%M:%S"), items={})
-    try:
-        df = krx.fetch_etf_list(timeout=timeout)
-        df.to_csv(os.path.join(out_dir, "krx_etf_list.csv"), index=False, encoding="utf-8-sig")
-        prov["items"]["krx_etf_list"] = dict(status="ok", rows=int(len(df)), source="krx_data", url=krx.KRX_JSON_URL, bld=krx.BLD_ETF_LIST,
-                                             summary=krx.summarize(df))
-    except Exception as e:  # noqa: BLE001
-        prov["items"]["krx_etf_list"] = dict(status="fail", error=f"{type(e).__name__}: {str(e)[:160]}", source="krx_data", url=krx.KRX_JSON_URL)
+    prov = dict(synced_at=time.strftime("%Y-%m-%dT%H:%M:%S"), items={}, policy="official-apis-and-manual-download-only")
+    list_path = os.path.join(out_dir, "krx_etf_list.csv")
+    if krx_csv:
+        try:
+            df = krx.read_krx_csv(krx_csv)
+            df.to_csv(list_path, index=False, encoding="utf-8-sig")
+            prov["items"]["krx_etf_list"] = dict(status="ok", rows=int(len(df)), source="krx_data", method="manual_csv", file=os.path.abspath(krx_csv),
+                                                 summary=krx.summarize(df), note=krx.KRX_SOURCE_NOTE)
+        except Exception as e:  # noqa: BLE001
+            prov["items"]["krx_etf_list"] = dict(status="fail", error=f"{type(e).__name__}: {str(e)[:160]}", source="krx_data", method="manual_csv")
+    elif os.path.exists(list_path):
+        prov["items"]["krx_etf_list"] = dict(status="kept", source="krx_data", method="manual_csv", file=list_path)
+    else:
+        prov["items"]["krx_etf_list"] = dict(status="missing", source="krx_data",
+                                             note="KRX 정보데이터시스템 › 기본 통계 › 증권상품 › ETF › 전종목 기본정보에서 CSV를 내려받아 --krx-csv 로 지정하세요")
+    kclient = krx.KrxOpenApiClient(krx_key, timeout=timeout)
+    if kclient.available:
+        try:
+            day = bas_dt or time.strftime("%Y%m%d")
+            dd = kclient.etf_daily(day)
+            dd.to_csv(os.path.join(out_dir, "krx_etf_daily.csv"), index=False, encoding="utf-8-sig")
+            prov["items"]["krx_etf_daily"] = dict(status="ok", rows=int(len(dd)), source="krx_openapi", date=day, note=krx.KRX_SOURCE_NOTE)
+            time.sleep(1.0)                                    # 호출 간 대기(일 한도·서버 부하 배려)
+        except Exception as e:  # noqa: BLE001
+            prov["items"]["krx_etf_daily"] = dict(status="fail", error=f"{type(e).__name__}: {str(e)[:160]}", source="krx_openapi")
+    else:
+        prov["items"]["krx_etf_daily"] = dict(status="skipped", reason="KRX_OPEN_API_KEY 없음", source="krx_openapi")
     client = DataGoKrClient(datagokr_key, timeout=timeout)
     if client.available:
         try:
@@ -71,7 +92,7 @@ def load_etf_universe(data_dir: str = DEFAULT_DIR) -> tuple:
                         label=f"KRX 스냅샷 {prov.get('synced_at', '')[:10]}")
     df = krx.normalize(pd.read_csv(SAMPLE_ETF, encoding="utf-8-sig"))
     return df, dict(kind="sample", path=SAMPLE_ETF, synced_at=None, detail={},
-                    label="샘플 데이터(가상 종목) — `python -m etfrec sources sync`로 실제 KRX 목록을 받으면 대체됩니다")
+                    label="샘플 데이터(가상 종목) — KRX 정보데이터시스템에서 내려받은 CSV를 `python -m etfrec sources sync --krx-csv 파일`로 넣으면 대체됩니다")
 
 
 def type_stats(df: pd.DataFrame, n_examples: int = 3) -> list:

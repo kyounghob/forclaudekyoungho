@@ -235,6 +235,9 @@ code { font-family: var(--mono); font-size: 12px; background: var(--surface-2); 
 .unit.next { border-color: var(--accent); background: var(--accent-soft); }
 .unit .utitle { font-weight: 600; font-size: 13px; }
 .unit .meta { font-size: 12px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.lesson { margin-top: 4px; font-size: 12px; }
+.lesson summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+.lesson ul { margin: 4px 0 4px 18px; padding: 0; display: grid; gap: 2px; }
 .rm-legend .l-avail::before { border-color: var(--accent); background: var(--surface); }
 .rm-legend .l-locked::before { border-style: dashed; background: var(--surface); }
 .rm-legend .l-next::before { background: var(--accent-soft); border-color: var(--accent); }

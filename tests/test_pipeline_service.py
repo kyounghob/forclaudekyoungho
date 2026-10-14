@@ -12,8 +12,14 @@ from etfrec.service import LearnerInput, RecommendationService
 def test_pipeline_outputs(small_bundle):
     b = small_bundle
     assert all(q["passed"] for q in b.qa) and len(b.qa) > 50
-    assert set(b.results.method) >= {"Global", "RouterNoGender", "RouterFull", "POP", "RULE", "CONTENT", "UCF", "ICF", "Random"}
-    assert np.isfinite(b.results[["ndcg", "diversity"]].values).all()
+    assert set(b.results.method) >= {"Global", "RouterNoGender", "RouterFull", "POP", "RULE", "CONTENT", "UCF", "ICF", "Random", "MF_BPR", "MLP_BPR", "MLP_BPRU", "MLP_NEXT"}
+    assert np.isfinite(b.results[["ndcg", "ndcg_active", "diversity"]].values).all()
+    r = b.results.set_index("method")
+    assert (r.ndcg_active >= r.ndcg).all() and r.active_users.min() > 0 and b.privacy["routing"]["groups"] > 0     # 활성 사용자 기준은 항상 크거나 같다
+    assert np.allclose(r.ndcg_active * r.active_users, r.ndcg * r.users) and r.active_users.nunique() == 1
+    g = b.group_results
+    assert {"ndcg_active", "active_share", "active_users"} <= set(g.columns) and (g.active_users <= g.users).all()
+    assert b.test_audit["raw_positive_users"] >= b.test_audit["eligible_positive_users"] == int(r.active_users.iloc[0])
     assert b.selection["operational_algorithm"] is not None
     assert len(b.algos) > 1000 and len(b.signal_meta) >= 140
 
@@ -129,3 +135,27 @@ def test_full_regression_matches_notebook():
                 "MF": 0.09264, "MF_OBS": 0.07099, "Random": 0.05993, "MLP": 0.05325}
     for k, v in expected.items():
         assert abs(got[k] - v) < 5e-5, (k, got[k], v)
+
+
+def test_adhoc_drop_cannot_coexist_with_complete(small_bundle):
+    svc = RecommendationService(small_bundle)
+    li = LearnerInput(age=30, interests=[1], placement=1, events=[dict(item=0, complete=True, drop=True), dict(item=3, quiz_pass=True)])
+    lg = svc._adhoc_log(li)
+    assert not (lg["drop"] & lg.complete).any() and bool(lg.complete.iloc[0]) and not bool(lg["drop"].iloc[0])
+    assert bool(lg.quiz.iloc[1]) and bool(lg.complete.iloc[1])     # 통과 ⇒ 퀴즈 ⇒ 완료
+    r = svc.recommend(li, k=3)
+    assert len(r["items"]) == 3                                   # 정규화 후에도 정상 추천
+
+
+def test_dataset_normalizes_event_flags():
+    import pandas as pd
+    from etfrec.config import TrainConfig
+    from etfrec.data import Dataset, normalize_event_flags
+    ds = Dataset.synthetic(TrainConfig(n_learners=200))
+    assert ds.event_repairs["rows_changed"] == 0                  # 모의 생성기는 구성상 논리를 만족한다
+    bad = ds.log.head(4).copy()
+    bad.loc[bad.index[0], ["complete", "drop"]] = [True, True]
+    bad.loc[bad.index[1], ["quiz", "quiz_pass", "complete"]] = [False, True, False]
+    fixed, rep = normalize_event_flags(bad)
+    assert rep["drop_cleared_by_complete"] >= 1 and rep["quiz_from_pass"] >= 1 and rep["complete_from_quiz"] >= 1
+    assert not (fixed["drop"] & fixed.complete).any() and (fixed.quiz_pass <= fixed.quiz).all() and (fixed.quiz <= fixed.complete).all()

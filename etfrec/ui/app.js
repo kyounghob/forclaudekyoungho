@@ -214,11 +214,11 @@
   async function renderQuiz() {
     if (!QUIZ) QUIZ = await api("/api/quiz");
     const ex = isExisting();
-    $("#quiz-count").textContent = `${QUIZ.length}문항 · 단원별 1문항`;
+    $("#quiz-count").textContent = `${QUIZ.length}문항 · ${new Set(QUIZ.map(q => q.topic + "·" + q.level)).size}개 단원`;
     $("#quiz-note").textContent = ex ? "기존 학습자는 스냅샷 기록으로 수준을 추정합니다. 진단을 적용하려면 2단계에서 '이 프로필을 새 학습자로 복사'하세요."
-      : (state.learner.diagnosis ? `적용된 진단: ${state.learner.diagnosis.summary}` : "답한 문항만 채점합니다. 수준 2는 수준1 문항 60%·수준2 문항 50% 이상, 수준 3은 수준2 75% 이상이면서 수준3 문항 2개 이상 정답일 때 부여합니다.");
+      : (state.learner.diagnosis ? `적용된 진단: ${state.learner.diagnosis.summary}` : "답한 문항만 채점합니다. 수준 2는 답한 수준1 문항 60%·수준2 문항 50% 이상, 수준 3은 여기에 수준2 75% 이상, 서로 다른 주제의 수준3 문항 2개 이상 정답, 수준3 정답률 60% 이상일 때 부여합니다. 한 단원에 문항이 둘이면 둘 다 맞혀야 통과로 기록하고, 규제 상식 문항(표시)은 수준 판정에만 씁니다.");
     const A = state.quiz.answers;
-    $("#quiz-list").innerHTML = QUIZ.map((q, i) => `<div class="qcard" id="qc-${q.id}"><div class="qhead"><span class="qnum">Q${i + 1}</span><span class="muted small">${esc(q.topic)} · 수준 ${q.level}</span></div><div class="qtext">${esc(q.text)}</div><div class="qopts">` +
+    $("#quiz-list").innerHTML = QUIZ.map((q, i) => `<div class="qcard" id="qc-${q.id}"><div class="qhead"><span class="qnum">Q${i + 1}</span><span class="muted small">${esc(q.topic)} · 수준 ${q.level}${q.diagnostic_only ? " · 규제 상식(수준 판정용)" : ""}</span></div><div class="qtext">${esc(q.text)}</div><div class="qopts">` +
       q.options.map((o, j) => `<label><input type="radio" name="quiz-${q.id}" value="${j}" ${A[q.id] === j ? "checked" : ""}> ${esc(o)}</label>`).join("") + `</div><div class="qresult" id="qr-${q.id}"></div></div>`).join("");
     $$("#quiz-list input[type=radio]").forEach(r => r.onchange = () => { A[r.name.slice(5)] = +r.value; save(); });
     renderQuizResult();
@@ -294,7 +294,12 @@
       `<div class="utitle">${esc(u.title)} ${u.item === nextItem ? '<span class="tag">다음 단원</span>' : ""}</div>` +
       `<div class="meta"><span>${esc(u.topic)}</span><span>수준 ${u.level}</span><span>약 ${u.minutes}분</span><span>${STATUS_KO[u.status]}</span>${u.concepts && u.concepts.length ? `<span>개념: ${esc(u.concepts.join(", "))}</span>` : ""}</div>` +
       (u.missing_prereqs.length ? `<div class="small warn-text">선수 단원 미이수: ${esc(u.missing_prereqs.join(", "))}</div>` : "") +
-      (u.sources && u.sources.length ? `<div class="small muted">자료: ${sourceLinks(u.sources)}</div>` : "") + `</div></li>`;
+      (u.sources && u.sources.length ? `<div class="small muted">자료: ${sourceLinks(u.sources)}</div>` : "") + lessonBlock(u.lesson) + `</div></li>`;
+  }
+  function lessonBlock(L) {
+    if (!L) return "";
+    return `<details class="lesson"><summary>학습 요점 (기준일 ${esc(L.asof)})</summary><ul>${L.points.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
+      (L.example ? `<div class="small"><b>예시</b> ${esc(L.example)}</div>` : "") + `</details>`;
   }
   function renderRoadmap() {
     const rm = state.roadmap; if (!rm) return;
@@ -466,7 +471,7 @@
     if (!state.result) { $("#compare-view").innerHTML = `<p class="muted small">7단계에서 추천을 먼저 계산하세요.</p>`; return; }
     if (!state.compare || force) {
       $("#compare-view").innerHTML = `<p class="muted small">계산 중…</p>`;
-      state.compare = await api("/api/compare", buildRequest({ methods: ["RouterNoGender", "Global", "RULE", "UCF", "ICF", "POP", "CONTENT", "MF", "MF_OBS", "MLP", "NoDemographics"].filter(m => META.methods.some(x => x.key === m)) }));
+      state.compare = await api("/api/compare", buildRequest({ methods: ["RouterNoGender", "Global", "RULE", "UCF", "ICF", "POP", "CONTENT", "MF", "MF_BPR", "MF_OBS", "MLP", "MLP_BPR", "MLP_BPRU", "MLP_NEXT", "NoDemographics"].filter(m => META.methods.some(x => x.key === m)) }));
     }
     const c = state.compare; const opIds = (c.methods[0] ? c.methods[0].items : []).map(i => i.item_id);
     $("#compare-view").innerHTML = `<table class="table"><tr><th>설정</th><th>테스트 NDCG@5</th><th>Top-${state.settings.k}</th><th>운영과 겹침</th></tr>` + c.methods.map(m => {
@@ -484,12 +489,17 @@
     const opName = META.operational_router; const hasPre = res.some(r => r.prereq_violation_rate != null);
     let html = `<div class="kv"><div><span class="muted">학습자</span><b>${ds.users.toLocaleString()}</b></div><div><span class="muted">학습 시도</span><b>${ds.study_attempts.toLocaleString()}</b></div><div><span class="muted">단원</span><b>${ds.items}</b></div><div><span class="muted">설정 수</span><b>${EVAL.configurations.toLocaleString()}</b></div><div><span class="muted">신호 수</span><b>${EVAL.signal_count}</b></div><div><span class="muted">테스트 사용자</span><b>${EVAL.test_audit.rows.toLocaleString()}</b></div><div><span class="muted">정답 없는 사용자</span><b>${EVAL.test_audit.zero_observed_target.toLocaleString()}</b></div><div><span class="muted">QA 검사</span><b>${EVAL.qa.filter(q => q.passed).length}/${EVAL.qa.length}</b></div><div><span class="muted">MF·MLP 학습</span><b>${EVAL.neural_enabled ? "포함" : "제외"}</b></div></div>`;
     if (ds.goals) html += `<p class="muted small">투자 목적 분포: ${Object.entries(ds.goals).map(([g, n]) => `${esc(META.goals[g] || g)} ${Number(n).toLocaleString()}`).join(" · ")}</p>`;
+    if (EVAL.privacy && EVAL.privacy.routing) html += `<p class="muted small">개인정보 점검: 라우팅 세그먼트(연령대×소득분위×성별) ${EVAL.privacy.routing.groups}개 셀, 최소 ${EVAL.privacy.routing.min_group}명(k=${EVAL.privacy.routing.k} ${EVAL.privacy.routing.satisfied ? "충족" : "미충족 → 일반화 필요"}) · 준식별자 6개 조합 ${EVAL.privacy.quasi.groups}개 셀, k=${EVAL.privacy.quasi.k} 미만 ${EVAL.privacy.quasi.groups_below_k}개 셀(${EVAL.privacy.quasi.users_below_k}명)</p>`;
     html += `<h4>방법별 NDCG@5 (사용자 평균, 테스트 ${EVAL.test_audit.week}주차)</h4>` + res.map(r => `<div class="evbar ${r.method === opName ? "op" : ""}"><span title="${esc(r.method)}">${esc(r.method)}</span><div class="ebar"><i style="width:${(100 * r.ndcg / maxN).toFixed(1)}%"></i></div><span class="num">${fmt(r.ndcg, 4)}</span></div>`).join("");
-    html += `<div class="table-wrap"><table class="table"><tr><th>방법</th><th>NDCG@5</th><th>Diversity@5</th><th>Hit@5</th>${hasPre ? "<th>선수 미이수 비율</th>" : ""}<th>전역 1위 대비 차이 [95% 구간]</th></tr>` + res.map(r => `<tr><td>${esc(r.method)}</td><td class="num">${fmt(r.ndcg)}</td><td class="num">${fmt(r.diversity, 3)}</td><td class="num">${fmt(r.hit_diagnostic, 3)}</td>${hasPre ? `<td class="num">${r.prereq_violation_rate != null ? fmt(r.prereq_violation_rate, 3) : "–"}</td>` : ""}<td class="num">${fmt(r.difference_vs_global)} [${fmt(r.ci_low)}, ${fmt(r.ci_high)}]</td></tr>`).join("") + `</table></div>`;
+    const hasAct = res.some(r => r.ndcg_active != null);
+    html += `<div class="table-wrap"><table class="table"><tr><th>방법</th><th>NDCG@5 (전체)</th>${hasAct ? "<th>NDCG@5 (활성 사용자)</th>" : ""}<th>Diversity@5</th><th>Hit@5</th>${hasAct ? "<th>Hit@5 (활성)</th>" : ""}${hasPre ? "<th>선수 미이수 비율</th>" : ""}<th>전역 1위 대비 차이 [95% 구간]</th></tr>` + res.map(r => `<tr><td>${esc(r.method)}</td><td class="num">${fmt(r.ndcg)}</td>${hasAct ? `<td class="num">${fmt(r.ndcg_active)}</td>` : ""}<td class="num">${fmt(r.diversity, 3)}</td><td class="num">${fmt(r.hit_diagnostic, 3)}</td>${hasAct ? `<td class="num">${fmt(r.hit_active, 3)}</td>` : ""}${hasPre ? `<td class="num">${r.prereq_violation_rate != null ? fmt(r.prereq_violation_rate, 3) : "–"}</td>` : ""}<td class="num">${fmt(r.difference_vs_global)} [${fmt(r.ci_low)}, ${fmt(r.ci_high)}]</td></tr>`).join("") + `</table></div>`;
+    if (hasAct) html += `<p class="muted small">전체 = 다음 주 정답이 없는 사용자도 NDCG 0으로 평균에 포함(노트북 규칙, 보수적). 활성 사용자 = 후보 안에 정답이 1개 이상인 사용자만 평균(추천 시스템 평가에서 흔한 관행, ${(res[0] && res[0].active_users) ? res[0].active_users.toLocaleString() : "–"}명). 모든 방법이 같은 활성 집합으로 평가되므로 두 값의 비가 같고 방법 순위도 같습니다(학습 QA에서 확인). 절대 차이는 활성 기준에서 그 비만큼 커집니다.</p>`;
     if (hasPre) html += `<p class="muted small">선수 미이수 비율 = Top-5 중 선수 단원을 아직 통과하지 않은 단원의 비율. '+prereq' 행은 같은 운영 라우터에 선수 단원 가드레일을 켠 결과입니다.</p>`;
     const g = EVAL.group_results.filter(x => x.method === "Global");
     const vars = { gender: "성별", age_band: "연령대", income_q: "소득분위", click_tier: "학습활동", goal: "투자 목적" };
-    html += `<h4>전역 1위 설정의 집단별 NDCG@5 (진단용, 동등 대우의 증거가 아님)</h4><div class="table-wrap"><table class="table"><tr><th>변수</th><th>집단</th><th>사용자</th><th>NDCG@5</th><th>95% 구간</th></tr>` + g.map(x => `<tr><td>${vars[x.variable] || esc(x.variable)}</td><td>${esc(groupLabel(x.variable, x.group))}</td><td class="num">${x.users.toLocaleString()}</td><td class="num">${fmt(x.ndcg)}</td><td class="num">[${fmt(x.ci_low)}, ${fmt(x.ci_high)}]</td></tr>`).join("") + `</table></div>`;
+    const gAct = g.some(x => x.ndcg_active != null);
+    html += `<h4>전역 1위 설정의 집단별 NDCG@5 (진단용, 동등 대우의 증거가 아님)</h4><div class="table-wrap"><table class="table"><tr><th>변수</th><th>집단</th><th>사용자</th><th>NDCG@5 전체</th><th>95% 구간</th>${gAct ? "<th>활성 비율</th><th>NDCG@5 활성</th><th>95% 구간</th>" : ""}</tr>` + g.map(x => `<tr><td>${vars[x.variable] || esc(x.variable)}</td><td>${esc(groupLabel(x.variable, x.group))}</td><td class="num">${x.users.toLocaleString()}</td><td class="num">${fmt(x.ndcg)}</td><td class="num">[${fmt(x.ci_low)}, ${fmt(x.ci_high)}]</td>${gAct ? `<td class="num">${fmt(x.active_share, 2)}</td><td class="num">${fmt(x.ndcg_active)}</td><td class="num">[${fmt(x.ci_low_active)}, ${fmt(x.ci_high_active)}]</td>` : ""}</tr>`).join("") + `</table></div>`;
+    if (gAct) html += `<p class="muted small">활성 비율(다음 주 정답이 있는 사용자 비율)이 집단마다 다르면 전체 기준과 활성 기준의 집단 순서가 달라질 수 있습니다. 예: 학습활동이 적은 집단은 활성 비율이 낮아 전체 기준에서 불리하게 보입니다.</p>`;
     const ex = EVAL.exposure.filter(x => x.method === "RouterNoGender");
     if (ex.length) html += `<h4>심화·레버리지 콘텐츠 노출 비율 (운영 라우터, 집단별)</h4><div class="table-wrap"><table class="table"><tr><th>변수</th><th>집단</th><th>사용자</th><th>Top-5 중 심화·레버리지 비율</th></tr>` + ex.map(x => `<tr><td>${vars[x.variable] || esc(x.variable)}</td><td>${esc(groupLabel(x.variable, x.group))}</td><td class="num">${x.users.toLocaleString()}</td><td class="num">${fmt(x.advanced_share, 3)}</td></tr>`).join("") + `</table></div>`;
     html += `<h4>검증 상위 설정 (${EVAL.validation_audit.week}주차)</h4><div class="table-wrap"><table class="table"><tr><th>#</th><th>기법군</th><th>설정</th><th>검증 NDCG@5</th><th>Diversity</th></tr>` + EVAL.validation_top.slice(0, 10).map(j => `<tr><td>${j.job_id}</td><td>${esc(j.family)}</td><td>${esc(j.name)}</td><td class="num">${fmt(j.ndcg)}</td><td class="num">${fmt(j.diversity, 3)}</td></tr>`).join("") + `</table></div>`;

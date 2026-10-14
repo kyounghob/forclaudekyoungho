@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "created_at": "2026-10-13T14:07:27",
+  "created_at": "2026-10-13T22:06:08",
   "config": {
     "n_learners": 15000,
     "seed": 42,
@@ -24,8 +24,13 @@
     "guardrail": {
       "block_gap": 2,
       "plus_one_max": 1,
-      "exclude_passed": true
-    }
+      "exclude_passed": true,
+      "prereq_block": false
+    },
+    "catalog_version": 1,
+    "generator_version": 1,
+    "goal_effect": 0.8,
+    "prereq_penalty": 0.8
   },
   "dataset": {
     "users": 15000,
@@ -33,9 +38,21 @@
     "weeks": 4,
     "study_attempts": 109022,
     "complete": 70073,
+    "quiz_attempted": 48915,
     "quiz_pass": 39572,
     "save": 12784,
     "drop": 31196,
+    "replay": 3742,
+    "not_complete": 38949,
+    "drop_and_complete": 0,
+    "pass_without_quiz": 0,
+    "quiz_without_complete": 0,
+    "event_repairs": {
+      "quiz_from_pass": 0,
+      "complete_from_quiz": 0,
+      "drop_cleared_by_complete": 0,
+      "rows_changed": 0
+    },
     "attempts_by_week": {
       "0": 28593,
       "1": 27850,
@@ -45,12 +62,27 @@
     "mastery_label_equals_quiz": true,
     "distinct_pairs": 98420,
     "density": 0.10935555555555555,
+    "goals": {
+      "long_term": 6126,
+      "income": 3141,
+      "trading": 2454,
+      "pension": 1776,
+      "diversify": 1503
+    },
+    "horizons": {
+      "long": 7902,
+      "mid": 4644,
+      "short": 2454
+    },
+    "catalog_version": 1,
     "source": "synthetic"
   },
   "dataset_meta": {
     "seed": 42,
     "effect_scale": 1.0,
     "gender_effect": 0.3,
+    "generator_version": 1,
+    "catalog_version": 1,
     "gender_effect_by_topic": {
       "ETF 구조": 0.171,
       "지수": 0.415,
@@ -81,6 +113,8 @@
     "zero_observed_target": 1834,
     "raw_positive_items": 9706,
     "eligible_positive_items": 9469,
+    "raw_positive_users": 4800,
+    "eligible_positive_users": 4763,
     "eligible_min": 31,
     "eligible_max": 60
   },
@@ -91,10 +125,12 @@
     "zero_observed_target": 1808,
     "raw_positive_items": 9466,
     "eligible_positive_items": 9242,
+    "raw_positive_users": 4693,
+    "eligible_positive_users": 4655,
     "eligible_min": 29,
     "eligible_max": 60
   },
-  "configurations": 1479,
+  "configurations": 1488,
   "family_counts": {
     "HYB2": 480,
     "HYBR": 256,
@@ -107,11 +143,15 @@
     "ICF": 8,
     "CONTENT": 6,
     "MF": 6,
+    "MF_BPR": 6,
     "POP": 1,
     "MF_OBS": 1,
-    "MLP": 1
+    "MLP": 1,
+    "MLP_BPR": 1,
+    "MLP_BPRU": 1,
+    "MLP_NEXT": 1
   },
-  "signal_count": 152,
+  "signal_count": 163,
   "selection": {
     "families": {
       "POP": 0,
@@ -120,10 +160,14 @@
       "UCF": 314,
       "ICF": 322,
       "MF": 328,
-      "MF_OBS": 1477,
-      "MLP": 1478,
+      "MF_BPR": 334,
+      "MF_OBS": 1483,
+      "MLP": 1484,
+      "MLP_BPR": 1485,
+      "MLP_BPRU": 1486,
+      "MLP_NEXT": 1487,
       "Global": 247,
-      "NoDemographics": 1020
+      "NoDemographics": 1026
     },
     "router_lambdas": {
       "RouterFull": 3000.0,
@@ -132,8 +176,8 @@
     },
     "operational": "RouterNoGender",
     "operational_algorithm": 247,
-    "no_gender_configs": 875,
-    "no_gender_income_configs": 429,
+    "no_gender_configs": 884,
+    "no_gender_income_configs": 438,
     "min_leaf_users": 20,
     "validation_best_ndcg": 0.17806780001507724,
     "operational_champion_counts": {
@@ -145,8 +189,8 @@
     "RouterFull": [
       {
         "lam": 0.0,
-        "mean": 0.1561126708984375,
-        "std": 0.0053316291049848264
+        "mean": 0.1556650958955288,
+        "std": 0.005538774585820072
       },
       {
         "lam": 20.0,
@@ -177,8 +221,8 @@
     "RouterNoGender": [
       {
         "lam": 0.0,
-        "mean": 0.15940682217478752,
-        "std": 0.004376898894862077
+        "mean": 0.1591869853436947,
+        "std": 0.004056452247352302
       },
       {
         "lam": 20.0,
@@ -209,8 +253,8 @@
     "RouterNoGenderIncome": [
       {
         "lam": 0.0,
-        "mean": 0.1582116037607193,
-        "std": 0.007976806350401886
+        "mean": 0.15791504457592964,
+        "std": 0.008033200932181139
       },
       {
         "lam": 20.0,
@@ -319,6 +363,96 @@
       "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
     },
     {
+      "model": "MF_BPR",
+      "factors": 8,
+      "reg": 0.01,
+      "seed": 53,
+      "positive_rows": 54133,
+      "pairs": 162399,
+      "epochs": 15,
+      "negative_resampling": "per-epoch",
+      "initial_negative_collisions": 21513,
+      "final_negative_collisions": 0,
+      "loss_first": 0.6818047505894503,
+      "loss_last": 0.26788468993257203,
+      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
+    },
+    {
+      "model": "MF_BPR",
+      "factors": 8,
+      "reg": 0.1,
+      "seed": 53,
+      "positive_rows": 54133,
+      "pairs": 162399,
+      "epochs": 15,
+      "negative_resampling": "per-epoch",
+      "initial_negative_collisions": 21513,
+      "final_negative_collisions": 0,
+      "loss_first": 0.6892274273004955,
+      "loss_last": 0.39288892525697394,
+      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
+    },
+    {
+      "model": "MF_BPR",
+      "factors": 16,
+      "reg": 0.01,
+      "seed": 53,
+      "positive_rows": 54133,
+      "pairs": 162399,
+      "epochs": 15,
+      "negative_resampling": "per-epoch",
+      "initial_negative_collisions": 21513,
+      "final_negative_collisions": 0,
+      "loss_first": 0.6685039772847984,
+      "loss_last": 0.1292053109654837,
+      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
+    },
+    {
+      "model": "MF_BPR",
+      "factors": 16,
+      "reg": 0.1,
+      "seed": 53,
+      "positive_rows": 54133,
+      "pairs": 162399,
+      "epochs": 15,
+      "negative_resampling": "per-epoch",
+      "initial_negative_collisions": 21513,
+      "final_negative_collisions": 0,
+      "loss_first": 0.6771447536627484,
+      "loss_last": 0.24717062647027377,
+      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
+    },
+    {
+      "model": "MF_BPR",
+      "factors": 32,
+      "reg": 0.01,
+      "seed": 53,
+      "positive_rows": 54133,
+      "pairs": 162399,
+      "epochs": 15,
+      "negative_resampling": "per-epoch",
+      "initial_negative_collisions": 21513,
+      "final_negative_collisions": 0,
+      "loss_first": 0.6473103424511939,
+      "loss_last": 0.034502003309844334,
+      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
+    },
+    {
+      "model": "MF_BPR",
+      "factors": 32,
+      "reg": 0.1,
+      "seed": 53,
+      "positive_rows": 54133,
+      "pairs": 162399,
+      "epochs": 15,
+      "negative_resampling": "per-epoch",
+      "initial_negative_collisions": 21513,
+      "final_negative_collisions": 0,
+      "loss_first": 0.6572434453703822,
+      "loss_last": 0.12339095758631967,
+      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
+    },
+    {
       "model": "mf_observed",
       "training_rows": 56443,
       "positive": 56443,
@@ -340,6 +474,54 @@
       "loss_first": 0.6644708762398166,
       "loss_last": 0.5387272448793853,
       "state_sha256": "a0f3fc2abb02f371f2f4d02e33d4e7c59c003bd63da07b1ec57ddf633373b2a8",
+      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
+    },
+    {
+      "model": "mlp9_bpr",
+      "training_rows": 56443,
+      "positive": 20400,
+      "zero": 36043,
+      "seed": 113,
+      "epochs": 12,
+      "loss_first": 0.6880049670240044,
+      "loss_last": 0.41488073018715826,
+      "state_sha256": "de5f51df29559103ba20c46e58f308d54dff732b86002ba0887edc22039b0ab0",
+      "pairs": 38198,
+      "pairs_with_observed_negative": 35390,
+      "loss": "BPR pairwise −ln σ(f(u,i) − f(u,j)); j = 같은 사용자의 미통과 시도 단원(없으면 미시도 단원)",
+      "users_with_pairs": 10146,
+      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
+    },
+    {
+      "model": "mlp9_bpru",
+      "training_rows": 56443,
+      "positive": 20400,
+      "zero": 36043,
+      "seed": 113,
+      "epochs": 12,
+      "loss_first": 0.672387425291772,
+      "loss_last": 0.37102103413320053,
+      "state_sha256": "028b4c00ba72ad9aa44e39d756bbf4984018b0bed4c5619773d4f242fea3f0b4",
+      "pairs": 40800,
+      "pairs_with_observed_negative": 0,
+      "loss": "BPR pairwise −ln σ(f(u,i) − f(u,j)); j = 같은 사용자가 시도하지 않은 단원",
+      "users_with_pairs": 10146,
+      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
+    },
+    {
+      "model": "mlp9_next",
+      "training_rows": 56443,
+      "positive": 20400,
+      "zero": 36043,
+      "seed": 113,
+      "epochs": 12,
+      "loss_first": 0.6567192855420018,
+      "loss_last": 0.3899844327949691,
+      "state_sha256": "cabc00888285398ded439ccdc409598a7fae15effc9b0bf86446a42121c76288",
+      "pairs": 60993,
+      "pairs_with_observed_negative": 0,
+      "loss": "BPR pairwise −ln σ(f(u,i) − f(u,j)); j = 학습 주 w 이전에 통과하지 않았고 w에도 통과하지 않은 단원(양성 = w의 통과 단원)",
+      "users_with_pairs": 7769,
       "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
     },
     {
@@ -369,6 +551,21 @@
       "snapshot": "B:42:(15000, 60):3:a8b11695a67fc02f6ab5"
     },
     {
+      "model": "MF_BPR",
+      "factors": 8,
+      "reg": 0.1,
+      "seed": 53,
+      "positive_rows": 77129,
+      "pairs": 231387,
+      "epochs": 15,
+      "negative_resampling": "per-epoch",
+      "initial_negative_collisions": 39912,
+      "final_negative_collisions": 0,
+      "loss_first": 0.6830926803773933,
+      "loss_last": 0.41970333273364935,
+      "snapshot": "B:42:(15000, 60):3:a8b11695a67fc02f6ab5"
+    },
+    {
       "model": "mf_observed",
       "training_rows": 83021,
       "positive": 83021,
@@ -391,6 +588,54 @@
       "loss_last": 0.5623267623813353,
       "state_sha256": "b72012cb9364b816004a7fee25cbe05af4591fa318b71c6f87417400f78edaf5",
       "snapshot": "B:42:(15000, 60):3:a8b11695a67fc02f6ab5"
+    },
+    {
+      "model": "mlp9_bpr",
+      "training_rows": 83021,
+      "positive": 30106,
+      "zero": 52915,
+      "seed": 113,
+      "epochs": 12,
+      "loss_first": 0.6854936696960646,
+      "loss_last": 0.4569494499128253,
+      "state_sha256": "979a00f9daae343d5ec7c68a14d3bfe0ae2a4267c807c5c120a59d3e34d05dff",
+      "pairs": 57435,
+      "pairs_with_observed_negative": 54549,
+      "loss": "BPR pairwise −ln σ(f(u,i) − f(u,j)); j = 같은 사용자의 미통과 시도 단원(없으면 미시도 단원)",
+      "users_with_pairs": 11722,
+      "snapshot": "B:42:(15000, 60):3:a8b11695a67fc02f6ab5"
+    },
+    {
+      "model": "mlp9_bpru",
+      "training_rows": 83021,
+      "positive": 30106,
+      "zero": 52915,
+      "seed": 113,
+      "epochs": 12,
+      "loss_first": 0.6558369647891927,
+      "loss_last": 0.40349706672619545,
+      "state_sha256": "eff97dff8896540f4ffdd4ee9d04fc165045188e3f9cea9885e11f73a322dd7a",
+      "pairs": 60212,
+      "pairs_with_observed_negative": 0,
+      "loss": "BPR pairwise −ln σ(f(u,i) − f(u,j)); j = 같은 사용자가 시도하지 않은 단원",
+      "users_with_pairs": 11722,
+      "snapshot": "B:42:(15000, 60):3:a8b11695a67fc02f6ab5"
+    },
+    {
+      "model": "mlp9_next",
+      "training_rows": 83021,
+      "positive": 30106,
+      "zero": 52915,
+      "seed": 113,
+      "epochs": 12,
+      "loss_first": 0.6416638366264839,
+      "loss_last": 0.40692212332606975,
+      "state_sha256": "c4858f9c2dc3d623b535422f4700cef7ca6261cb91b4a69c8faab4fbb1824496",
+      "pairs": 89646,
+      "pairs_with_observed_negative": 0,
+      "loss": "BPR pairwise −ln σ(f(u,i) − f(u,j)); j = 학습 주 w 이전에 통과하지 않았고 w에도 통과하지 않은 단원(양성 = w의 통과 단원)",
+      "users_with_pairs": 9370,
+      "snapshot": "B:42:(15000, 60):3:a8b11695a67fc02f6ab5"
     }
   ],
   "results": [
@@ -399,182 +644,380 @@
       "ndcg": 0.17123145879461266,
       "diversity": 0.9098406312857807,
       "hit_diagnostic": 0.34813554077054,
+      "ndcg_active": 0.23773768382160715,
+      "hit_active": 0.4833512352309345,
+      "active_users": 4655,
       "coverage_diagnostic": 1.0,
       "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.8225282376605292,
       "users": 6463,
       "requests": 6463,
       "difference_vs_global": 0.0,
       "ci_low": 0.0,
-      "ci_high": 0.0
+      "ci_high": 0.0,
+      "difference_vs_global_active": 0.0,
+      "ci_low_active": 0.0,
+      "ci_high_active": 0.0
     },
     {
       "method": "Global",
       "ndcg": 0.17123145879461266,
       "diversity": 0.9098406312857807,
       "hit_diagnostic": 0.34813554077054,
+      "ndcg_active": 0.23773768382160715,
+      "hit_active": 0.4833512352309345,
+      "active_users": 4655,
       "coverage_diagnostic": 1.0,
       "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.8225282376605292,
       "users": 6463,
       "requests": 6463,
       "difference_vs_global": 0.0,
       "ci_low": 0.0,
-      "ci_high": 0.0
+      "ci_high": 0.0,
+      "difference_vs_global_active": 0.0,
+      "ci_low_active": 0.0,
+      "ci_high_active": 0.0
     },
     {
       "method": "RouterNoGender",
       "ndcg": 0.17118648862212366,
       "diversity": 0.9052297694569087,
       "hit_diagnostic": 0.34782608695652173,
+      "ndcg_active": 0.23767524725344472,
+      "hit_active": 0.48292158968850696,
+      "active_users": 4655,
       "coverage_diagnostic": 1.0,
       "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.8276032802104286,
       "users": 6463,
       "requests": 6463,
       "difference_vs_global": -4.497017248898047e-05,
       "ci_low": -0.0016066081414101555,
-      "ci_high": 0.001614780785495701
+      "ci_high": 0.001614780785495701,
+      "difference_vs_global_active": -6.243656816246667e-05,
+      "ci_low_active": -0.0025407134306321315,
+      "ci_high_active": 0.001992171098410392
     },
     {
       "method": "RouterFull",
       "ndcg": 0.1711596260692243,
       "diversity": 0.9047655887358813,
       "hit_diagnostic": 0.34798081386353086,
+      "ndcg_active": 0.23763795129654064,
+      "hit_active": 0.4831364124597207,
+      "active_users": 4655,
       "coverage_diagnostic": 1.0,
       "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.8276032802104286,
       "users": 6463,
       "requests": 6463,
       "difference_vs_global": -7.183272538829835e-05,
       "ci_low": -0.0016934844940188509,
-      "ci_high": 0.0016505957856058457
+      "ci_high": 0.0016505957856058457,
+      "difference_vs_global_active": -9.97325250665034e-05,
+      "ci_low_active": -0.0027472820885065296,
+      "ci_high_active": 0.002168312281226537
     },
     {
       "method": "RouterNoGenderIncome",
       "ndcg": 0.15701707480210206,
       "diversity": 0.9168033421011915,
       "hit_diagnostic": 0.3250812316261798,
+      "ndcg_active": 0.21800243919355222,
+      "hit_active": 0.4513426423200859,
+      "active_users": 4655,
       "coverage_diagnostic": 1.0,
       "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.8341946464490175,
       "users": 6463,
       "requests": 6463,
       "difference_vs_global": -0.014214383992510566,
       "ci_low": -0.018732449245659814,
-      "ci_high": -0.009155974909078402
+      "ci_high": -0.009155974909078402,
+      "difference_vs_global_active": -0.01973524462805495,
+      "ci_low_active": -0.025796978729183403,
+      "ci_high_active": -0.01318629555325369
     },
     {
       "method": "NoDemographics",
       "ndcg": 0.1535471194649258,
       "diversity": 0.9320594151322917,
       "hit_diagnostic": 0.32105833204394246,
+      "ndcg_active": 0.21318475469426756,
+      "hit_active": 0.44575725026852847,
+      "active_users": 4655,
       "coverage_diagnostic": 1.0,
       "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.8334210119139719,
       "users": 6463,
       "requests": 6463,
       "difference_vs_global": -0.017684339329686816,
       "ci_low": -0.02200048660142232,
-      "ci_high": -0.013297376857103324
+      "ci_high": -0.013297376857103324,
+      "difference_vs_global_active": -0.024552929127339612,
+      "ci_low_active": -0.030633617195576727,
+      "ci_high_active": -0.018221449664993266
     },
     {
       "method": "UCF",
       "ndcg": 0.1426849773681836,
       "diversity": 0.9692402908865853,
       "hit_diagnostic": 0.29753984217855484,
+      "ndcg_active": 0.19810376127402163,
+      "hit_active": 0.41310418904403867,
+      "active_users": 4655,
       "coverage_diagnostic": 0.9666666666666667,
       "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.8424261179019031,
       "users": 6463,
       "requests": 6463,
       "difference_vs_global": -0.028546481426429012,
       "ci_low": -0.03361266890307552,
-      "ci_high": -0.02331570232503603
+      "ci_high": -0.02331570232503603,
+      "difference_vs_global_active": -0.03963392254758554,
+      "ci_low_active": -0.04705257743843419,
+      "ci_high_active": -0.032243699198306566
     },
     {
       "method": "POP",
       "ndcg": 0.11875271683174875,
       "diversity": 0.9999381092371964,
       "hit_diagnostic": 0.24446851307442363,
+      "ndcg_active": 0.1648762210276245,
+      "hit_active": 0.3394199785177229,
+      "active_users": 4655,
       "coverage_diagnostic": 0.23333333333333334,
       "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.8768064366393316,
       "users": 6463,
       "requests": 6463,
       "difference_vs_global": -0.05247874196286388,
       "ci_low": -0.05845589014703818,
-      "ci_high": -0.046093149369241825
+      "ci_high": -0.046093149369241825,
+      "difference_vs_global_active": -0.07286146279398266,
+      "ci_low_active": -0.08147148495605486,
+      "ci_high_active": -0.06433469554245312
     },
     {
       "method": "ICF",
       "ndcg": 0.11111548773081448,
       "diversity": 0.9940430140801485,
       "hit_diagnostic": 0.2382794367940585,
+      "ndcg_active": 0.15427269542518884,
+      "hit_active": 0.3308270676691729,
+      "active_users": 4655,
       "coverage_diagnostic": 1.0,
       "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.8140182577750271,
       "users": 6463,
       "requests": 6463,
       "difference_vs_global": -0.060115971063798145,
       "ci_low": -0.06670625262046179,
-      "ci_high": -0.052638315073146424
+      "ci_high": -0.052638315073146424,
+      "difference_vs_global_active": -0.08346498839641835,
+      "ci_low_active": -0.09353469016665758,
+      "ci_high_active": -0.07445014518436846
+    },
+    {
+      "method": "MLP_BPRU",
+      "ndcg": 0.10932697648345083,
+      "diversity": 0.9983908401671051,
+      "hit_diagnostic": 0.2404456134921863,
+      "ndcg_active": 0.15178952717777502,
+      "hit_active": 0.33383458646616543,
+      "active_users": 4655,
+      "coverage_diagnostic": 1.0,
+      "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.8875754293671669,
+      "users": 6463,
+      "requests": 6463,
+      "difference_vs_global": -0.061904482311161795,
+      "ci_low": -0.06893818120629155,
+      "ci_high": -0.05505359921997471,
+      "difference_vs_global_active": -0.08594815664383217,
+      "ci_low_active": -0.09543634044276729,
+      "ci_high_active": -0.07724336414984162
+    },
+    {
+      "method": "MF_BPR",
+      "ndcg": 0.10429154890396479,
+      "diversity": 0.9544793439579143,
+      "hit_diagnostic": 0.23657744081695806,
+      "ndcg_active": 0.1447983416898656,
+      "hit_active": 0.3284640171858217,
+      "active_users": 4655,
+      "coverage_diagnostic": 1.0,
+      "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.8318427974624787,
+      "users": 6463,
+      "requests": 6463,
+      "difference_vs_global": -0.06693990989064783,
+      "ci_low": -0.07361224753339751,
+      "ci_high": -0.060587569776175874,
+      "difference_vs_global_active": -0.09293934213174157,
+      "ci_low_active": -0.1019200963933393,
+      "ci_high_active": -0.0848520075801773
     },
     {
       "method": "CONTENT",
       "ndcg": 0.09957460300500118,
       "diversity": 0.8901903140956212,
       "hit_diagnostic": 0.23054309144360205,
+      "ndcg_active": 0.1382493360303593,
+      "hit_active": 0.3200859291084855,
+      "active_users": 4655,
       "coverage_diagnostic": 1.0,
       "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.7797617205632059,
       "users": 6463,
       "requests": 6463,
       "difference_vs_global": -0.07165685578961145,
       "ci_low": -0.07773383001153482,
-      "ci_high": -0.065765317608649
+      "ci_high": -0.065765317608649,
+      "difference_vs_global_active": -0.09948834779124788,
+      "ci_low_active": -0.10717482689945172,
+      "ci_high_active": -0.09124839136230069
+    },
+    {
+      "method": "MLP_NEXT",
+      "ndcg": 0.09509295742865685,
+      "diversity": 0.9653411728299551,
+      "hit_diagnostic": 0.2200216617669813,
+      "ndcg_active": 0.1320270212376819,
+      "hit_active": 0.3054779806659506,
+      "active_users": 4655,
+      "coverage_diagnostic": 1.0,
+      "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.8469441435865697,
+      "users": 6463,
+      "requests": 6463,
+      "difference_vs_global": -0.07613850136595578,
+      "ci_low": -0.08237919695799313,
+      "ci_high": -0.0694656311040583,
+      "difference_vs_global_active": -0.10571066258392528,
+      "ci_low_active": -0.11527473989390931,
+      "ci_high_active": -0.09679046895420809
     },
     {
       "method": "MF",
       "ndcg": 0.09264085737054714,
       "diversity": 0.9548197431533345,
       "hit_diagnostic": 0.219712207952963,
+      "ndcg_active": 0.12862252657053627,
+      "hit_active": 0.3050483351235231,
+      "active_users": 4655,
       "coverage_diagnostic": 1.0,
       "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.8345969364072412,
       "users": 6463,
       "requests": 6463,
       "difference_vs_global": -0.07859060142406546,
       "ci_low": -0.08557289215815152,
-      "ci_high": -0.07141624652495346
+      "ci_high": -0.07141624652495346,
+      "difference_vs_global_active": -0.1091151572510709,
+      "ci_low_active": -0.11814675746887357,
+      "ci_high_active": -0.09985024472166615
+    },
+    {
+      "method": "RouterNoGender+prereq",
+      "ndcg": 0.08225771963362312,
+      "diversity": 0.9955129196967353,
+      "hit_diagnostic": 0.17561503945536128,
+      "ndcg_active": 0.11420658259765977,
+      "hit_active": 0.24382384532760473,
+      "active_users": 4655,
+      "coverage_diagnostic": 1.0,
+      "short_list_rate": 0.37567693021816495,
+      "prereq_violation_rate": 0.0,
+      "users": 6463,
+      "requests": 6463,
+      "difference_vs_global": -0.08897373916098951,
+      "ci_low": -0.09583953616563343,
+      "ci_high": -0.08115419495540556,
+      "difference_vs_global_active": -0.1235311012239474,
+      "ci_low_active": -0.1331902601025446,
+      "ci_high_active": -0.11302527576464373
+    },
+    {
+      "method": "MLP_BPR",
+      "ndcg": 0.07295270658295239,
+      "diversity": 0.9867553767600187,
+      "hit_diagnostic": 0.17546031254835215,
+      "ndcg_active": 0.1012875064759659,
+      "hit_active": 0.24360902255639097,
+      "active_users": 4655,
+      "coverage_diagnostic": 1.0,
+      "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.8120377533653103,
+      "users": 6463,
+      "requests": 6463,
+      "difference_vs_global": -0.09827875221166024,
+      "ci_low": -0.10505576262518415,
+      "ci_high": -0.09115537460885152,
+      "difference_vs_global_active": -0.13645017734564127,
+      "ci_low_active": -0.14505347897848686,
+      "ci_high_active": -0.1267953401754412
     },
     {
       "method": "MF_OBS",
       "ndcg": 0.07098514697339195,
       "diversity": 0.980303264737738,
       "hit_diagnostic": 0.17019959771004178,
+      "ndcg_active": 0.0985557475594054,
+      "hit_active": 0.23630504833512353,
+      "active_users": 4655,
       "coverage_diagnostic": 1.0,
       "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.8077982361132601,
       "users": 6463,
       "requests": 6463,
       "difference_vs_global": -0.10024631182122068,
       "ci_low": -0.10681698114992391,
-      "ci_high": -0.09263374365490341
+      "ci_high": -0.09263374365490341,
+      "difference_vs_global_active": -0.13918193626220177,
+      "ci_low_active": -0.14836305237990202,
+      "ci_high_active": -0.12948313745251666
     },
     {
       "method": "Random",
       "ndcg": 0.05993396673383345,
       "diversity": 0.97016865232864,
       "hit_diagnostic": 0.15890453349837536,
+      "ndcg_active": 0.0832122936628927,
+      "hit_active": 0.22062298603651986,
+      "active_users": 4655,
       "coverage_diagnostic": 1.0,
       "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.8504100263035742,
       "users": 6463,
       "requests": 6463,
       "difference_vs_global": -0.11129749206077919,
       "ci_low": -0.11765188169812678,
-      "ci_high": -0.10332987043056688
+      "ci_high": -0.10332987043056688,
+      "difference_vs_global_active": -0.15452539015871447,
+      "ci_low_active": -0.16384742328680946,
+      "ci_high_active": -0.14477090672133575
     },
     {
       "method": "MLP",
       "ndcg": 0.05324735778103019,
       "diversity": 0.9886894630976326,
       "hit_diagnostic": 0.14111093919232554,
+      "ndcg_active": 0.0739286086656924,
+      "hit_active": 0.19591836734693877,
+      "active_users": 4655,
       "coverage_diagnostic": 1.0,
       "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.8229924183815566,
       "users": 6463,
       "requests": 6463,
       "difference_vs_global": -0.11798410101358243,
       "ci_low": -0.12486874628261958,
-      "ci_high": -0.11013256870738934
+      "ci_high": -0.11013256870738934,
+      "difference_vs_global_active": -0.16380907515591478,
+      "ci_low_active": -0.1730517166038779,
+      "ci_high_active": -0.15503081109209862
     }
   ],
   "group_results": [
@@ -585,7 +1028,12 @@
       "users": 3307,
       "ndcg": 0.16202162168703932,
       "ci_low": 0.15241070241379528,
-      "ci_high": 0.1709551690237919
+      "ci_high": 0.1709551690237919,
+      "active_users": 2358,
+      "active_share": 0.7130329603870578,
+      "ndcg_active": 0.22722879682741268,
+      "ci_low_active": 0.21590452010183336,
+      "ci_high_active": 0.2383489568595823
     },
     {
       "method": "Global",
@@ -594,7 +1042,12 @@
       "users": 3156,
       "ndcg": 0.180881944002073,
       "ci_low": 0.1711957774767649,
-      "ci_high": 0.19093333216245426
+      "ci_high": 0.19093333216245426,
+      "active_users": 2297,
+      "active_share": 0.7278200253485425,
+      "ndcg_active": 0.24852564878996186,
+      "ci_low_active": 0.23567696468614677,
+      "ci_high_active": 0.26017306771238574
     },
     {
       "method": "Global",
@@ -603,7 +1056,12 @@
       "users": 1211,
       "ndcg": 0.19917787756167138,
       "ci_low": 0.18320991378693333,
-      "ci_high": 0.2138072037286372
+      "ci_high": 0.2138072037286372,
+      "active_users": 878,
+      "active_share": 0.7250206440957886,
+      "ndcg_active": 0.2747202844273167,
+      "ci_low_active": 0.2553483301504895,
+      "ci_high_active": 0.29855780748929484
     },
     {
       "method": "Global",
@@ -612,7 +1070,12 @@
       "users": 1942,
       "ndcg": 0.17710991328179787,
       "ci_low": 0.166583374499626,
-      "ci_high": 0.19163061207484333
+      "ci_high": 0.19163061207484333,
+      "active_users": 1418,
+      "active_share": 0.7301750772399588,
+      "ndcg_active": 0.24255814639862586,
+      "ci_low_active": 0.22775163464078518,
+      "ci_high_active": 0.25748250321994803
     },
     {
       "method": "Global",
@@ -621,7 +1084,12 @@
       "users": 1901,
       "ndcg": 0.14966300471259142,
       "ci_low": 0.13853317508428617,
-      "ci_high": 0.16102205778981662
+      "ci_high": 0.16102205778981662,
+      "active_users": 1351,
+      "active_share": 0.7106785902156759,
+      "ndcg_active": 0.21059168908855386,
+      "ci_low_active": 0.19831501053588574,
+      "ci_high_active": 0.22372544380384649
     },
     {
       "method": "Global",
@@ -630,7 +1098,12 @@
       "users": 1049,
       "ndcg": 0.15691401875246694,
       "ci_low": 0.13998238021553583,
-      "ci_high": 0.17263620146579833
+      "ci_high": 0.17263620146579833,
+      "active_users": 761,
+      "active_share": 0.7254528122020972,
+      "ndcg_active": 0.21629803636181053,
+      "ci_low_active": 0.1964882996893625,
+      "ci_high_active": 0.23703307729680023
     },
     {
       "method": "Global",
@@ -639,7 +1112,12 @@
       "users": 360,
       "ndcg": 0.201124664553255,
       "ci_low": 0.17020916032597708,
-      "ci_high": 0.22816768652178895
+      "ci_high": 0.22816768652178895,
+      "active_users": 247,
+      "active_share": 0.6861111111111111,
+      "ndcg_active": 0.2931371629116267,
+      "ci_low_active": 0.25179264368213644,
+      "ci_high_active": 0.3345561307378217
     },
     {
       "method": "Global",
@@ -648,7 +1126,12 @@
       "users": 1306,
       "ndcg": 0.21163539314220708,
       "ci_low": 0.1951826832843677,
-      "ci_high": 0.2283095740343796
+      "ci_high": 0.2283095740343796,
+      "active_users": 943,
+      "active_share": 0.722052067381317,
+      "ndcg_active": 0.293102675974255,
+      "ci_low_active": 0.2708019956025621,
+      "ci_high_active": 0.31510088631239774
     },
     {
       "method": "Global",
@@ -657,7 +1140,12 @@
       "users": 1260,
       "ndcg": 0.16290488395438646,
       "ci_low": 0.14821829710527096,
-      "ci_high": 0.17770948173029202
+      "ci_high": 0.17770948173029202,
+      "active_users": 885,
+      "active_share": 0.7023809523809523,
+      "ndcg_active": 0.23193237715539766,
+      "ci_low_active": 0.21543681437730489,
+      "ci_high_active": 0.25287049150154217
     },
     {
       "method": "Global",
@@ -666,7 +1154,12 @@
       "users": 1304,
       "ndcg": 0.16236648948260338,
       "ci_low": 0.1474536904606162,
-      "ci_high": 0.17787452943047477
+      "ci_high": 0.17787452943047477,
+      "active_users": 942,
+      "active_share": 0.7223926380368099,
+      "ndcg_active": 0.22476210433685226,
+      "ci_low_active": 0.20984520737385948,
+      "ci_high_active": 0.24321039176805168
     },
     {
       "method": "Global",
@@ -675,7 +1168,12 @@
       "users": 1289,
       "ndcg": 0.170841471106084,
       "ci_low": 0.15633173864614996,
-      "ci_high": 0.18649993011020846
+      "ci_high": 0.18649993011020846,
+      "active_users": 933,
+      "active_share": 0.7238169123351436,
+      "ndcg_active": 0.23602857047775164,
+      "ci_low_active": 0.21781334272494068,
+      "ci_high_active": 0.25799630229883924
     },
     {
       "method": "Global",
@@ -684,7 +1182,12 @@
       "users": 1304,
       "ndcg": 0.14806164296186722,
       "ci_low": 0.13703509512688297,
-      "ci_high": 0.16019471358191242
+      "ci_high": 0.16019471358191242,
+      "active_users": 952,
+      "active_share": 0.7300613496932515,
+      "ndcg_active": 0.20280712439314585,
+      "ci_low_active": 0.1860942504671105,
+      "ci_high_active": 0.222653229379217
     },
     {
       "method": "Global",
@@ -693,7 +1196,12 @@
       "users": 907,
       "ndcg": 0.18774320788540913,
       "ci_low": 0.16922223063981826,
-      "ci_high": 0.20612651707460436
+      "ci_high": 0.20612651707460436,
+      "active_users": 572,
+      "active_share": 0.6306504961411246,
+      "ndcg_active": 0.29769770900710857,
+      "ci_low_active": 0.27190548990300795,
+      "ci_high_active": 0.3259024985217044
     },
     {
       "method": "Global",
@@ -702,7 +1210,12 @@
       "users": 3543,
       "ndcg": 0.16028950288189456,
       "ci_low": 0.15149318884538843,
-      "ci_high": 0.16861980113082745
+      "ci_high": 0.16861980113082745,
+      "active_users": 2407,
+      "active_share": 0.6793677674287327,
+      "ndcg_active": 0.23593922256358638,
+      "ci_low_active": 0.22533045304202853,
+      "ci_high_active": 0.24780300398722277
     },
     {
       "method": "Global",
@@ -711,7 +1224,12 @@
       "users": 2013,
       "ndcg": 0.18305023344608193,
       "ci_low": 0.17123886526661714,
-      "ci_high": 0.19539674044878214
+      "ci_high": 0.19539674044878214,
+      "active_users": 1676,
+      "active_share": 0.8325881768504719,
+      "ndcg_active": 0.219856873464775,
+      "ci_low_active": 0.20859795614244928,
+      "ci_high_active": 0.23391696651629565
     },
     {
       "method": "RouterFull",
@@ -720,7 +1238,12 @@
       "users": 3307,
       "ndcg": 0.162170845069427,
       "ci_low": 0.15316114278771492,
-      "ci_high": 0.17162728181264064
+      "ci_high": 0.17162728181264064,
+      "active_users": 2358,
+      "active_share": 0.7130329603870578,
+      "ndcg_active": 0.22743807660924303,
+      "ci_low_active": 0.21559032704619455,
+      "ci_high_active": 0.23895247682480183
     },
     {
       "method": "RouterFull",
@@ -729,7 +1252,12 @@
       "users": 3156,
       "ndcg": 0.18057847865678128,
       "ci_low": 0.17109148051898912,
-      "ci_high": 0.1906218961517164
+      "ci_high": 0.1906218961517164,
+      "active_users": 2297,
+      "active_share": 0.7278200253485425,
+      "ndcg_active": 0.24810869771040564,
+      "ci_low_active": 0.23498124315798943,
+      "ci_high_active": 0.2590303960667565
     },
     {
       "method": "RouterFull",
@@ -738,7 +1266,12 @@
       "users": 1211,
       "ndcg": 0.19740473937928468,
       "ci_low": 0.18132730239813105,
-      "ci_high": 0.21240832690372755
+      "ci_high": 0.21240832690372755,
+      "active_users": 878,
+      "active_share": 0.7250206440957886,
+      "ndcg_active": 0.2722746462281478,
+      "ci_low_active": 0.2526602466812801,
+      "ci_high_active": 0.2945715472837615
     },
     {
       "method": "RouterFull",
@@ -747,7 +1280,12 @@
       "users": 1942,
       "ndcg": 0.17485059626656937,
       "ci_low": 0.1649418509826366,
-      "ci_high": 0.19007073399782767
+      "ci_high": 0.19007073399782767,
+      "active_users": 1418,
+      "active_share": 0.7301750772399588,
+      "ndcg_active": 0.23946393367396174,
+      "ci_low_active": 0.22471293637197548,
+      "ci_high_active": 0.25399242821353957
     },
     {
       "method": "RouterFull",
@@ -756,7 +1294,12 @@
       "users": 1901,
       "ndcg": 0.15146754049643507,
       "ci_low": 0.1411275642330982,
-      "ci_high": 0.16293819485729874
+      "ci_high": 0.16293819485729874,
+      "active_users": 1351,
+      "active_share": 0.7106785902156759,
+      "ndcg_active": 0.21313086194206,
+      "ci_low_active": 0.20036624751187057,
+      "ci_high_active": 0.2279497768795222
     },
     {
       "method": "RouterFull",
@@ -765,7 +1308,12 @@
       "users": 1049,
       "ndcg": 0.16022031863713557,
       "ci_low": 0.14307283426472345,
-      "ci_high": 0.176460689771786
+      "ci_high": 0.176460689771786,
+      "active_users": 761,
+      "active_share": 0.7254528122020972,
+      "ndcg_active": 0.22085560348272695,
+      "ci_low_active": 0.200095169813531,
+      "ci_high_active": 0.24198546664858844
     },
     {
       "method": "RouterFull",
@@ -774,7 +1322,12 @@
       "users": 360,
       "ndcg": 0.19882432559257526,
       "ci_low": 0.16861563643336014,
-      "ci_high": 0.22692364339462254
+      "ci_high": 0.22692364339462254,
+      "active_users": 247,
+      "active_share": 0.6861111111111111,
+      "ndcg_active": 0.28978444215921895,
+      "ci_low_active": 0.24878380521074037,
+      "ci_high_active": 0.33455337544726654
     },
     {
       "method": "RouterFull",
@@ -783,7 +1336,12 @@
       "users": 1306,
       "ndcg": 0.2119516153675984,
       "ci_low": 0.1966694117755319,
-      "ci_high": 0.22779476679994864
+      "ci_high": 0.22779476679994864,
+      "active_users": 943,
+      "active_share": 0.722052067381317,
+      "ndcg_active": 0.2935406253129199,
+      "ci_low_active": 0.2707521035187642,
+      "ci_high_active": 0.3171629035411786
     },
     {
       "method": "RouterFull",
@@ -792,7 +1350,12 @@
       "users": 1260,
       "ndcg": 0.1633916071890202,
       "ci_low": 0.14868571614987683,
-      "ci_high": 0.17869501085279657
+      "ci_high": 0.17869501085279657,
+      "active_users": 885,
+      "active_share": 0.7023809523809523,
+      "ndcg_active": 0.23262533904877455,
+      "ci_low_active": 0.21293470873861486,
+      "ci_high_active": 0.25198055439578415
     },
     {
       "method": "RouterFull",
@@ -801,7 +1364,12 @@
       "users": 1304,
       "ndcg": 0.16104112088201,
       "ci_low": 0.1480895299566925,
-      "ci_high": 0.17639486159337336
+      "ci_high": 0.17639486159337336,
+      "active_users": 942,
+      "active_share": 0.7223926380368099,
+      "ndcg_active": 0.222927411496965,
+      "ci_low_active": 0.20753201293468654,
+      "ci_high_active": 0.23936323687472225
     },
     {
       "method": "RouterFull",
@@ -810,7 +1378,12 @@
       "users": 1289,
       "ndcg": 0.1699931878966783,
       "ci_low": 0.15715718311789426,
-      "ci_high": 0.18393674190418519
+      "ci_high": 0.18393674190418519,
+      "active_users": 933,
+      "active_share": 0.7238169123351436,
+      "ndcg_active": 0.234856612217383,
+      "ci_low_active": 0.2157422915570819,
+      "ci_high_active": 0.2554386035484921
     },
     {
       "method": "RouterFull",
@@ -819,7 +1392,12 @@
       "users": 1304,
       "ndcg": 0.14908250592652494,
       "ci_low": 0.1374372519462657,
-      "ci_high": 0.16222726632108173
+      "ci_high": 0.16222726632108173,
+      "active_users": 952,
+      "active_share": 0.7300613496932515,
+      "ndcg_active": 0.20420544929431564,
+      "ci_low_active": 0.18794857878035562,
+      "ci_high_active": 0.22430809486462164
     },
     {
       "method": "RouterFull",
@@ -828,7 +1406,12 @@
       "users": 907,
       "ndcg": 0.18740509070260497,
       "ci_low": 0.16944552890147602,
-      "ci_high": 0.2057552544659576
+      "ci_high": 0.2057552544659576,
+      "active_users": 572,
+      "active_share": 0.6306504961411246,
+      "ndcg_active": 0.2971615686490607,
+      "ci_low_active": 0.2711098237361527,
+      "ci_high_active": 0.32494541565548923
     },
     {
       "method": "RouterFull",
@@ -837,7 +1420,12 @@
       "users": 3543,
       "ndcg": 0.16077396213374104,
       "ci_low": 0.15165280450530544,
-      "ci_high": 0.16906510926066456
+      "ci_high": 0.16906510926066456,
+      "active_users": 2407,
+      "active_share": 0.6793677674287327,
+      "ndcg_active": 0.23665232565012234,
+      "ci_low_active": 0.22617899222199267,
+      "ci_high_active": 0.24899935768910422
     },
     {
       "method": "RouterFull",
@@ -846,7 +1434,12 @@
       "users": 2013,
       "ndcg": 0.1821192738093838,
       "ci_low": 0.1718504362611423,
-      "ci_high": 0.19501940768513348
+      "ci_high": 0.19501940768513348,
+      "active_users": 1676,
+      "active_share": 0.8325881768504719,
+      "ndcg_active": 0.2187387220634186,
+      "ci_low_active": 0.20782096490761276,
+      "ci_high_active": 0.23282147729778246
     },
     {
       "method": "RouterNoGender",
@@ -855,7 +1448,12 @@
       "users": 3307,
       "ndcg": 0.16206723792024832,
       "ci_low": 0.15290839546491275,
-      "ci_high": 0.17132690494242084
+      "ci_high": 0.17132690494242084,
+      "active_users": 2358,
+      "active_share": 0.7130329603870578,
+      "ndcg_active": 0.22729277175668414,
+      "ci_low_active": 0.2154871421370075,
+      "ci_high_active": 0.23920189596211897
     },
     {
       "method": "RouterNoGender",
@@ -864,7 +1462,12 @@
       "users": 3156,
       "ndcg": 0.18074205328343598,
       "ci_low": 0.17134667432907758,
-      "ci_high": 0.1906678788517489
+      "ci_high": 0.1906678788517489,
+      "active_users": 2297,
+      "active_share": 0.7278200253485425,
+      "ndcg_active": 0.2483334436928707,
+      "ci_low_active": 0.2356174194828532,
+      "ci_high_active": 0.2589632100369124
     },
     {
       "method": "RouterNoGender",
@@ -873,7 +1476,12 @@
       "users": 1211,
       "ndcg": 0.19797742731655796,
       "ci_low": 0.18239086497612317,
-      "ci_high": 0.2133334538987896
+      "ci_high": 0.2133334538987896,
+      "active_users": 878,
+      "active_share": 0.7250206440957886,
+      "ndcg_active": 0.273064538132519,
+      "ci_low_active": 0.25355893205154784,
+      "ci_high_active": 0.2955633024973976
     },
     {
       "method": "RouterNoGender",
@@ -882,7 +1490,12 @@
       "users": 1942,
       "ndcg": 0.1746513929672725,
       "ci_low": 0.16474264768333974,
-      "ci_high": 0.18973734001745593
+      "ci_high": 0.18973734001745593,
+      "active_users": 1418,
+      "active_share": 0.7301750772399588,
+      "ndcg_active": 0.23919111787196273,
+      "ci_low_active": 0.22417173012751315,
+      "ci_high_active": 0.2533744549910922
     },
     {
       "method": "RouterNoGender",
@@ -891,7 +1504,12 @@
       "users": 1901,
       "ndcg": 0.1513975459643913,
       "ci_low": 0.14053186318689104,
-      "ci_high": 0.162918919615355
+      "ci_high": 0.162918919615355,
+      "active_users": 1351,
+      "active_share": 0.7106785902156759,
+      "ndcg_active": 0.21303237222672683,
+      "ci_low_active": 0.2001966763126846,
+      "ci_high_active": 0.22887234979086235
     },
     {
       "method": "RouterNoGender",
@@ -900,7 +1518,12 @@
       "users": 1049,
       "ndcg": 0.16022031863713557,
       "ci_low": 0.14307283426472345,
-      "ci_high": 0.176460689771786
+      "ci_high": 0.176460689771786,
+      "active_users": 761,
+      "active_share": 0.7254528122020972,
+      "ndcg_active": 0.22085560348272695,
+      "ci_low_active": 0.200095169813531,
+      "ci_high_active": 0.24198546664858844
     },
     {
       "method": "RouterNoGender",
@@ -909,7 +1532,12 @@
       "users": 360,
       "ndcg": 0.19882432559257526,
       "ci_low": 0.16861563643336014,
-      "ci_high": 0.22692364339462254
+      "ci_high": 0.22692364339462254,
+      "active_users": 247,
+      "active_share": 0.6861111111111111,
+      "ndcg_active": 0.28978444215921895,
+      "ci_low_active": 0.24878380521074037,
+      "ci_high_active": 0.33455337544726654
     },
     {
       "method": "RouterNoGender",
@@ -918,7 +1546,12 @@
       "users": 1306,
       "ndcg": 0.2118035849578001,
       "ci_low": 0.19693468141075543,
-      "ci_high": 0.22777214119137087
+      "ci_high": 0.22777214119137087,
+      "active_users": 943,
+      "active_share": 0.722052067381317,
+      "ndcg_active": 0.29333561182914836,
+      "ci_low_active": 0.27040580010220583,
+      "ci_high_active": 0.317930497814233
     },
     {
       "method": "RouterNoGender",
@@ -927,7 +1560,12 @@
       "users": 1260,
       "ndcg": 0.16369762859528425,
       "ci_low": 0.14795042762610808,
-      "ci_high": 0.17910720848082878
+      "ci_high": 0.17910720848082878,
+      "active_users": 885,
+      "active_share": 0.7023809523809523,
+      "ndcg_active": 0.2330610305424386,
+      "ci_low_active": 0.213650037268403,
+      "ci_high_active": 0.2515242193354811
     },
     {
       "method": "RouterNoGender",
@@ -936,7 +1574,12 @@
       "users": 1304,
       "ndcg": 0.1604209917038382,
       "ci_low": 0.14714547532932346,
-      "ci_high": 0.17589205392342025
+      "ci_high": 0.17589205392342025,
+      "active_users": 942,
+      "active_share": 0.7223926380368099,
+      "ndcg_active": 0.22206897365372086,
+      "ci_low_active": 0.20724378105737973,
+      "ci_high_active": 0.2391793366881711
     },
     {
       "method": "RouterNoGender",
@@ -945,7 +1588,12 @@
       "users": 1289,
       "ndcg": 0.17060606754836816,
       "ci_low": 0.15727408419348124,
-      "ci_high": 0.18409836774244365
+      "ci_high": 0.18409836774244365,
+      "active_users": 933,
+      "active_share": 0.7238169123351436,
+      "ndcg_active": 0.2357033451981206,
+      "ci_low_active": 0.21681637045096222,
+      "ci_high_active": 0.2565515886490706
     },
     {
       "method": "RouterNoGender",
@@ -954,7 +1602,12 @@
       "users": 1304,
       "ndcg": 0.14908250592652494,
       "ci_low": 0.1374372519462657,
-      "ci_high": 0.16222726632108173
+      "ci_high": 0.16222726632108173,
+      "active_users": 952,
+      "active_share": 0.7300613496932515,
+      "ndcg_active": 0.20420544929431564,
+      "ci_low_active": 0.18794857878035562,
+      "ci_high_active": 0.22430809486462164
     },
     {
       "method": "RouterNoGender",
@@ -963,7 +1616,12 @@
       "users": 907,
       "ndcg": 0.18774320788540913,
       "ci_low": 0.16922223063981826,
-      "ci_high": 0.20612651707460436
+      "ci_high": 0.20612651707460436,
+      "active_users": 572,
+      "active_share": 0.6306504961411246,
+      "ndcg_active": 0.29769770900710857,
+      "ci_low_active": 0.27190548990300795,
+      "ci_high_active": 0.3259024985217044
     },
     {
       "method": "RouterNoGender",
@@ -972,7 +1630,12 @@
       "users": 3543,
       "ndcg": 0.1607364065013913,
       "ci_low": 0.15137286195881414,
-      "ci_high": 0.16927976552970925
+      "ci_high": 0.16927976552970925,
+      "active_users": 2407,
+      "active_share": 0.6793677674287327,
+      "ndcg_active": 0.23659704538198145,
+      "ci_low_active": 0.2260785359345613,
+      "ci_high_active": 0.24897529255933584
     },
     {
       "method": "RouterNoGender",
@@ -981,7 +1644,12 @@
       "users": 2013,
       "ndcg": 0.1821192738093838,
       "ci_low": 0.1718504362611423,
-      "ci_high": 0.19501940768513348
+      "ci_high": 0.19501940768513348,
+      "active_users": 1676,
+      "active_share": 0.8325881768504719,
+      "ndcg_active": 0.2187387220634186,
+      "ci_low_active": 0.20782096490761276,
+      "ci_high_active": 0.23282147729778246
     },
     {
       "method": "RouterNoGenderIncome",
@@ -990,7 +1658,12 @@
       "users": 3307,
       "ndcg": 0.15060625613931417,
       "ci_low": 0.1431976573732089,
-      "ci_high": 0.15939633193854413
+      "ci_high": 0.15939633193854413,
+      "active_users": 2358,
+      "active_share": 0.7130329603870578,
+      "ndcg_active": 0.21121920655331294,
+      "ci_low_active": 0.20006085761791625,
+      "ci_high_active": 0.222820910906628
     },
     {
       "method": "RouterNoGenderIncome",
@@ -999,7 +1672,12 @@
       "users": 3156,
       "ndcg": 0.16373462148075843,
       "ci_low": 0.15319244195980553,
-      "ci_high": 0.1744319170153605
+      "ci_high": 0.1744319170153605,
+      "active_users": 2297,
+      "active_share": 0.7278200253485425,
+      "ndcg_active": 0.2249658099230621,
+      "ci_low_active": 0.2133309764129026,
+      "ci_high_active": 0.23537320150691063
     },
     {
       "method": "RouterNoGenderIncome",
@@ -1008,7 +1686,12 @@
       "users": 1211,
       "ndcg": 0.1906866247354077,
       "ci_low": 0.17430933813944668,
-      "ci_high": 0.20532917307878887
+      "ci_high": 0.20532917307878887,
+      "active_users": 878,
+      "active_share": 0.7250206440957886,
+      "ndcg_active": 0.263008545050773,
+      "ci_low_active": 0.24494774270332928,
+      "ci_high_active": 0.28646316881977096
     },
     {
       "method": "RouterNoGenderIncome",
@@ -1017,7 +1700,12 @@
       "users": 1942,
       "ndcg": 0.1612275540131081,
       "ci_low": 0.15106253081352214,
-      "ci_high": 0.1758933350596629
+      "ci_high": 0.1758933350596629,
+      "active_users": 1418,
+      "active_share": 0.7301750772399588,
+      "ndcg_active": 0.22080670655391813,
+      "ci_low_active": 0.20501922101087014,
+      "ci_high_active": 0.23499996640908014
     },
     {
       "method": "RouterNoGenderIncome",
@@ -1026,7 +1714,12 @@
       "users": 1901,
       "ndcg": 0.13967461339703954,
       "ci_low": 0.1296865238778781,
-      "ci_high": 0.15087483947980135
+      "ci_high": 0.15087483947980135,
+      "active_users": 1351,
+      "active_share": 0.7106785902156759,
+      "ndcg_active": 0.19653696526111925,
+      "ci_low_active": 0.18114219161249476,
+      "ci_high_active": 0.2105873357892618
     },
     {
       "method": "RouterNoGenderIncome",
@@ -1035,7 +1728,12 @@
       "users": 1049,
       "ndcg": 0.13276298480742257,
       "ci_low": 0.1170213517814942,
-      "ci_high": 0.14780930285550425
+      "ci_high": 0.14780930285550425,
+      "active_users": 761,
+      "active_share": 0.7254528122020972,
+      "ndcg_active": 0.1830070579014275,
+      "ci_low_active": 0.16460491224256502,
+      "ci_high_active": 0.20234194028371974
     },
     {
       "method": "RouterNoGenderIncome",
@@ -1044,7 +1742,12 @@
       "users": 360,
       "ndcg": 0.18329480796442374,
       "ci_low": 0.16145727468000726,
-      "ci_high": 0.21097306312395026
+      "ci_high": 0.21097306312395026,
+      "active_users": 247,
+      "active_share": 0.6861111111111111,
+      "ndcg_active": 0.26715032739754063,
+      "ci_low_active": 0.22740921095682134,
+      "ci_high_active": 0.30282041339476307
     },
     {
       "method": "RouterNoGenderIncome",
@@ -1053,7 +1756,12 @@
       "users": 1306,
       "ndcg": 0.20689906469508615,
       "ci_low": 0.19000597503789254,
-      "ci_high": 0.2248750590109015
+      "ci_high": 0.2248750590109015,
+      "active_users": 943,
+      "active_share": 0.722052067381317,
+      "ndcg_active": 0.28654313731896347,
+      "ci_low_active": 0.26549986284450705,
+      "ci_high_active": 0.3074668516250223
     },
     {
       "method": "RouterNoGenderIncome",
@@ -1062,7 +1770,12 @@
       "users": 1260,
       "ndcg": 0.1533016322033153,
       "ci_low": 0.13916208577770012,
-      "ci_high": 0.16723597954032834
+      "ci_high": 0.16723597954032834,
+      "active_users": 885,
+      "active_share": 0.7023809523809523,
+      "ndcg_active": 0.21825995093353365,
+      "ci_low_active": 0.20107807569086297,
+      "ci_high_active": 0.23741888914182138
     },
     {
       "method": "RouterNoGenderIncome",
@@ -1071,7 +1784,12 @@
       "users": 1304,
       "ndcg": 0.14560956692816307,
       "ci_low": 0.13213662279277694,
-      "ci_high": 0.1616276369892553
+      "ci_high": 0.1616276369892553,
+      "active_users": 942,
+      "active_share": 0.7223926380368099,
+      "ndcg_active": 0.2015656850045909,
+      "ci_low_active": 0.18564579204489537,
+      "ci_high_active": 0.21607169313089655
     },
     {
       "method": "RouterNoGenderIncome",
@@ -1080,7 +1798,12 @@
       "users": 1289,
       "ndcg": 0.1500783314862205,
       "ci_low": 0.13743147343368367,
-      "ci_high": 0.1660525764637671
+      "ci_high": 0.1660525764637671,
+      "active_users": 933,
+      "active_share": 0.7238169123351436,
+      "ndcg_active": 0.2073429467156894,
+      "ci_low_active": 0.18659562532779916,
+      "ci_high_active": 0.22724588758895797
     },
     {
       "method": "RouterNoGenderIncome",
@@ -1089,7 +1812,12 @@
       "users": 1304,
       "ndcg": 0.12891508805058507,
       "ci_low": 0.11906301052394525,
-      "ci_high": 0.14060294316924493
+      "ci_high": 0.14060294316924493,
+      "active_users": 952,
+      "active_share": 0.7300613496932515,
+      "ndcg_active": 0.176581171027272,
+      "ci_low_active": 0.1622284012756222,
+      "ci_high_active": 0.19256037910309107
     },
     {
       "method": "RouterNoGenderIncome",
@@ -1098,7 +1826,12 @@
       "users": 907,
       "ndcg": 0.17647377809171566,
       "ci_low": 0.15605316766810506,
-      "ci_high": 0.19407331794413568
+      "ci_high": 0.19407331794413568,
+      "active_users": 572,
+      "active_share": 0.6306504961411246,
+      "ndcg_active": 0.27982817609997573,
+      "ci_low_active": 0.25249608253191297,
+      "ci_high_active": 0.30366215474093805
     },
     {
       "method": "RouterNoGenderIncome",
@@ -1107,7 +1840,12 @@
       "users": 3543,
       "ndcg": 0.14862456876963476,
       "ci_low": 0.13930594117835737,
-      "ci_high": 0.15719756976923202
+      "ci_high": 0.15719756976923202,
+      "active_users": 2407,
+      "active_share": 0.6793677674287327,
+      "ndcg_active": 0.2187689435607877,
+      "ci_low_active": 0.20713536512207711,
+      "ci_high_active": 0.23098398595954392
     },
     {
       "method": "RouterNoGenderIncome",
@@ -1116,7 +1854,152 @@
       "users": 2013,
       "ndcg": 0.16302175388275386,
       "ci_low": 0.15254947526694754,
-      "ci_high": 0.17753764162934585
+      "ci_high": 0.17753764162934585,
+      "active_users": 1676,
+      "active_share": 0.8325881768504719,
+      "ndcg_active": 0.19580118768853433,
+      "ci_low_active": 0.18493005744360874,
+      "ci_high_active": 0.20746107514512052
+    },
+    {
+      "method": "Global",
+      "variable": "goal",
+      "group": "pension",
+      "users": 783,
+      "ndcg": 0.17849724072483986,
+      "ci_low": 0.16016483008042026,
+      "ci_high": 0.20148015950886228,
+      "active_users": 556,
+      "active_share": 0.7100893997445722,
+      "ndcg_active": 0.2513729127473914,
+      "ci_low_active": 0.2292835212649348,
+      "ci_high_active": 0.27619558051083376
+    },
+    {
+      "method": "Global",
+      "variable": "goal",
+      "group": "income",
+      "users": 1328,
+      "ndcg": 0.1489104080896527,
+      "ci_low": 0.13599926429236728,
+      "ci_high": 0.16388284552571986,
+      "active_users": 952,
+      "active_share": 0.7168674698795181,
+      "ndcg_active": 0.2077237625452298,
+      "ci_low_active": 0.1884789020776436,
+      "ci_high_active": 0.22567236720270203
+    },
+    {
+      "method": "Global",
+      "variable": "goal",
+      "group": "long_term",
+      "users": 2633,
+      "ndcg": 0.1653634135521932,
+      "ci_low": 0.15644737506704617,
+      "ci_high": 0.17529755943608483,
+      "active_users": 1879,
+      "active_share": 0.7136346372958602,
+      "ndcg_active": 0.231719993551317,
+      "ci_low_active": 0.21778048989959012,
+      "ci_high_active": 0.2444402489098855
+    },
+    {
+      "method": "Global",
+      "variable": "goal",
+      "group": "trading",
+      "users": 1053,
+      "ndcg": 0.20062909042627644,
+      "ci_low": 0.18449889215208606,
+      "ci_high": 0.2174911626815931,
+      "active_users": 786,
+      "active_share": 0.7464387464387464,
+      "ndcg_active": 0.26878172038024056,
+      "ci_low_active": 0.2455309639463573,
+      "ci_high_active": 0.286766151499943
+    },
+    {
+      "method": "Global",
+      "variable": "goal",
+      "group": "diversify",
+      "users": 666,
+      "ndcg": 0.18391630128705588,
+      "ci_low": 0.16202037871674602,
+      "ci_high": 0.2061155925638736,
+      "active_users": 482,
+      "active_share": 0.7237237237237237,
+      "ndcg_active": 0.2541250138115751,
+      "ci_low_active": 0.2269398225346567,
+      "ci_high_active": 0.2788279472260389
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "goal",
+      "group": "pension",
+      "users": 783,
+      "ndcg": 0.17869822052541856,
+      "ci_low": 0.16062549136976384,
+      "ci_high": 0.20082316311642776,
+      "active_users": 556,
+      "active_share": 0.7100893997445722,
+      "ndcg_active": 0.2516559472507244,
+      "ci_low_active": 0.22882620548909643,
+      "ci_high_active": 0.2783619474816906
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "goal",
+      "group": "income",
+      "users": 1328,
+      "ndcg": 0.1520372077955755,
+      "ci_low": 0.1382326479957922,
+      "ci_high": 0.16775382127743713,
+      "active_users": 952,
+      "active_share": 0.7168674698795181,
+      "ndcg_active": 0.21208551675685322,
+      "ci_low_active": 0.19152214873686496,
+      "ci_high_active": 0.2309319413731809
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "goal",
+      "group": "long_term",
+      "users": 2633,
+      "ndcg": 0.16539255547203421,
+      "ci_low": 0.1565278883200607,
+      "ci_high": 0.17446722005061194,
+      "active_users": 1879,
+      "active_share": 0.7136346372958602,
+      "ndcg_active": 0.2317608294613444,
+      "ci_low_active": 0.21812330074138733,
+      "ci_high_active": 0.24472129919183658
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "goal",
+      "group": "trading",
+      "users": 1053,
+      "ndcg": 0.19864871553350694,
+      "ci_low": 0.1828606700051899,
+      "ci_high": 0.2163883026364825,
+      "active_users": 786,
+      "active_share": 0.7464387464387464,
+      "ndcg_active": 0.2661286227185532,
+      "ci_low_active": 0.24275382489450859,
+      "ci_high_active": 0.2822829952657296
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "goal",
+      "group": "diversify",
+      "users": 666,
+      "ndcg": 0.18002471670601985,
+      "ci_low": 0.15928468745654834,
+      "ci_high": 0.20047599974657085,
+      "active_users": 482,
+      "active_share": 0.7237237237237237,
+      "ndcg_active": 0.24874784507512288,
+      "ci_low_active": 0.22149907516166556,
+      "ci_high_active": 0.2733551413751849
     }
   ],
   "qa": [
@@ -1196,6 +2079,26 @@
       "details": null
     },
     {
+      "test": "mlp9_bpr_pairs_at_two_snapshots",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "mlp9_bpru_pairs_at_two_snapshots",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "mlp9_next_pairs_at_two_snapshots",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "MF_BPR_trained_at_two_snapshots",
+      "passed": true,
+      "details": null
+    },
+    {
       "test": "observed_models_trained_at_validation_and_test_snapshots",
       "passed": true,
       "details": null
@@ -1209,6 +2112,31 @@
       "test": "mastery_equals_quiz_pass",
       "passed": true,
       "details": null
+    },
+    {
+      "test": "event_logic_drop_excludes_complete",
+      "passed": true,
+      "details": "이탈과 완료는 같은 시도에서 동시에 참일 수 없다"
+    },
+    {
+      "test": "event_logic_quiz_pass_requires_quiz_and_complete",
+      "passed": true,
+      "details": "퀴즈 통과 ⊆ 퀴즈 시도 ⊆ 완료"
+    },
+    {
+      "test": "ndcg_active_identity",
+      "passed": true,
+      "details": "활성 사용자 NDCG × 활성 수 = 전체 NDCG × 전체 수 (정답 없는 사용자는 모든 방법에서 0)"
+    },
+    {
+      "test": "active_users_identical_across_methods",
+      "passed": true,
+      "details": "모든 방법이 같은 활성 사용자 집합으로 평가되어야 두 기준의 순위가 같다"
+    },
+    {
+      "test": "active_rank_preserved",
+      "passed": true,
+      "details": "전체·활성 기준의 방법 순위가 같다"
     },
     {
       "test": "ordered_study_times",
@@ -1336,6 +2264,26 @@
       "details": null
     },
     {
+      "test": "unique_items_MF_BPR",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_MF_BPR",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_MF_BPR",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_MF_BPR",
+      "passed": true,
+      "details": null
+    },
+    {
       "test": "unique_items_MF_OBS",
       "passed": true,
       "details": null
@@ -1372,6 +2320,66 @@
     },
     {
       "test": "no_passed_unit_recommended_MLP",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_MLP_BPR",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_MLP_BPR",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_MLP_BPR",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_MLP_BPR",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_MLP_BPRU",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_MLP_BPRU",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_MLP_BPRU",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_MLP_BPRU",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_MLP_NEXT",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_MLP_NEXT",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_MLP_NEXT",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_MLP_NEXT",
       "passed": true,
       "details": null
     },
@@ -1496,6 +2504,26 @@
       "details": null
     },
     {
+      "test": "unique_items_RouterNoGender+prereq",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_RouterNoGender+prereq",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_RouterNoGender+prereq",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_RouterNoGender+prereq",
+      "passed": true,
+      "details": null
+    },
+    {
       "test": "selection_operational_is_locked",
       "passed": true,
       "details": null
@@ -1503,6 +2531,79 @@
   ],
   "neural_enabled": true,
   "zoo_skipped": 0,
+  "privacy": {
+    "routing": {
+      "columns": [
+        "age_band",
+        "income_q",
+        "gender"
+      ],
+      "k": 20,
+      "groups": 50,
+      "min_group": 38,
+      "median_group": 279.0,
+      "groups_below_k": 0,
+      "users_below_k": 0,
+      "share_below_k": 0.0,
+      "satisfied": true
+    },
+    "quasi": {
+      "columns": [
+        "age_band",
+        "income_q",
+        "gender",
+        "exp",
+        "risk",
+        "goal"
+      ],
+      "k": 5,
+      "groups": 568,
+      "min_group": 1,
+      "median_group": 17.5,
+      "groups_below_k": 77,
+      "users_below_k": 200,
+      "share_below_k": 0.013333333333333334,
+      "satisfied": false
+    },
+    "generalization": [
+      {
+        "drop": "income_q",
+        "remaining": [
+          "age_band",
+          "gender",
+          "exp",
+          "risk",
+          "goal"
+        ],
+        "min_group": 3,
+        "users_below_k": 7,
+        "satisfied": false
+      },
+      {
+        "drop": "age_band",
+        "remaining": [
+          "gender",
+          "exp",
+          "risk",
+          "goal"
+        ],
+        "min_group": 24,
+        "users_below_k": 0,
+        "satisfied": true
+      }
+    ],
+    "policy": [
+      "수집 최소화: 원시 연령·연소득은 온보딩 직후 연령대(5구간)·소득분위(5분위)로 일반화해 저장하고 원값은 보관하지 않는다",
+      "가명 처리: 학습자 식별자는 일방향 해시 가명 번호로 바꾸고 매핑표는 분리 보관·접근 통제(모델 학습 부서는 매핑표 접근 불가)",
+      "민감 속성 비사용: 성별은 운영 라우터·운영 설정에서 제외하고 성별 뒤집기 불변 검사로 확인",
+      "시간 정보 축약: 접속 시각은 4개 시간대(출근·점심·저녁·심야)로만 저장",
+      "k-익명성: 라우팅 세그먼트 조합은 잎 최소 20명(λ 수축), 준식별자 조합이 k=5 미만인 셀은 일반화(열 제거)하거나 집계에서 제외",
+      "보관·삭제: 학습 로그는 목적 달성 후 통계·연구용 가명정보로만 보관하고 보관 기간을 문서화, 탈퇴 시 삭제",
+      "접근 통제: 가명처리 담당과 모델 학습 담당의 권한·망 분리, 번들에는 원시 프로필이 아닌 세그먼트 코드와 집계만 저장",
+      "재식별 금지: 가명정보를 특정 개인을 알아보기 위한 목적으로 처리하지 않으며, 재식별 가능성 발견 시 즉시 처리 중단·보고"
+    ],
+    "note": "가명 번호만으로는 충분하지 않다. 준식별자 조합의 k-익명성을 학습 전에 점검하고, k 미만 셀은 일반화하거나 집계에서 제외한다."
+  },
   "environment": {
     "python": "3.13.16",
     "numpy": "2.5.4",

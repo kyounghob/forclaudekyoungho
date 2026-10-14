@@ -159,6 +159,7 @@ def primary_eval(week: int, F: FeatureStore, log: pd.DataFrame, catalog: Catalog
     cands = CandidateBatch(users, C, R)
     cands.audit = dict(mode="next-week observed quiz-pass; hard-eligible unmastered units", week=int(week), rows=int(len(users)),
                        zero_observed_target=int((R.sum(1) == 0).sum()), raw_positive_items=raw, eligible_positive_items=int(R.sum()),
+                       raw_positive_users=int(passed[users].any(1).sum()), eligible_positive_users=int((R.sum(1) > 0).sum()),
                        eligible_min=int(cands.valid.sum(1).min()), eligible_max=int(cands.valid.sum(1).max()))
     lb = LearnerBatch.from_store(F, users)
     return cands, lb
