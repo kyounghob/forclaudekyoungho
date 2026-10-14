@@ -70,7 +70,7 @@ SOURCES = {
         name="자산운용사 ETF 가이드북·상품 설명 자료", publisher="삼성자산운용(KODEX)·미래에셋자산운용(TIGER)·KB자산운용(RISE, 구 KBSTAR) 등",
         url="https://www.riseetf.co.kr", menu="각 운용사 홈페이지 › 투자 가이드/자료실", kind="PDF 가이드북·상품 설명서·용어집",
         access="웹(무료 내려받기)", topics=["비용", "분배금", "환헤지", "해외 ETF", "커버드콜 ETF", "테마 ETF", "레버리지·인버스"],
-        use="시각 자료와 용어 정리가 잘 되어 있어 콘텐츠 텍스트 특징으로 확장할 후보(현재 TF-IDF는 단원 제목만 씀)", license="운용사 저작물. 인용·요약만, 원문 재배포 금지",
+        use="시각 자료와 용어 정리가 잘 되어 있어 콘텐츠 텍스트 특징으로 확장할 후보(현재 TF-IDF는 주제 이름과 단원 제목만 씀)", license="운용사 저작물. 인용·요약만, 원문 재배포 금지",
         verified="domain(RISE 사이트 확인, 가이드북 PDF 경로는 미확인)"),
     "creators_research": dict(
         name="증권사 리서치·금융 크리에이터 아카이브", publisher="증권사 리서치센터, 유튜브 채널", url="", menu="",

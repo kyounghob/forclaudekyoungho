@@ -58,7 +58,7 @@ python -m etfrec serve --bundle artifacts/bundle_v2     # http://127.0.0.1:8000
 | KRX Open API(ETF 일별매매정보) | 종가·NAV·거래량 → 유형 카드의 괴리율 절댓값 중앙값·거래량 중앙값 | `--krx-key` 또는 환경변수 `KRX_OPEN_API_KEY`(openapi.krx.co.kr 인증키·서비스 신청, 비상업 이용·재배포 금지·출처 표기). 코드는 실행당 호출 상한과 호출 간격(기본 30회·1초)을 지키며, 인증키별 호출 한도는 KRX 이용 조건으로 확인 |
 | 공공데이터포털 증권상품시세정보(ETF) | 종가·NAV·거래량 → 같은 통계(KRX 시세보다 기준일이 최근일 때) | `--datagokr-key` 또는 환경변수 `DATA_GO_KR_KEY`. totalCount까지 페이지를 넘겨 받고(최대 10쪽) 다 못 받으면 `partial` |
 | 공공데이터포털 KRX상장종목정보 | 단축코드·ISIN 교차 확인(선택, 결과는 provenance에 기록만) | 같은 serviceKey, `--no-cross-check`로 끔. `getItemInfo` 경로는 활용 가이드 기준이며 키 발급 후 확인 |
-| 자산운용사 가이드북(KODEX·TIGER·RISE 등) | 용어·시각 자료 → 콘텐츠 텍스트 특징으로 확장할 후보(현재 TF-IDF는 단원 제목만 사용) | 웹(무료 PDF). 인용·요약만 |
+| 자산운용사 가이드북(KODEX·TIGER·RISE 등) | 용어·시각 자료 → 콘텐츠 텍스트 특징으로 확장할 후보(현재 TF-IDF는 주제 이름과 단원 제목만 사용) | 웹(무료 PDF). 인용·요약만 |
 
 수집 전에는 `etfrec/sources/data/etf_list_sample.csv`(가상 종목 45개, 화면에 "샘플" 표시)로 유형 통계를 계산하고,
 `sources sync` 뒤에는 `data/sources/` 스냅샷과 수집 경로(provenance, `policy: official-apis-and-manual-download-only`)를 씁니다.
