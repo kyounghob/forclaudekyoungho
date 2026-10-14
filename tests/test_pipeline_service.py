@@ -15,7 +15,7 @@ def test_pipeline_outputs(small_bundle):
     assert set(b.results.method) >= {"Global", "RouterNoGender", "RouterFull", "POP", "RULE", "CONTENT", "UCF", "ICF", "Random", "MF_BPR", "MLP_BPR", "MLP_BPRU", "MLP_NEXT"}
     assert np.isfinite(b.results[["ndcg", "ndcg_active", "diversity"]].values).all()
     r = b.results.set_index("method")
-    assert (r.ndcg_active >= r.ndcg).all() and r.active_users.min() > 0 and b.privacy["routing"]["groups"] > 0     # 활성 사용자 기준은 항상 크거나 같다
+    assert (r.ndcg_active >= r.ndcg).all() and r.active_users.min() > 0 and b.privacy["router_leaves"]["RouterNoGender"]["leaves"] > 0     # 활성 사용자 기준은 항상 크거나 같다
     assert np.allclose(r.ndcg_active * r.active_users, r.ndcg * r.users) and r.active_users.nunique() == 1
     g = b.group_results
     assert {"ndcg_active", "active_share", "active_users"} <= set(g.columns) and (g.active_users <= g.users).all()

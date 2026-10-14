@@ -35,6 +35,10 @@ def estimate_level(lg: pd.DataFrame, n: int, placement: np.ndarray, item_level: 
     return lv
 
 
+AGE_CUTS = (30, 40, 50, 60)            # 연령대 경계: 29세 이하·30대·40대·50대·60세 이상
+AGE_BAND_REP = (25, 35, 45, 55, 65)     # 연령대 대표값(화면 입력란 채우기용, 원값 아님)
+
+
 def income_quintile(income: np.ndarray, edges: np.ndarray = None):
     """소득 5분위. 기준 집단에서는 pd.qcut, 임의 학습자는 저장된 경계(오른쪽 닫힘)로 계산한다."""
     if edges is None:
@@ -43,9 +47,23 @@ def income_quintile(income: np.ndarray, edges: np.ndarray = None):
     return np.searchsorted(edges, income, side="left").astype(int), edges
 
 
+def income_representatives(income, edges) -> np.ndarray:
+    """분위별 대표 소득(집계 5개): 분위수 10·30·50·70·90%를 10만원 단위로 반올림. 그 값이 자기 분위로 다시 분류되지 않거나
+    원값이 없으면 분위 경계 사이 값을 쓴다. 기존 학습자를 새 학습자로 복사할 때 입력란을 채우는 데만 쓴다."""
+    e = np.asarray(edges, float)
+    mid = np.concatenate([[e[0]], (e[:-1] + e[1:]) / 2, [e[-1] + max((e[-1] - e[-2]) / 2, 1.0)]])
+    if income is None:
+        return mid
+    rep = np.quantile(np.asarray(income, float), [0.1, 0.3, 0.5, 0.7, 0.9])
+    rep = np.where(income_quintile(rep, e)[0] == np.arange(5), rep, mid)
+    r10 = np.round(rep / 10) * 10
+    return np.where(income_quintile(r10, e)[0] == np.arange(5), r10, rep)
+
+
 @dataclass
 class FeatureStore:
-    """기준 주 이전 로그로 만든 사용자 특징(행 = 학습자)."""
+    """기준 주 이전 로그로 만든 사용자 특징(행 = 학습자). 원시 연령·연소득은 저장하지 않는다: 구간 코드(codes)와
+    분위 경계·집계(income_edges·income_median·income_rep)만 남는다(etfrec.privacy)."""
     week: int
     n: int
     Rw: sp.csr_matrix                 # 반응 행렬(양수 점수 합)  [교안 2-2] preference = matrix > 0
@@ -64,12 +82,12 @@ class FeatureStore:
     risk: np.ndarray
     mobile: np.ndarray
     gender: np.ndarray
-    age: np.ndarray
-    income: np.ndarray
-    income_edges: np.ndarray
+    income_edges: np.ndarray          # 소득 5분위 경계 4개(임의 학습자 분위 계산용)
     goal: np.ndarray = None           # (n,) 투자 목적 키
     horizon: np.ndarray = None        # (n,) 투자 기간 키
     stats: dict = field(default_factory=dict)
+    income_median: float = None       # 소득 중앙값(집계) — 소득을 비운 임의 학습자의 대체값. 기준 집단에서만 채움
+    income_rep: np.ndarray = None     # (5,) 분위별 대표 소득(집계). 기준 집단에서만 채움
 
     @property
     def demo(self) -> dict:
@@ -117,10 +135,11 @@ def build_features(profiles: pd.DataFrame, log_before: pd.DataFrame, catalog: Ca
     und = np.zeros((n, N_ITEMS), bool)
     und[lg.user.values[lg.understood.values], lg.item.values[lg.understood.values]] = True
     top2 = np.argsort(-pref, 1)[:, :2]
-    age = profiles.age.values.astype(int); income = profiles.income.values.astype(float)
+    age = profiles.age.values.astype(int); income = profiles.income.values.astype(float)   # 원값은 구간 계산에만 쓰고 저장하지 않는다
     gender = profiles.gender.values.astype(int)
-    age_band = np.digitize(age, [30, 40, 50, 60])
+    age_band = np.digitize(age, AGE_CUTS)
     income_q, edges = income_quintile(income, income_edges)
+    ref = income_edges is None                                     # 기준 집단(분위 경계를 여기서 만든다)일 때만 집계를 남긴다
     codes = np.stack([np.digitize(views, click_cuts), g4.argmax(1), age_band, income_q, gender], 1)
     bucket = lambda x: np.where(np.isnan(x), 3, np.digitize(np.nan_to_num(x), [1 / 3, 2 / 3]))
     exp_, risk, mobile = profiles.exp.values.astype(int), profiles.risk.values.astype(int), profiles.mobile.values.astype(int)
@@ -130,7 +149,8 @@ def build_features(profiles: pd.DataFrame, log_before: pd.DataFrame, catalog: Ca
     goal = profiles["goal"].astype(str).values if "goal" in profiles.columns else np.full(n, "long_term")
     horizon = profiles["horizon"].astype(str).values if "horizon" in profiles.columns else np.full(n, "mid")
     TN = catalog.topics
-    users = pd.DataFrame({"학습자": np.arange(n), "성별": np.array(LABELS["gender"])[gender], "연령": age, "연소득(만원)": income,
+    users = pd.DataFrame({"학습자": np.arange(n), "성별": np.array(LABELS["gender"])[gender],
+                          "연령대": np.array(LABELS["age_band"])[age_band], "소득분위": np.array(LABELS["income_q"])[income_q],
                           "투자 목적": [GOALS.get(g, g) for g in goal], "투자 기간": [HORIZONS.get(h, h) for h in horizon],
                           "투자 경험": np.array(EXPS)[exp_], "위험성향": np.array(RISKS)[risk], "기기": np.where(mobile == 1, "모바일", "PC"),
                           "학습 시간대": np.array(HOURS + ["미상"])[hour],
@@ -141,9 +161,11 @@ def build_features(profiles: pd.DataFrame, log_before: pd.DataFrame, catalog: Ca
     ev = lg[lg.understood]
     return FeatureStore(week=week, n=n, Rw=Rw, Rw_conf=Rw_conf, nu=views.astype(float), codes=codes, pref=pref, top2=top2,
                         level=level, und=und, blocks=blocks, users=users, ev_user=ev.user.values, ev_item=ev.item.values,
-                        interests=interests, risk=risk, mobile=mobile, gender=gender, age=age, income=income,
+                        interests=interests, risk=risk, mobile=mobile, gender=gender,
                         income_edges=np.asarray(edges), goal=goal, horizon=horizon,
-                        stats=dict(views=views, quiz=quiz, quiz_pass=qp, complete=comp, saves=saves, drops=drops, hour=hour))
+                        stats=dict(views=views, quiz=quiz, quiz_pass=qp, complete=comp, saves=saves, drops=drops, hour=hour),
+                        income_median=float(np.median(income)) if ref else None,
+                        income_rep=income_representatives(income, edges) if ref else None)
 
 
 def feature_store(profiles: pd.DataFrame, log: pd.DataFrame, catalog: Catalog, week: int) -> FeatureStore:

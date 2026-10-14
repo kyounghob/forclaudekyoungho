@@ -2,6 +2,9 @@
 
 ``verified``는 2026-10 기준 검색으로 확인한 범위를 뜻한다: "domain" = 도메인·메뉴 이름만 확인, "page" = 해당 페이지 확인.
 세부 URL은 기관 개편으로 바뀔 수 있으므로 화면에서는 기관 루트 링크와 메뉴 이름을 함께 보여 준다.
+
+이용 범위: 이 프로젝트는 비상업 수업 프로젝트다. KRX Open API·정보데이터시스템 자료는 비상업 이용 조건이므로, 상업 서비스로 쓰려면
+공공데이터포털의 이용허락 범위를 확인한 공공데이터 경로나 KRX와의 별도 데이터 이용 계약이 필요하다. 화면용 비공식 엔드포인트는 호출하지 않는다.
 """
 from __future__ import annotations
 
@@ -35,29 +38,39 @@ SOURCES = {
         kind="지수 산출 방법론·구성 종목", access="웹(무료)", topics=["지수"], use="지수 단원의 산출 방식·정기변경 예시", license="사이트 고지 확인", verified="domain"),
     "krx_data": dict(
         name="KRX 정보데이터시스템 ETF 전종목 기본정보", publisher="한국거래소(KRX)", url="https://data.krx.co.kr", menu="기본 통계 › 증권상품 › ETF › 전종목 기본정보",
-        kind="데이터(화면에서 CSV·Excel 수동 내려받기)", access="웹(무료, 회원 로그인). 화면용 JSON 엔드포인트의 프로그램 호출(크롤링)은 이용약관·서버 부하 문제로 쓰지 않고, "
-             "이용자가 내려받은 파일을 `sources sync --krx-csv`로 정규화한다",
-        topics=["유동성", "비용"], use="ETF 유형 연결 단계의 메타데이터: 종목명·운용사·기초지수·총보수·과세유형·복제방법·기초시장·기초자산 분류",
-        license="개인 학습·연구 범위 이용, 출처 표기. 재배포·상업적 이용 금지", verified="domain"),
+        kind="데이터(화면에서 직접 내려받는 파일. CSV는 UTF-8·cp949 모두 읽고, Excel은 openpyxl(.xlsx)·xlrd(.xls)가 설치된 경우에만 읽음)",
+        access="웹(무료, 회원 로그인). 화면용 JSON 엔드포인트의 프로그램 호출(크롤링)은 이용약관·서버 부하 문제로 쓰지 않고, "
+               "이용자가 내려받은 파일을 `sources sync --krx-csv 파일 [--krx-csv-date YYYYMMDD]`로 정규화한다",
+        topics=["유동성", "비용"], use="ETF 유형 연결 단계의 메타데이터: 종목명·운용사·기초지수·총보수·과세유형·복제방법·기초시장·기초자산 분류 → 유형 분류·유형 통계",
+        license="개인 학습·연구 범위 이용, 출처 표기. 재배포·상업적 이용 금지(이 프로젝트는 비상업 수업용. 상업 서비스는 KRX와 별도 데이터 이용 계약 필요)",
+        verified="domain"),
     "krx_openapi": dict(
         name="KRX Open API(ETF 일별매매정보)", publisher="한국거래소(KRX)", url="https://openapi.krx.co.kr", menu="Open API › 인증키 발급 › 서비스별 이용 신청 › ETP",
         kind="REST API(인증키 헤더 AUTH_KEY, JSON)", access="회원 가입 후 인증키 발급과 서비스별 이용 신청(무료). 환경변수 KRX_OPEN_API_KEY",
-        topics=["ETF 구조", "유동성"], use="종가·NAV·거래량·기초지수 종가 → 괴리율·거래량 예시의 공식 자동 수집 경로",
-        license="비상업적 이용, 제3자 재배포 금지, 결과물에 '한국거래소' 출처 표기, 일 호출 한도 준수", verified="domain(검색: 인증키·이용 신청 절차 확인, 엔드포인트 경로는 활용 가이드 확인 필요)"),
+        topics=["ETF 구조", "유동성"],
+        use="공식 자동 수집 경로. sync가 받은 krx_etf_daily.csv의 종가·NAV·거래량을 단축코드로 결합해 유형 카드에 괴리율 절댓값 중앙값·거래량 중앙값을 "
+            "시세 기준일과 함께 표시(기초지수명·종가는 파일에 저장만 함)",
+        license="비상업적 이용, 제3자 재배포 금지, 결과물에 '한국거래소' 출처 표기. 인증키별 호출 한도는 KRX 이용 조건에서 확인(코드는 실행당 호출 상한과 "
+                "호출 간격만 지킴: 기본 30회·1초). 상업 서비스는 KRX와 별도 데이터 이용 계약 필요",
+        verified="domain(검색: 인증키·이용 신청 절차 확인, 엔드포인트 경로는 활용 가이드 확인 필요)"),
     "datagokr_etf": dict(
         name="공공데이터포털 금융위원회_증권상품시세정보(ETF)", publisher="금융위원회 / 공공데이터포털", url="https://www.data.go.kr/data/15094806/openapi.do",
         menu="오픈 API › 증권상품시세정보 › getETFPriceInfo", kind="REST API(JSON·XML)", access="API 키(serviceKey) 발급 후 무료",
-        topics=["유동성", "ETF 구조"], use="종가·NAV·거래량·시가총액·기초지수 종가 → 괴리율·거래량 예시와 유형 통계 보강",
-        license="공공데이터 이용허락(사이트 고지)", verified="page(검색 결과: 공통 요청변수·무료·JSON/XML 확인)"),
+        topics=["유동성", "ETF 구조"],
+        use="종가·NAV·거래량 → 유형 카드의 괴리율·거래량 중앙값(KRX 일별 시세보다 기준일이 최근일 때 이 파일을 씀). sync는 totalCount까지 "
+            "페이지를 넘겨 받고(최대 10쪽) 다 못 받으면 partial로 기록",
+        license="공공데이터 이용허락(포털 고지의 이용허락 범위 확인)", verified="page(검색 결과: 공통 요청변수·무료·JSON/XML 확인)"),
     "datagokr_listed": dict(
         name="공공데이터포털 금융위원회_KRX상장종목정보", publisher="금융위원회 / 공공데이터포털", url="https://www.data.go.kr/data/15094775/openapi.do",
-        menu="오픈 API › KRX상장종목정보", kind="REST API", access="API 키 발급 후 무료", topics=["ETF 구조"],
-        use="단축코드·ISIN·시장구분·종목명 조회(종목 식별자 정합성)", license="공공데이터 이용허락", verified="page(검색 결과)"),
+        menu="오픈 API › KRX상장종목정보 › getItemInfo", kind="REST API(JSON)", access="API 키 발급 후 무료(증권상품시세정보와 같은 serviceKey)", topics=["ETF 구조"],
+        use="sync 때 선택적으로 전종목 기본정보의 단축코드·ISIN을 교차 확인(키가 있을 때만, --no-cross-check로 끔). 결과는 provenance에 기록만 함. "
+            "엔드포인트 경로는 활용 가이드 기준이며 키 발급 후 확인, ETF 포함 여부 미확인",
+        license="공공데이터 이용허락(포털 고지의 이용허락 범위 확인)", verified="page(검색 결과: 엔드포인트·요청변수·제공 항목)"),
     "am_guidebooks": dict(
         name="자산운용사 ETF 가이드북·상품 설명 자료", publisher="삼성자산운용(KODEX)·미래에셋자산운용(TIGER)·KB자산운용(RISE, 구 KBSTAR) 등",
         url="https://www.riseetf.co.kr", menu="각 운용사 홈페이지 › 투자 가이드/자료실", kind="PDF 가이드북·상품 설명서·용어집",
         access="웹(무료 내려받기)", topics=["비용", "분배금", "환헤지", "해외 ETF", "커버드콜 ETF", "테마 ETF", "레버리지·인버스"],
-        use="시각 자료와 용어 정리가 잘 되어 있어 콘텐츠 텍스트 데이터베이스(TF-IDF 특징)로 확장", license="운용사 저작물. 인용·요약만, 원문 재배포 금지",
+        use="시각 자료와 용어 정리가 잘 되어 있어 콘텐츠 텍스트 특징으로 확장할 후보(현재 TF-IDF는 단원 제목만 씀)", license="운용사 저작물. 인용·요약만, 원문 재배포 금지",
         verified="domain(RISE 사이트 확인, 가이드북 PDF 경로는 미확인)"),
     "creators_research": dict(
         name="증권사 리서치·금융 크리에이터 아카이브", publisher="증권사 리서치센터, 유튜브 채널", url="", menu="",

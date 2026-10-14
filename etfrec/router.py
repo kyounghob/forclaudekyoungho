@@ -2,7 +2,9 @@
 
 세그먼트 g의 설정 a 점수 = n_g/(n_g+λ)·(g 안 평균 NDCG) + λ/(n_g+λ)·(상위 세그먼트의 수축 점수).
 세그먼트마다 수축 점수 1위를 챔피언으로 두고, 학습자는 자기 잎 세그먼트(없으면 가장 깊은 상위)의
-챔피언으로 간다. 표본이 MIN_ROUTER_USERS 미만인 세그먼트는 상위 추정값을 그대로 쓴다.
+챔피언으로 간다. 표본이 MIN_ROUTER_USERS 미만인 세그먼트는 상위 추정값을 그대로 쓴다. 이 규칙은 잎 크기를 보장하지
+않는다(20명 미만 잎이 생긴다. 실제 크기는 etfrec.privacy.router_leaf_audit가 번들 privacy에 기록). 경로 출력(path)은
+20명 미만 노드의 정확한 n과 그 노드만의 원시 평균을 내보내지 않는다.
 """
 from __future__ import annotations
 
@@ -11,6 +13,7 @@ import pandas as pd
 import scipy.sparse as sp
 
 from .config import MIN_ROUTER_USERS, SEED, SEG_VARS
+from .privacy import MIN_LEAF_DISPLAY
 from .signals import shrink_to_parent
 
 
@@ -65,8 +68,9 @@ class ShrinkRouter:
             champ[found], depth[found], node[found] = L["champ"][pos[found]], lv, pos[found]
         return champ, depth, node
 
-    def path(self, code_row):
-        """학습자 한 명이 거친 세그먼트 경로(수준별 표본 수·챔피언·추정 NDCG)."""
+    def path(self, code_row, min_display: int = MIN_LEAF_DISPLAY):
+        """학습자 한 명이 거친 세그먼트 경로(수준별 표본 수·챔피언·추정 NDCG). 표본이 min_display(20)명 미만인 노드는
+        n=None·n_label='20명 미만'으로 내보내고 그 노드만의 원시 평균(raw·raw_champ·raw_best)도 비운다."""
         out = []
         code_row = np.asarray(code_row)
         for lv in range(len(self.levels)):
@@ -75,9 +79,11 @@ class ShrinkRouter:
             pos = np.searchsorted(L["keys"], key)
             if np.any(code_row[self.cols[:lv]] < 0) or pos >= len(L["keys"]) or L["keys"][pos] != key:
                 break
-            out.append(dict(level=lv, var=None if lv == 0 else self.order[lv - 1], n=int(L["N"][pos]), champ=int(L["champ"][pos]),
-                            est=float(L["est"][pos]), raw=float(L["raw"][pos]), raw_champ=int(L["raw_champ"][pos]),
-                            raw_best=float(L["raw_best"][pos]), top=L["top"][pos].tolist(),
+            n = int(L["N"][pos]); small = n < min_display
+            out.append(dict(level=lv, var=None if lv == 0 else self.order[lv - 1], n=None if small else n,
+                            n_label=f"{min_display}명 미만" if small else f"{n}명", champ=int(L["champ"][pos]), est=float(L["est"][pos]),
+                            raw=None if small else float(L["raw"][pos]), raw_champ=None if small else int(L["raw_champ"][pos]),
+                            raw_best=None if small else float(L["raw_best"][pos]), top=L["top"][pos].tolist(),
                             top_est=np.round(L["top_est"][pos], 4).tolist()))
         return out
 

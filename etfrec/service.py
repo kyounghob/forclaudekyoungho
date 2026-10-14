@@ -20,8 +20,9 @@ from .sources.registry import SOURCES, source_info, sources_for_items
 from .taxonomy import ETF_TYPES, ROADMAP_TEMPLATES, TYPE_BY_KEY, goal_label, horizon_label, types_for_goal
 from .data import score_attempts
 from .evaluation import candidate_items, choose_items
-from .features import build_features
+from .features import AGE_BAND_REP, build_features, income_representatives
 from .pipeline import Bundle
+from .privacy import generalize_users_table, hydrate_design, scrub_design
 from .signals import CandidateBatch, LearnerBatch, SignalBank, build_signals
 from .synth import LOG_COLUMNS
 from .util import json_safe
@@ -64,7 +65,13 @@ class RecommendationService:
         self.serve_week = int(self.store.week)
         self.n_users = int(self.store.n)
         self._log_by_user = None
-        self.median_income = float(np.median(self.store.income))
+        # 소득 미입력 대체값·분위 대표값: 학습 때 저장한 집계(번들에는 원시 소득 배열이 없다). 이전 형식 번들만 원값에서 계산
+        old = getattr(self.store, "income", None)
+        med = getattr(self.store, "income_median", None)
+        self.median_income = float(med if med is not None else (np.median(old) if old is not None else np.median(self.store.income_edges)))
+        rep = getattr(self.store, "income_rep", None)
+        self.income_rep = np.asarray(rep if rep is not None else income_representatives(old, self.store.income_edges), float)
+        self.store.users = generalize_users_table(self.store.users, self.store.codes)   # 이전 형식 번들의 원값 열은 내보내지 않는다
         self.universe, self.universe_prov = load_etf_universe()
         self._type_stats = type_stats(self.universe)
 
@@ -75,6 +82,7 @@ class RecommendationService:
         return int(uid)
 
     def learners(self, query: str = "", limit: int = 20, offset: int = 0) -> dict:
+        """학습자 목록: 연령대·소득분위는 이름(표의 열)과 코드(age_band·income_q)만 낸다. 원시 연령·연소득은 번들에 없다."""
         df = self.store.users
         if query:
             q = str(query).strip()
@@ -82,23 +90,38 @@ class RecommendationService:
                 df = df[df["학습자"] == int(q)]
             else:
                 mask = np.zeros(len(df), bool)
-                for col in ("관심 주제", "선호 1위 주제", "투자 경험", "위험성향", "기기", "학습 시간대", "성별"):
-                    mask |= df[col].astype(str).str.contains(q, regex=False).values
+                for col in ("관심 주제", "선호 1위 주제", "투자 목적", "투자 기간", "투자 경험", "위험성향", "기기", "학습 시간대", "성별",
+                            "연령대", "소득분위"):
+                    if col in df.columns:
+                        mask |= df[col].astype(str).str.contains(q, regex=False).values
                 df = df[mask]
         total = int(len(df))
-        rows = df.iloc[offset:offset + limit]
-        return dict(total=total, items=json_safe(rows.to_dict("records")))
+        items = df.iloc[offset:offset + limit].to_dict("records")
+        for it in items:
+            c = self.store.codes[int(it["학습자"])]
+            it.update(age_band=int(c[SEG_VARS.index("age_band")]), income_q=int(c[SEG_VARS.index("income_q")]))
+        return dict(total=total, items=json_safe(items))
+
+    def _bands(self, uid: int) -> dict:
+        """연령대·소득분위 코드·이름과 구간 대표값(새 학습자로 복사할 때 입력란을 채우는 값, 원값 아님)."""
+        c = self.store.codes[uid]
+        a, q = int(c[SEG_VARS.index("age_band")]), int(c[SEG_VARS.index("income_q")])
+        return dict(age_band=dict(code=a, label=_seg_label("age_band", a), representative=int(AGE_BAND_REP[a])),
+                    income_q=dict(code=q, label=_seg_label("income_q", q), representative=float(self.income_rep[q])),
+                    note="대표값은 구간 안의 값이며 학습자의 원래 연령·소득이 아닙니다")
 
     def _history(self, uid: int) -> list:
+        """학습 이력: 주차·4개 시간대·주 안 순서만(번들 로그에 일·분이 없다)."""
         if self._log_by_user is None:
             self._log_by_user = {u: g for u, g in self.b.log.groupby("user")} if self.b.log is not None else {}
         g = self._log_by_user.get(uid)
         if g is None:
             return []
+        order = [c for c in ("week", "seq" if "seq" in g.columns else "minute") if c in g.columns]   # minute: 이전 형식 번들
         out = []
-        for r in g.sort_values(["week", "minute"]).itertuples():
+        for r in g.sort_values(order, kind="stable").itertuples():
             d = self.catalog.item_info(r.item)
-            d.update(week=int(r.week), day=int(r.day), hour=int(r.hour), minute=int(r.minute), complete=bool(r.complete),
+            d.update(week=int(r.week), seq=int(getattr(r, "seq", 0)), hour=int(r.hour), complete=bool(r.complete),
                      quiz=bool(r.quiz), quiz_pass=bool(r.quiz_pass), save=bool(r.save), drop=bool(r.drop), replay=bool(r.replay),
                      score=int(r.score))
             out.append(d)
@@ -109,7 +132,7 @@ class RecommendationService:
         F = self.store
         codes = F.codes[uid]
         return json_safe(dict(
-            user=uid, profile=F.users.iloc[uid].to_dict(), level=int(F.level[uid]), level_name=LEVEL_NAMES[int(F.level[uid])],
+            user=uid, profile=F.users.iloc[uid].to_dict(), bands=self._bands(uid), level=int(F.level[uid]), level_name=LEVEL_NAMES[int(F.level[uid])],
             goal=str(F.goal[uid]) if F.goal is not None else "long_term", horizon=str(F.horizon[uid]) if F.horizon is not None else "mid",
             interests=[self.catalog.topics[t] for t in F.interests[uid] if 0 <= t < self.catalog.n_topics],
             interest_ids=[int(t) for t in F.interests[uid]], placement=int(self.b.profiles.placement.iloc[uid]),
@@ -405,6 +428,15 @@ class RecommendationService:
                               templates={g: dict(types=t["types"]) for g, t in ROADMAP_TEMPLATES.items()}, type_names={t["key"]: t["name"] for t in ETF_TYPES},
                               dataset=self.b.dataset_summary, labels=LABELS, seg_vars=SEG_VARS, seg_ko=SEG_KO, notice=NOTICE,
                               test_ndcg=self.b.results.set_index("method").ndcg.to_dict()))
+
+    # ---------- 저장 설계 ----------
+    def scrub_design(self, payload: dict) -> dict:
+        """저장 전: 연령·연소득 원값 → 구간 코드, 자유 입력의 연령·소득 표현 → 구간 이름(etfrec.privacy.scrub_design)."""
+        return scrub_design(payload, self.store.income_edges)
+
+    def load_design(self, payload: dict) -> dict:
+        """불러올 때: 다시 한 번 원값을 지운 뒤(이전에 저장된 파일 대비) state.learner에 구간 대표값을 채운다."""
+        return hydrate_design(scrub_design(payload, self.store.income_edges), self.income_rep)
 
 
 def _seg_label(var, code) -> str:

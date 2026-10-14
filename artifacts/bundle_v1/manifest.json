@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "created_at": "2026-10-13T22:06:08",
+  "created_at": "2026-10-14T08:04:41",
   "config": {
     "n_learners": 15000,
     "seed": 42,
@@ -2527,25 +2527,89 @@
       "test": "selection_operational_is_locked",
       "passed": true,
       "details": null
+    },
+    {
+      "test": "bundle_profiles_no_raw_age_income",
+      "passed": true,
+      "details": "번들 프로필 열 ['age_band', 'exp', 'gender', 'goal', 'horizon', 'income_q', 'interest1', 'interest2', 'mobile', 'placement', 'risk', 'user']"
+    },
+    {
+      "test": "bundle_log_no_day_minute",
+      "passed": true,
+      "details": "번들 로그 열 ['complete', 'drop', 'hour', 'item', 'quiz', 'quiz_pass', 'replay', 'save', 'score', 'seq', 'understood', 'user', 'week']"
+    },
+    {
+      "test": "feature_store_no_raw_age_income",
+      "passed": true,
+      "details": "원값 필드 없음, 학습자 표 열에 원값 없음, 대체 소득은 집계 스칼라(4690.0)"
+    },
+    {
+      "test": "published_group_cells_ge_5",
+      "passed": true,
+      "details": "최소 셀 {'group_results': 360, 'group_results.active_users': 247, 'exposure': 360} (k=5)"
+    },
+    {
+      "test": "privacy_audit_columns_complete",
+      "passed": true,
+      "details": "감사 열 ['age_band', 'income_q', 'gender', 'exp', 'risk', 'goal', 'horizon', 'mobile'], 누락 [], 미분류 [], 라우터 ['RouterFull', 'RouterNoGender', 'RouterNoGenderIncome']"
     }
   ],
   "neural_enabled": true,
   "zoo_skipped": 0,
   "privacy": {
-    "routing": {
-      "columns": [
+    "recorded_in": "Bundle.privacy → manifest.json 'privacy', /api/evaluation 'privacy'. 검사(실패 시 학습 중단·번들 미저장)는 manifest 'qa'의 bundle_profiles_no_raw_age_income, bundle_log_no_day_minute, feature_store_no_raw_age_income, published_group_cells_ge_5, privacy_audit_columns_complete",
+    "k": 5,
+    "stored": {
+      "profile_columns": [
+        "user",
         "age_band",
         "income_q",
-        "gender"
+        "gender",
+        "exp",
+        "risk",
+        "mobile",
+        "interest1",
+        "interest2",
+        "placement",
+        "goal",
+        "horizon"
       ],
-      "k": 20,
-      "groups": 50,
-      "min_group": 38,
-      "median_group": 279.0,
-      "groups_below_k": 0,
-      "users_below_k": 0,
-      "share_below_k": 0.0,
-      "satisfied": true
+      "column_roles": {
+        "user": "가명 번호(0부터 연속)",
+        "age_band": "준식별자(감사·반출 대상)",
+        "income_q": "준식별자(감사·반출 대상)",
+        "gender": "준식별자(감사·반출 대상)",
+        "exp": "준식별자(감사·반출 대상)",
+        "risk": "준식별자(감사·반출 대상)",
+        "mobile": "준식별자(감사·반출 대상)",
+        "interest1": "학습 속성(관심 주제, 반출 안 함)",
+        "interest2": "학습 속성(관심 주제, 반출 안 함)",
+        "placement": "학습 속성(진단 수준, 반출 안 함)",
+        "goal": "준식별자(감사·반출 대상)",
+        "horizon": "준식별자(감사·반출 대상)"
+      },
+      "unclassified": [],
+      "raw_columns": [],
+      "quasi_in_profiles": [
+        "age_band",
+        "income_q",
+        "gender",
+        "exp",
+        "risk",
+        "goal",
+        "horizon",
+        "mobile"
+      ],
+      "quasi_in_store": [
+        "age_band",
+        "income_q",
+        "gender",
+        "exp",
+        "risk",
+        "goal",
+        "horizon",
+        "mobile"
+      ]
     },
     "quasi": {
       "columns": [
@@ -2554,15 +2618,29 @@
         "gender",
         "exp",
         "risk",
-        "goal"
+        "goal",
+        "horizon",
+        "mobile"
       ],
+      "requested": [
+        "age_band",
+        "income_q",
+        "gender",
+        "exp",
+        "risk",
+        "goal",
+        "horizon",
+        "mobile"
+      ],
+      "missing": [],
       "k": 5,
-      "groups": 568,
+      "rows": 15000,
+      "groups": 1065,
       "min_group": 1,
-      "median_group": 17.5,
-      "groups_below_k": 77,
-      "users_below_k": 200,
-      "share_below_k": 0.013333333333333334,
+      "median_group": 7.0,
+      "groups_below_k": 388,
+      "users_below_k": 939,
+      "share_below_k": 0.0626,
       "satisfied": false
     },
     "generalization": [
@@ -2573,10 +2651,12 @@
           "gender",
           "exp",
           "risk",
-          "goal"
+          "goal",
+          "horizon",
+          "mobile"
         ],
-        "min_group": 3,
-        "users_below_k": 7,
+        "min_group": 1,
+        "users_below_k": 47,
         "satisfied": false
       },
       {
@@ -2585,24 +2665,433 @@
           "gender",
           "exp",
           "risk",
-          "goal"
+          "goal",
+          "horizon",
+          "mobile"
         ],
-        "min_group": 24,
+        "min_group": 6,
         "users_below_k": 0,
         "satisfied": true
       }
     ],
-    "policy": [
-      "수집 최소화: 원시 연령·연소득은 온보딩 직후 연령대(5구간)·소득분위(5분위)로 일반화해 저장하고 원값은 보관하지 않는다",
-      "가명 처리: 학습자 식별자는 일방향 해시 가명 번호로 바꾸고 매핑표는 분리 보관·접근 통제(모델 학습 부서는 매핑표 접근 불가)",
-      "민감 속성 비사용: 성별은 운영 라우터·운영 설정에서 제외하고 성별 뒤집기 불변 검사로 확인",
-      "시간 정보 축약: 접속 시각은 4개 시간대(출근·점심·저녁·심야)로만 저장",
-      "k-익명성: 라우팅 세그먼트 조합은 잎 최소 20명(λ 수축), 준식별자 조합이 k=5 미만인 셀은 일반화(열 제거)하거나 집계에서 제외",
-      "보관·삭제: 학습 로그는 목적 달성 후 통계·연구용 가명정보로만 보관하고 보관 기간을 문서화, 탈퇴 시 삭제",
-      "접근 통제: 가명처리 담당과 모델 학습 담당의 권한·망 분리, 번들에는 원시 프로필이 아닌 세그먼트 코드와 집계만 저장",
-      "재식별 금지: 가명정보를 특정 개인을 알아보기 위한 목적으로 처리하지 않으며, 재식별 가능성 발견 시 즉시 처리 중단·보고"
-    ],
-    "note": "가명 번호만으로는 충분하지 않다. 준식별자 조합의 k-익명성을 학습 전에 점검하고, k 미만 셀은 일반화하거나 집계에서 제외한다."
+    "generalization_status": {
+      "satisfied": true,
+      "impossible": false,
+      "kept": [
+        "gender",
+        "exp",
+        "risk",
+        "goal",
+        "horizon",
+        "mobile"
+      ],
+      "missing": [],
+      "initial_satisfied": false,
+      "note": ""
+    },
+    "release": {
+      "rows_in": 15000,
+      "rows_out": 14999,
+      "steps": [
+        {
+          "step": 0,
+          "action": "원본",
+          "column": null,
+          "groups": 1065,
+          "min_group": 1,
+          "users_below_k": 939,
+          "satisfied": false
+        },
+        {
+          "step": 1,
+          "action": "일반화 gender",
+          "column": "gender",
+          "groups": 557,
+          "min_group": 1,
+          "users_below_k": 230,
+          "satisfied": false
+        },
+        {
+          "step": 2,
+          "action": "일반화 mobile",
+          "column": "mobile",
+          "groups": 290,
+          "min_group": 1,
+          "users_below_k": 44,
+          "satisfied": false
+        },
+        {
+          "step": 3,
+          "action": "일반화 exp",
+          "column": "exp",
+          "groups": 195,
+          "min_group": 1,
+          "users_below_k": 21,
+          "satisfied": false
+        },
+        {
+          "step": 4,
+          "action": "일반화 risk",
+          "column": "risk",
+          "groups": 143,
+          "min_group": 1,
+          "users_below_k": 5,
+          "satisfied": false
+        },
+        {
+          "step": 5,
+          "action": "일반화 horizon",
+          "column": "horizon",
+          "groups": 143,
+          "min_group": 1,
+          "users_below_k": 5,
+          "satisfied": false
+        },
+        {
+          "step": 6,
+          "action": "일반화 goal",
+          "column": "goal",
+          "groups": 143,
+          "min_group": 1,
+          "users_below_k": 5,
+          "satisfied": false
+        },
+        {
+          "step": 7,
+          "action": "일반화 income_q",
+          "column": "income_q",
+          "groups": 87,
+          "min_group": 1,
+          "users_below_k": 5,
+          "satisfied": false
+        },
+        {
+          "step": 8,
+          "action": "일반화 age_band",
+          "column": "age_band",
+          "groups": 56,
+          "min_group": 1,
+          "users_below_k": 1,
+          "satisfied": false
+        }
+      ],
+      "generalized": [
+        "gender",
+        "mobile",
+        "exp",
+        "risk",
+        "horizon",
+        "goal",
+        "income_q",
+        "age_band"
+      ],
+      "suppressed_rows": 1,
+      "suppressed_values": 6,
+      "removed_rows": 1,
+      "final_groups": 55,
+      "final_min_group": 9,
+      "satisfied": true
+    },
+    "router_leaves": {
+      "RouterFull": {
+        "variables": [
+          "click_tier",
+          "pref_cluster",
+          "age_band",
+          "income_q",
+          "gender"
+        ],
+        "threshold": 20,
+        "min_users_param": 20,
+        "lam": 3000.0,
+        "leaves": 540,
+        "leaves_below": 432,
+        "users_in_small_leaves": 3000,
+        "min_leaf": 1,
+        "users": 6597,
+        "decision_min_n": 20,
+        "distinct_leaf_champions": 4,
+        "leaf_champion_is_root_share": 0.6611111111111111,
+        "levels": [
+          {
+            "level": 0,
+            "variable": null,
+            "nodes": 1,
+            "nodes_below": 0,
+            "users_in_nodes_below": 0,
+            "min_n": 6597,
+            "users": 6597
+          },
+          {
+            "level": 1,
+            "variable": "click_tier",
+            "nodes": 3,
+            "nodes_below": 0,
+            "users_in_nodes_below": 0,
+            "min_n": 1258,
+            "users": 6597
+          },
+          {
+            "level": 2,
+            "variable": "pref_cluster",
+            "nodes": 12,
+            "nodes_below": 0,
+            "users_in_nodes_below": 0,
+            "min_n": 55,
+            "users": 6597
+          },
+          {
+            "level": 3,
+            "variable": "age_band",
+            "nodes": 60,
+            "nodes_below": 12,
+            "users_in_nodes_below": 124,
+            "min_n": 2,
+            "users": 6597
+          },
+          {
+            "level": 4,
+            "variable": "income_q",
+            "nodes": 288,
+            "nodes_below": 179,
+            "users_in_nodes_below": 1385,
+            "min_n": 1,
+            "users": 6597
+          },
+          {
+            "level": 5,
+            "variable": "gender",
+            "nodes": 540,
+            "nodes_below": 432,
+            "users_in_nodes_below": 3000,
+            "min_n": 1,
+            "users": 6597
+          }
+        ]
+      },
+      "RouterNoGender": {
+        "variables": [
+          "click_tier",
+          "pref_cluster",
+          "age_band",
+          "income_q"
+        ],
+        "threshold": 20,
+        "min_users_param": 20,
+        "lam": 3000.0,
+        "leaves": 288,
+        "leaves_below": 179,
+        "users_in_small_leaves": 1385,
+        "min_leaf": 1,
+        "users": 6597,
+        "decision_min_n": 20,
+        "distinct_leaf_champions": 2,
+        "leaf_champion_is_root_share": 0.6666666666666666,
+        "levels": [
+          {
+            "level": 0,
+            "variable": null,
+            "nodes": 1,
+            "nodes_below": 0,
+            "users_in_nodes_below": 0,
+            "min_n": 6597,
+            "users": 6597
+          },
+          {
+            "level": 1,
+            "variable": "click_tier",
+            "nodes": 3,
+            "nodes_below": 0,
+            "users_in_nodes_below": 0,
+            "min_n": 1258,
+            "users": 6597
+          },
+          {
+            "level": 2,
+            "variable": "pref_cluster",
+            "nodes": 12,
+            "nodes_below": 0,
+            "users_in_nodes_below": 0,
+            "min_n": 55,
+            "users": 6597
+          },
+          {
+            "level": 3,
+            "variable": "age_band",
+            "nodes": 60,
+            "nodes_below": 12,
+            "users_in_nodes_below": 124,
+            "min_n": 2,
+            "users": 6597
+          },
+          {
+            "level": 4,
+            "variable": "income_q",
+            "nodes": 288,
+            "nodes_below": 179,
+            "users_in_nodes_below": 1385,
+            "min_n": 1,
+            "users": 6597
+          }
+        ]
+      },
+      "RouterNoGenderIncome": {
+        "variables": [
+          "click_tier",
+          "pref_cluster",
+          "age_band"
+        ],
+        "threshold": 20,
+        "min_users_param": 20,
+        "lam": 500.0,
+        "leaves": 60,
+        "leaves_below": 12,
+        "users_in_small_leaves": 124,
+        "min_leaf": 2,
+        "users": 6597,
+        "decision_min_n": 21,
+        "distinct_leaf_champions": 18,
+        "leaf_champion_is_root_share": 0.11666666666666667,
+        "levels": [
+          {
+            "level": 0,
+            "variable": null,
+            "nodes": 1,
+            "nodes_below": 0,
+            "users_in_nodes_below": 0,
+            "min_n": 6597,
+            "users": 6597
+          },
+          {
+            "level": 1,
+            "variable": "click_tier",
+            "nodes": 3,
+            "nodes_below": 0,
+            "users_in_nodes_below": 0,
+            "min_n": 1258,
+            "users": 6597
+          },
+          {
+            "level": 2,
+            "variable": "pref_cluster",
+            "nodes": 12,
+            "nodes_below": 0,
+            "users_in_nodes_below": 0,
+            "min_n": 55,
+            "users": 6597
+          },
+          {
+            "level": 3,
+            "variable": "age_band",
+            "nodes": 60,
+            "nodes_below": 12,
+            "users_in_nodes_below": 124,
+            "min_n": 2,
+            "users": 6597
+          }
+        ]
+      }
+    },
+    "published": {
+      "group_results": {
+        "k": 5,
+        "rows": 70,
+        "rows_removed": 0,
+        "active_masked": 0,
+        "min_users": 360,
+        "min_active_users": 247
+      },
+      "advanced_exposure": {
+        "k": 5,
+        "rows": 24,
+        "rows_removed": 0,
+        "active_masked": 0,
+        "min_users": 360,
+        "min_active_users": null
+      }
+    },
+    "policy": {
+      "implemented": [
+        {
+          "item": "원시 연령·연소득 비저장: 학습 중 메모리에서 소득 5분위 경계 계산에만 쓰고, 번들 프로필·특징 저장소·learner_profiles.csv에는 연령대·소득분위 구간만 남긴다(모델은 원래 구간 코드만 쓰므로 학습 결과는 같다)",
+          "enforced_by": [
+            "privacy.generalize_profiles",
+            "features.FeatureStore(age·income 필드 없음)",
+            "QA bundle_profiles_no_raw_age_income",
+            "QA feature_store_no_raw_age_income"
+          ]
+        },
+        {
+          "item": "학습 이력 시각 축약: 번들 로그는 주차·4개 시간대·주 안 순서(seq)만 남기고 일(day)·분(minute)은 버린다",
+          "enforced_by": [
+            "privacy.minimize_log",
+            "QA bundle_log_no_day_minute"
+          ]
+        },
+        {
+          "item": "API 최소화: /api/learners·학습자 상세는 연령대·소득분위 코드와 이름만 반환하고, 소득 미입력 대체값은 학습 때 저장한 중앙값(집계)을 쓴다",
+          "enforced_by": [
+            "service.RecommendationService.learners/learner",
+            "FeatureStore.income_median",
+            "tests/test_privacy.py"
+          ]
+        },
+        {
+          "item": "저장 설계 최소화: /api/designs는 쓰기 전에 연령·연소득 원값을 구간 코드로 바꾸고 자유 입력 문장의 연령·소득 표현을 구간 이름으로 가린다",
+          "enforced_by": [
+            "privacy.scrub_design",
+            "api.save_design"
+          ]
+        },
+        {
+          "item": "작은 셀 비공개: 추천 경로 출력에서 20명 미만 라우터 노드는 n=null·'20명 미만'으로만 표시하고 그 노드의 원시 평균을 숨긴다. 집단별 표(group_results·advanced_exposure)는 5명 미만 집단을 빼고 활성 5명 미만이면 활성 기준 값을 비운다",
+          "enforced_by": [
+            "router.ShrinkRouter.path",
+            "privacy.suppress_small_groups",
+            "QA published_group_cells_ge_5"
+          ]
+        },
+        {
+          "item": "감사 기록: 저장 준식별자 8개 조합의 k=5 결과·열 제거 일반화 계획·export-deid 일반화 요약·실제 라우터 잎 크기를 기록하고, 감사가 저장 열을 빠짐없이 다루는지 확인한다",
+          "enforced_by": [
+            "privacy.privacy_audit",
+            "QA privacy_audit_columns_complete"
+          ]
+        },
+        {
+          "item": "가명처리 도구(운영 원본용, 모의 데이터 학습에는 쓰지 않음): 외부 회원 ID → HMAC-SHA256 가명(16자) → 가명 순서 연속 번호. 키는 환경변수 ETFREC_PSEUDO_KEY에서만 읽고 없거나 16자 미만이면 거부, 매핑표는 --mapping-out에만 쓰며 출력 폴더 안이면 거부, 학습 스키마 밖 열은 버린다",
+          "enforced_by": [
+            "privacy.build_pseudonymized_inputs",
+            "cli pseudonymize"
+          ]
+        },
+        {
+          "item": "반출 k-익명화: export-deid는 저장 프로필의 준식별자 8개 열만 일반화 계층 → 국소 억제로 k 이상(기본 5)으로 만든 뒤에만 파일을 쓴다(가명 번호·관심 주제·진단 수준은 내보내지 않는다). 모델 학습 입력은 일반화하지 않는다",
+          "enforced_by": [
+            "privacy.enforce_k_anonymity",
+            "privacy.export_deid",
+            "cli export-deid"
+          ]
+        },
+        {
+          "item": "성별의 운영 비사용: 운영 라우터(RouterNoGender)는 성별을 쓰지 않는 설정만 후보로 두고 성별을 세그먼트에서 뺀다(성별은 저장·진단에는 남는다)",
+          "enforced_by": [
+            "pipeline.train router_settings(allowed_ng)",
+            "tests/test_pipeline_service.py::test_gender_flip_invariance_operational"
+          ]
+        }
+      ],
+      "organizational": [
+        "권한·망 분리: 학습 환경과 운영·가명처리 환경의 권한과 네트워크를 분리한다",
+        "역할 분리: 가명처리 담당(키 ETFREC_PSEUDO_KEY·매핑표 보관)과 모델 학습 담당을 나누고, 학습 담당은 키·매핑표에 접근하지 않는다",
+        "반출 심사: export-deid 결과를 포함해 학습 환경 밖으로 나가는 자료는 반출 전에 적정성 심사를 거친다",
+        "접근 기록 감사: 학습 입력·번들·매핑표 접근 기록을 남기고 주기적으로 점검한다",
+        "외부 결합·공유: 다른 기관 자료와 결합하거나 공유할 때는 개인정보 이노베이션 존(또는 결합전문기관)에 준하는 통제 환경에서만 한다",
+        "보관·삭제: 학습 입력·번들·저장 설계의 보관 기간을 정해 문서화하고, 기간이 지나거나 탈퇴하면 삭제한다",
+        "재식별 금지: 가명정보를 특정 개인을 알아보는 목적으로 처리하지 않고, 재식별 가능성을 발견하면 처리를 멈추고 보고한다"
+      ]
+    },
+    "note": "가명 번호만으로는 충분하지 않다. 저장 준식별자 조합은 k=5를 만족하지 않을 수 있으므로(quasi) 학습자 단위 표는 export-deid로 일반화·억제한 것만 반출한다. 라우터 잎 크기는 보장되지 않는다(router_leaves)."
   },
   "environment": {
     "python": "3.13.16",

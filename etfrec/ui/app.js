@@ -144,7 +144,7 @@
     const r = await api(`/api/learners?q=${encodeURIComponent(q)}&limit=12`);
     if (seq !== searchSeq) return;   // 더 늦게 보낸 검색 결과가 이미 그려졌으면 이전 응답은 버린다
     $("#learner-results").innerHTML = (r.items.length ? "" : `<div class="muted small">검색 결과가 없습니다</div>`) + r.items.map(u =>
-      `<div class="learner-card ${u["학습자"] === state.learnerId ? "selected" : ""}" data-uid="${u["학습자"]}"><span>#${u["학습자"]} · ${esc(u["성별"])} ${u["연령"]}세 · ${esc(u["투자 목적"] || "")} · ${esc(u["투자 경험"])}/${esc(u["위험성향"])}/${esc(u["기기"])} · 관심 ${esc(u["관심 주제"])} · 조회 ${u["조회 수"]} · 수준 ${u["추정 수준"]}</span><button class="btn small">선택</button></div>`).join("");
+      `<div class="learner-card ${u["학습자"] === state.learnerId ? "selected" : ""}" data-uid="${u["학습자"]}"><span>#${u["학습자"]} · ${esc(u["성별"])} ${esc(u["연령대"] ?? "")} · ${esc(u["소득분위"] ?? "")} · ${esc(u["투자 목적"] || "")} · ${esc(u["투자 경험"])}/${esc(u["위험성향"])}/${esc(u["기기"])} · 관심 ${esc(u["관심 주제"])} · 조회 ${u["조회 수"]} · 수준 ${u["추정 수준"]}</span><button class="btn small">선택</button></div>`).join("");
     $("#learner-results").insertAdjacentHTML("afterbegin", `<div class="muted small">${r.total}명 중 ${r.items.length}명 표시</div>`);
     $$("#learner-results .learner-card button").forEach(b => b.onclick = () => selectLearner(+b.parentElement.dataset.uid));
   }
@@ -173,12 +173,16 @@
     if (ex) {
       const p = state.learnerInfo.profile; const seg = state.learnerInfo.segment;
       $("#existing-profile").innerHTML = `<h3>학습자 #${state.learnerId} 프로필 (스냅샷 ${state.learnerInfo.snapshot_week}주차 기준)</h3><div class="kv">` +
-        ["투자 목적", "투자 기간", "위험성향", "성별", "연령", "연소득(만원)", "투자 경험", "기기", "학습 시간대", "관심 주제", "조회 수", "퀴즈 통과율", "완료율", "이탈률", "추정 수준", "선호 1위 주제", "통과 단원 수"].map(k => `<div><span class="muted">${k}</span><b>${esc(p[k] ?? "–")}</b></div>`).join("") +
+        ["투자 목적", "투자 기간", "위험성향", "성별", "연령대", "소득분위", "투자 경험", "기기", "학습 시간대", "관심 주제", "조회 수", "퀴즈 통과율", "완료율", "이탈률", "추정 수준", "선호 1위 주제", "통과 단원 수"].map(k => `<div><span class="muted">${k}</span><b>${esc(p[k] ?? "–")}</b></div>`).join("") +
         `</div><p class="small muted">세그먼트: ${Object.values(seg).map(s => esc(s.label)).join(" · ")}</p><button class="btn small" id="copy-as-new">이 프로필을 새 학습자로 복사</button>`;
       $("#copy-as-new").onclick = () => {
         const ev = state.learnerInfo.history.map(h => ({ item: h.item, week: h.week, complete: h.complete, quiz: h.quiz, quiz_pass: h.quiz_pass, save: h.save, drop: h.drop, replay: h.replay }));
-        Object.assign(L, { label: `#${state.learnerId} 복사본`, age: p["연령"], gender: p["성별"] === "여성" ? 1 : 0, income: p["연소득(만원)"], exp: ["없음", "1~3년", "3년 이상"].indexOf(p["투자 경험"]), risk: RISK_NAME.indexOf(p["위험성향"]), mobile: p["기기"] === "모바일" ? 1 : 0, interests: state.learnerInfo.interest_ids.filter(x => x >= 0), placement: state.learnerInfo.placement, goal: state.learnerInfo.goal || "long_term", horizon: state.learnerInfo.horizon || "mid", diagnosis: null, events: ev });
-        state.source = "new"; state.touched.placement = true; state.touched.goal = true; invalidate(); $$("input[name=source]").forEach(r => r.checked = r.value === "new"); renderBasic(); toast("새 학습자로 복사했습니다. 수정 후 추천을 계산하세요");
+        const B = state.learnerInfo.bands || {}; const BA = B.age_band || {}, BI = B.income_q || {};   // 번들에는 원값이 없다: 구간 대표값으로 채운다
+        Object.assign(L, { label: `#${state.learnerId} 복사본`, age: BA.representative ?? null, gender: p["성별"] === "여성" ? 1 : 0, income: BI.representative ?? null, exp: ["없음", "1~3년", "3년 이상"].indexOf(p["투자 경험"]), risk: RISK_NAME.indexOf(p["위험성향"]), mobile: p["기기"] === "모바일" ? 1 : 0, interests: state.learnerInfo.interest_ids.filter(x => x >= 0), placement: state.learnerInfo.placement, goal: state.learnerInfo.goal || "long_term", horizon: state.learnerInfo.horizon || "mid", diagnosis: null, events: ev });
+        state.source = "new"; state.touched.placement = true; state.touched.goal = true; invalidate(); $$("input[name=source]").forEach(r => r.checked = r.value === "new"); renderBasic();
+        const bandNote = `연령 ${BA.representative ?? "–"}세·연소득 ${BI.representative != null ? Number(BI.representative).toLocaleString("ko-KR") + "만원" : "–"}은 학습자 #${state.learnerId}의 원값이 아니라 구간 대표값입니다(${esc(BA.label || "연령대 미상")} · ${esc(BI.label || "소득분위 미상")}). 번들은 원시 연령·연소득을 보관하지 않습니다.`;
+        $("#band-rep-note")?.remove(); $("#basic-form").insertAdjacentHTML("afterbegin", `<p class="note small" id="band-rep-note">${bandNote}</p>`);
+        toast("새 학습자로 복사했습니다. 연령·소득은 구간 대표값입니다. 수정 후 추천을 계산하세요", 5000);
       };
       return;
     }
@@ -366,7 +370,7 @@
         (it.sources && it.sources.length ? `<div class="small muted" style="margin-top:4px">자료: ${sourceLinks(it.sources)}</div>` : "") + `</div></li>`;
     }).join("") : `<li class="muted">${esc(r.reason || "추천할 단원이 없습니다")}</li>`;
     $("#rec-checks").innerHTML = r.checks.map(c => `<li class="${c.passed ? "" : "fail"}">${esc(c.name)}<span class="muted small">${esc(c.detail)}</span></li>`).join("");
-    $("#rec-route").innerHTML = r.route_path.length ? r.route_path.map((p, i) => `<div class="node ${i === r.route_path.length - 1 ? "leaf" : ""}"><span class="muted">${esc(p.var_label)}${p.var ? " = " + esc(r.segment[p.var].label) : ""}</span><span>n=${p.n} · #${p.champ} ${esc(p.champion_family)} · 추정 NDCG ${fmt(p.est, 4)}</span></div>`).join("") : `<div class="muted small">설정을 강제로 골라 라우터를 쓰지 않았습니다.</div>`;
+    $("#rec-route").innerHTML = r.route_path.length ? r.route_path.map((p, i) => `<div class="node ${i === r.route_path.length - 1 ? "leaf" : ""}"><span class="muted">${esc(p.var_label)}${p.var ? " = " + esc(r.segment[p.var].label) : ""}</span><span>${p.n != null ? "n=" + p.n : esc(p.n_label || "20명 미만")} · #${p.champ} ${esc(p.champion_family)} · 추정 NDCG ${fmt(p.est, 4)}</span></div>`).join("") : `<div class="muted small">설정을 강제로 골라 라우터를 쓰지 않았습니다.</div>`;
     $("#rec-formula").textContent = r.formula;
   }
   function renderMap(map, sel) {
@@ -438,10 +442,11 @@
   }
   function renderTypes() {
     const T = state.typesResult; if (!T) return;
-    const uni = T.universe || {}; const sample = uni.kind !== "snapshot";
+    const uni = T.universe || {}; const sample = uni.kind !== "snapshot"; const px = uni.prices || null;   // px: 결합된 시세 스냅샷(없으면 null)
     $("#types-status").textContent = `목적 ${T.goal_label} · 위험성향 ${RISK_NAME[T.risk]} · 유형 ${T.cards.length}개 (권장 ${T.cards.filter(c => c.recommended_for_goal).length}개)`;
     $("#types-view").hidden = false;
-    $("#types-badges").innerHTML = `<span class="badge ${sample ? "warn" : "ok"}">${sample ? "유형 통계: 샘플 데이터(가상 종목)" : "유형 통계: KRX 스냅샷 " + esc(uni.synced_at || "")}</span><span class="badge">종목 ${T.universe_rows}개</span><span class="badge">열린 유형 ${T.cards.filter(c => c.unlocked).length}/${T.cards.length}</span>` +
+    $("#types-badges").innerHTML = `<span class="badge ${sample || uni.stale ? "warn" : "ok"}">${sample ? "유형 통계: 샘플 데이터(가상 종목)" : "유형 통계: KRX 스냅샷 " + esc(uni.as_of || (uni.synced_at || "").slice(0, 10)) + (uni.stale ? ` · ${uni.age_days}일 지남` : "")}</span>` +
+      (px ? `<span class="badge ${px.stale ? "warn" : ""}">시세 ${esc(px.as_of)} · ${esc(px.source_name)} · ${px.matched}종목 결합</span>` : "") + `<span class="badge">종목 ${T.universe_rows}개</span><span class="badge">열린 유형 ${T.cards.filter(c => c.unlocked).length}/${T.cards.length}</span>` +
       (state.types.includeAssume && state.sim.assume.length ? `<span class="badge">통과 가정 ${state.sim.assume.length}개 반영</span>` : "");
     $("#types-grid").innerHTML = T.cards.map(c => {
       const st = c.stats || {};
@@ -451,7 +456,7 @@
         <p>${esc(c.description)}</p>
         <div class="concepts">${c.concepts.map(k => `<span class="chip ${k.passed ? "passed" : ""}" title="${esc(k.topic)} · 수준 ${k.level}">${k.passed ? "✓ " : ""}${esc(k.title)}</span>`).join("")}</div>
         <dl class="kvl"><dt>세금</dt><dd>${esc(c.tax)}</dd><dt>연금계좌</dt><dd>${esc(c.pension)}</dd>${c.regulation ? `<dt>규제·사전교육</dt><dd class="warn-text">${esc(c.regulation)}</dd>` : ""}<dt>주의</dt><dd>${c.cautions.map(x => esc(x)).join(" / ")}</dd></dl>
-        <div class="stats"><span class="muted">${sample ? "샘플" : "KRX"} 통계</span> 종목 ${st.count ?? 0}개 · 환헤지(H) ${st.hedged ?? 0}개 · 총보수 중앙값 ${st.fee_median != null ? st.fee_median + "%" : "–"}${st.fee_min != null ? ` (${st.fee_min}~${st.fee_max}%)` : ""}${st.examples && st.examples.length ? ` · 예: ${esc(st.examples.join(", "))}` : ""}</div>
+        <div class="stats"><span class="muted">${sample ? "샘플" : "KRX"} 통계</span> 종목 ${st.count ?? 0}개 · 환헤지(H) ${st.hedged ?? 0}개 · 총보수 중앙값 ${st.fee_median != null ? st.fee_median + "%" : "–"}${st.fee_min != null ? ` (${st.fee_min}~${st.fee_max}%)` : ""}${px && (st.premium_abs_median != null || st.volume_median != null) ? ` · <span class="muted">시세 ${esc(px.as_of)}</span>${st.premium_abs_median != null ? ` 괴리율 절댓값 중앙값 ${(st.premium_abs_median * 100).toFixed(2)}% (${st.priced}/${st.count}종목)` : ""}${st.volume_median != null ? ` · 거래량 중앙값 ${Number(st.volume_median).toLocaleString("ko-KR")}주` : ""}` : ""}${st.examples && st.examples.length ? ` · 예: ${esc(st.examples.join(", "))}` : ""}</div>
         <div class="small muted">자료: ${sourceLinks(c.sources)}</div>
       </article>`;
     }).join("");
@@ -461,7 +466,7 @@
     if (!SOURCES) return;
     $("#sources-table").innerHTML = `<tr><th>출처</th><th>종류 · 접근</th><th>쓰임</th><th>이용 조건</th><th>확인</th></tr>` + SOURCES.sources.map(s =>
       `<tr><td><b>${esc(s.name)}</b><br><span class="muted small">${esc(s.publisher)}${s.menu ? " · " + esc(s.menu) : ""}</span>${s.url ? `<br><a class="small" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.url)}</a>` : ""}</td><td class="small">${esc(s.kind)}<br><span class="muted">${esc(s.access)}</span></td><td class="small">${esc(s.use)}</td><td class="small muted">${esc(s.license)}</td><td class="small">${esc(s.verified)}</td></tr>`).join("");
-    $("#sources-stats").innerHTML = `<p class="muted small">${esc(SOURCES.universe.label)} · 종목 ${SOURCES.universe_rows}개. 실제 목록으로 바꾸려면 <code>python -m etfrec sources sync</code>(KRX 정보데이터시스템 전종목 기본정보)를, 시세·NAV까지 받으려면 <code>--datagokr-key</code>(공공데이터포털 serviceKey)를 함께 실행하세요.</p>` +
+    $("#sources-stats").innerHTML = `<p class="muted small">${esc(SOURCES.universe.label)} · 종목 ${SOURCES.universe_rows}개. 실제 목록으로 바꾸려면 KRX 정보데이터시스템에서 전종목 기본정보 파일을 내려받아 <code>python -m etfrec sources sync --krx-csv 파일</code>을, 괴리율·거래량 통계까지 보려면 <code>--krx-key</code>(KRX Open API) 또는 <code>--datagokr-key</code>(공공데이터포털 serviceKey)를 함께 실행하세요. 비상업 수업 프로젝트 범위의 이용입니다.</p>` +
       `<div class="table-wrap"><table class="table"><tr><th>유형</th><th>종목 수</th><th>환헤지</th><th>선물형</th><th>총보수 중앙값(%)</th><th>운용사 수</th><th>예시</th></tr>` +
       SOURCES.type_stats.map(t => `<tr><td>${esc(t.name)}</td><td class="num">${t.count}</td><td class="num">${t.hedged}</td><td class="num">${t.futures}</td><td class="num">${t.fee_median ?? "–"}</td><td class="num">${t.issuers}</td><td class="small">${esc(t.examples.join(", "))}</td></tr>`).join("") + `</table></div>`;
   }
@@ -489,7 +494,9 @@
     const opName = META.operational_router; const hasPre = res.some(r => r.prereq_violation_rate != null);
     let html = `<div class="kv"><div><span class="muted">학습자</span><b>${ds.users.toLocaleString()}</b></div><div><span class="muted">학습 시도</span><b>${ds.study_attempts.toLocaleString()}</b></div><div><span class="muted">단원</span><b>${ds.items}</b></div><div><span class="muted">설정 수</span><b>${EVAL.configurations.toLocaleString()}</b></div><div><span class="muted">신호 수</span><b>${EVAL.signal_count}</b></div><div><span class="muted">테스트 사용자</span><b>${EVAL.test_audit.rows.toLocaleString()}</b></div><div><span class="muted">정답 없는 사용자</span><b>${EVAL.test_audit.zero_observed_target.toLocaleString()}</b></div><div><span class="muted">QA 검사</span><b>${EVAL.qa.filter(q => q.passed).length}/${EVAL.qa.length}</b></div><div><span class="muted">MF·MLP 학습</span><b>${EVAL.neural_enabled ? "포함" : "제외"}</b></div></div>`;
     if (ds.goals) html += `<p class="muted small">투자 목적 분포: ${Object.entries(ds.goals).map(([g, n]) => `${esc(META.goals[g] || g)} ${Number(n).toLocaleString()}`).join(" · ")}</p>`;
-    if (EVAL.privacy && EVAL.privacy.routing) html += `<p class="muted small">개인정보 점검: 라우팅 세그먼트(연령대×소득분위×성별) ${EVAL.privacy.routing.groups}개 셀, 최소 ${EVAL.privacy.routing.min_group}명(k=${EVAL.privacy.routing.k} ${EVAL.privacy.routing.satisfied ? "충족" : "미충족 → 일반화 필요"}) · 준식별자 6개 조합 ${EVAL.privacy.quasi.groups}개 셀, k=${EVAL.privacy.quasi.k} 미만 ${EVAL.privacy.quasi.groups_below_k}개 셀(${EVAL.privacy.quasi.users_below_k}명)</p>`;
+    if (EVAL.privacy && EVAL.privacy.quasi) { const P = EVAL.privacy, q = P.quasi, lf = (P.router_leaves || {})[EVAL.selection.operational], rl = P.release || {};   // 측정한 것만 표시(충족 여부를 꾸미지 않는다)
+      html += `<p class="muted small">개인정보 점검: 저장 준식별자 ${q.columns.length}개 조합(k=${q.k}) ${q.groups.toLocaleString()}개 셀 중 k 미만 ${q.groups_below_k.toLocaleString()}개(${q.users_below_k.toLocaleString()}명)${q.satisfied ? "" : " → 학습자 단위 표는 export-deid로 일반화·억제한 것만 반출"}${rl.satisfied ? `(k=${q.k} 표 ${rl.rows_out.toLocaleString()}/${rl.rows_in.toLocaleString()}행)` : ""}` +
+        (lf ? ` · 운영 라우터 잎 ${lf.leaves}개 중 ${lf.threshold}명 미만 ${lf.leaves_below}개(${lf.users_in_small_leaves.toLocaleString()}명), 최소 ${lf.min_leaf}명 — 잎 크기는 보장되지 않으며 ${lf.min_users_param}명 미만 노드는 상위 노드 추정으로 챔피언을 정함${lf.distinct_leaf_champions != null ? ` · 잎 챔피언 ${lf.distinct_leaf_champions}종${lf.lam >= 1e8 ? "(λ=∞: 모든 잎이 전역 챔피언)" : ""}` : ""}` : "") + `</p>`; }
     html += `<h4>방법별 NDCG@5 (사용자 평균, 테스트 ${EVAL.test_audit.week}주차)</h4>` + res.map(r => `<div class="evbar ${r.method === opName ? "op" : ""}"><span title="${esc(r.method)}">${esc(r.method)}</span><div class="ebar"><i style="width:${(100 * r.ndcg / maxN).toFixed(1)}%"></i></div><span class="num">${fmt(r.ndcg, 4)}</span></div>`).join("");
     const hasAct = res.some(r => r.ndcg_active != null);
     html += `<div class="table-wrap"><table class="table"><tr><th>방법</th><th>NDCG@5 (전체)</th>${hasAct ? "<th>NDCG@5 (활성 사용자)</th>" : ""}<th>Diversity@5</th><th>Hit@5</th>${hasAct ? "<th>Hit@5 (활성)</th>" : ""}${hasPre ? "<th>선수 미이수 비율</th>" : ""}<th>전역 1위 대비 차이 [95% 구간]</th></tr>` + res.map(r => `<tr><td>${esc(r.method)}</td><td class="num">${fmt(r.ndcg)}</td>${hasAct ? `<td class="num">${fmt(r.ndcg_active)}</td>` : ""}<td class="num">${fmt(r.diversity, 3)}</td><td class="num">${fmt(r.hit_diagnostic, 3)}</td>${hasAct ? `<td class="num">${fmt(r.hit_active, 3)}</td>` : ""}${hasPre ? `<td class="num">${r.prereq_violation_rate != null ? fmt(r.prereq_violation_rate, 3) : "–"}</td>` : ""}<td class="num">${fmt(r.difference_vs_global)} [${fmt(r.ci_low)}, ${fmt(r.ci_high)}]</td></tr>`).join("") + `</table></div>`;
@@ -517,7 +524,7 @@
   async function listDesigns() {
     const ds = await api("/api/designs");
     $("#design-list").innerHTML = ds.length ? ds.map(d => `<li><span><b>${esc(d.name)}</b><br><span class="muted small">${esc(d.saved_at)} · ${esc(d.summary)}</span></span><span><button class="btn small" data-load="${esc(d.name)}">불러오기</button> <button class="btn small ghost" data-rm="${esc(d.name)}">삭제</button></span></li>`).join("") : `<li class="muted">저장된 설계가 없습니다.</li>`;
-    $$("[data-load]").forEach(b => b.onclick = async () => { const d = await api(`/api/designs/${encodeURIComponent(b.dataset.load)}`); applyDesign(d.payload); toast(`'${d.name}'을 불러왔습니다`); });
+    $$("[data-load]").forEach(b => b.onclick = async () => { const d = await api(`/api/designs/${encodeURIComponent(b.dataset.load)}`); applyDesign(d.payload); const br = ((d.payload || {}).state || {}).learner?.band_representative; toast(`'${d.name}'을 불러왔습니다` + (br && br.length ? " · 연령·소득은 저장 때 구간 코드로만 남아 구간 대표값으로 채웠습니다(원값 아님)" : ""), br && br.length ? 5000 : undefined); });
     $$("[data-rm]").forEach(b => b.onclick = async () => { await api(`/api/designs/${encodeURIComponent(b.dataset.rm)}`, null, "DELETE"); listDesigns(); });
   }
   function applyDesign(p) {

@@ -2,148 +2,148 @@
  {
   "prereq_penalty": 0.8,
   "users": 1284,
-  "validation_best": 0.14536075295664372,
+  "validation_best": 0.14491938430621962,
   "operational": "규칙[관심 주제+수준 일치+소득 구간 주제+모바일·짧은 콘텐츠+투자 목적 일치+로드맵 단계 우선순위](base=연령대+소득분위)",
-  "seconds": 30.8,
-  "quiz_pass": 4756,
+  "seconds": 27.7,
+  "quiz_pass": 4786,
   "attempts": 21634,
   "Global": {
-   "ndcg": 0.12730044205217103,
-   "prereq_violation_rate": 0.5475077881619937,
+   "ndcg": 0.12633303917518804,
+   "prereq_violation_rate": 0.5390965732087227,
    "short_list_rate": 0.0,
-   "diversity": 0.9116822429906541,
+   "diversity": 0.913317757009346,
    "ci_low": 0.0,
    "ci_high": 0.0
   },
   "RouterNoGender": {
-   "ndcg": 0.12730044205217103,
-   "prereq_violation_rate": 0.5475077881619937,
+   "ndcg": 0.12561611227704392,
+   "prereq_violation_rate": 0.538785046728972,
    "short_list_rate": 0.0,
-   "diversity": 0.9116822429906541,
-   "ci_low": 0.0,
-   "ci_high": 0.0
+   "diversity": 0.9118380062305297,
+   "ci_low": -0.001791871158963873,
+   "ci_high": 0.0001916787688708352
   },
   "RouterNoGender+prereq": {
-   "ndcg": 0.10067778182226894,
+   "ndcg": 0.10145711644606392,
    "prereq_violation_rate": 0.0,
-   "short_list_rate": 0.5264797507788161,
+   "short_list_rate": 0.5241433021806854,
    "diversity": 0.9977933541017652,
-   "ci_low": -0.03765652069319428,
-   "ci_high": -0.015698058982231877
+   "ci_low": -0.03510884954553512,
+   "ci_high": -0.014327656269608661
   },
   "POP": {
-   "ndcg": 0.10135918307002677,
+   "ndcg": 0.10155200088636837,
    "prereq_violation_rate": 0.37258566978193147,
    "short_list_rate": 0.0,
    "diversity": 1.0,
-   "ci_low": -0.03669037999385368,
-   "ci_high": -0.016997720776049836
+   "ci_low": -0.03664704487191106,
+   "ci_high": -0.015177100600526823
   },
   "UCF": {
-   "ndcg": 0.10325037249432138,
-   "prereq_violation_rate": 0.7627725856697819,
+   "ndcg": 0.10388918654593746,
+   "prereq_violation_rate": 0.7601246105919003,
    "short_list_rate": 0.0,
-   "diversity": 0.9603582554517135,
-   "ci_low": -0.03596227121597698,
-   "ci_high": -0.013188841553165187
+   "diversity": 0.9609034267912774,
+   "ci_low": -0.034016058786911406,
+   "ci_high": -0.011027408182841918
   }
  },
  {
   "prereq_penalty": 2.0,
   "users": 1284,
-  "validation_best": 0.14031019893224447,
+  "validation_best": 0.14097959219493988,
   "operational": "아이템 CF(λ=10, confidence) ⊕ 규칙[관심 주제+투자 목적 일치+로드맵 단계 우선순위] (α_u, λ=30)",
-  "seconds": 28.1,
-  "quiz_pass": 2280,
+  "seconds": 26.3,
+  "quiz_pass": 2312,
   "attempts": 21634,
   "Global": {
-   "ndcg": 0.13005246549547916,
-   "prereq_violation_rate": 0.3309968847352025,
+   "ndcg": 0.12943281256277886,
+   "prereq_violation_rate": 0.3110591900311526,
    "short_list_rate": 0.0,
-   "diversity": 0.9521028037383178,
+   "diversity": 0.9552959501557633,
    "ci_low": 0.0,
    "ci_high": 0.0
   },
   "RouterNoGender": {
-   "ndcg": 0.13005246549547916,
-   "prereq_violation_rate": 0.3309968847352025,
+   "ndcg": 0.12943281256277886,
+   "prereq_violation_rate": 0.3110591900311526,
    "short_list_rate": 0.0,
-   "diversity": 0.9521028037383178,
+   "diversity": 0.9552959501557633,
    "ci_low": 0.0,
    "ci_high": 0.0
   },
   "RouterNoGender+prereq": {
-   "ndcg": 0.12817726371388796,
+   "ndcg": 0.12650603946008798,
    "prereq_violation_rate": 0.0,
-   "short_list_rate": 0.6993769470404985,
+   "short_list_rate": 0.6978193146417445,
    "diversity": 0.999766355140187,
-   "ci_low": -0.005923942851351209,
-   "ci_high": 0.0024563281485621125
+   "ci_low": -0.007321328831022725,
+   "ci_high": 0.0021839744555472262
   },
   "POP": {
-   "ndcg": 0.12871167862880836,
-   "prereq_violation_rate": 0.23146417445482867,
+   "ndcg": 0.12658803496133228,
+   "prereq_violation_rate": 0.23426791277258566,
    "short_list_rate": 0.0,
    "diversity": 1.0,
-   "ci_low": -0.008771383254556352,
-   "ci_high": 0.004471494887488291
+   "ci_low": -0.010309372542268613,
+   "ci_high": 0.0032472586153800688
   },
   "UCF": {
-   "ndcg": 0.08040067586097216,
-   "prereq_violation_rate": 0.7004672897196261,
+   "ndcg": 0.07871546082172068,
+   "prereq_violation_rate": 0.7006230529595016,
    "short_list_rate": 0.0,
-   "diversity": 0.962772585669782,
-   "ci_low": -0.059285296027125615,
-   "ci_high": -0.03817968941425895
+   "diversity": 0.9625389408099689,
+   "ci_low": -0.05998818271113935,
+   "ci_high": -0.03959900364310572
   }
  },
  {
   "prereq_penalty": 4.0,
   "users": 1284,
-  "validation_best": 0.15644012817106498,
-  "operational": "규칙[관심 주제](base=전체)",
-  "seconds": 26.6,
-  "quiz_pass": 1479,
+  "validation_best": 0.15781659610235205,
+  "operational": "규칙[관심 주제+로드맵 단계 우선순위](base=전체)",
+  "seconds": 25.4,
+  "quiz_pass": 1480,
   "attempts": 21634,
   "Global": {
-   "ndcg": 0.14830963215207044,
-   "prereq_violation_rate": 0.2425233644859813,
+   "ndcg": 0.14742303879330979,
+   "prereq_violation_rate": 0.24657320872274144,
    "short_list_rate": 0.0,
-   "diversity": 0.9809190031152648,
+   "diversity": 0.9735202492211839,
    "ci_low": 0.0,
    "ci_high": 0.0
   },
   "RouterNoGender": {
-   "ndcg": 0.14830963215207044,
-   "prereq_violation_rate": 0.2425233644859813,
+   "ndcg": 0.14742303879330979,
+   "prereq_violation_rate": 0.24657320872274144,
    "short_list_rate": 0.0,
-   "diversity": 0.9809190031152648,
+   "diversity": 0.9735202492211839,
    "ci_low": 0.0,
    "ci_high": 0.0
   },
   "RouterNoGender+prereq": {
-   "ndcg": 0.1509457334849471,
+   "ndcg": 0.15025696716733272,
    "prereq_violation_rate": 0.0,
-   "short_list_rate": 0.7570093457943925,
+   "short_list_rate": 0.7562305295950156,
    "diversity": 1.0,
-   "ci_low": -0.0020555265784768166,
-   "ci_high": 0.00704553842463242
+   "ci_low": -0.0010393711474352692,
+   "ci_high": 0.00705377255749788
   },
   "POP": {
-   "ndcg": 0.14767292134216134,
+   "ndcg": 0.14732514972435398,
    "prereq_violation_rate": 0.22741433021806853,
    "short_list_rate": 0.0,
    "diversity": 1.0,
-   "ci_low": -0.00538376351112987,
-   "ci_high": 0.004323869731723284
+   "ci_low": -0.005158242265863859,
+   "ci_high": 0.005516342144741762
   },
   "UCF": {
    "ndcg": 0.08872242076313837,
-   "prereq_violation_rate": 0.6529595015576324,
+   "prereq_violation_rate": 0.6532710280373831,
    "short_list_rate": 0.0,
    "diversity": 0.9616043613707166,
-   "ci_low": -0.07096996774077984,
-   "ci_high": -0.04785718068136997
+   "ci_low": -0.06996026822117012,
+   "ci_high": -0.047432790964101856
   }
  }
 ]

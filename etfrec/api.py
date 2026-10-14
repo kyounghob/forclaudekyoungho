@@ -268,25 +268,33 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None) -> FastAPI:
             if fn.endswith(".json"):
                 with open(os.path.join(designs_dir, fn), encoding="utf-8") as f:
                     d = json.load(f)
-                out.append(dict(name=d.get("name", fn[:-5]), saved_at=d.get("saved_at"), summary=d.get("summary", "")))
+                out.append(dict(name=d.get("name", fn[:-5]), saved_at=d.get("saved_at"),
+                                summary=svc.scrub_design({"summary": str(d.get("summary", ""))})["summary"]))
         return out
 
     @app.post("/api/designs")
     def save_design(d: Design):
+        """쓰기 전에 연령·연소득 원값을 구간 코드로 바꾼다(etfrec.privacy.scrub_design). 파일에는 원값이 남지 않는다."""
         name = _safe_name(d.name)
-        payload = dict(name=name, saved_at=time.strftime("%Y-%m-%d %H:%M:%S"), payload=d.payload,
-                       summary=str(d.payload.get("summary", ""))[:120])
+        clean = svc.scrub_design(d.payload)
+        payload = dict(name=name, saved_at=time.strftime("%Y-%m-%d %H:%M:%S"), payload=clean,
+                       summary=str(clean.get("summary", ""))[:120], privacy="연령·연소득은 구간 코드로만 저장")
         with open(os.path.join(designs_dir, name + ".json"), "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
         return {"saved": name, "saved_at": payload["saved_at"]}
 
     @app.get("/api/designs/{name}")
     def get_design(name: str):
+        """불러오기: 원값을 다시 지우고(이전 파일 대비) state.learner의 연령·소득 입력란은 구간 대표값으로 채운다(원값 복원 아님)."""
         p = os.path.join(designs_dir, _safe_name(name) + ".json")
         if not os.path.exists(p):
             raise HTTPException(404, "저장된 설계가 없습니다")
         with open(p, encoding="utf-8") as f:
-            return json.load(f)
+            d = json.load(f)
+        if isinstance(d.get("payload"), dict):
+            d["payload"] = svc.load_design(d["payload"])
+        d["summary"] = svc.scrub_design({"summary": str(d.get("summary", ""))})["summary"]
+        return d
 
     @app.delete("/api/designs/{name}")
     def delete_design(name: str):

@@ -27,7 +27,7 @@ from .features import FeatureStore, feature_store
 from .router import ShrinkRouter, tune_router
 from .signals import CandidateBatch, LearnerBatch, ModelStore, Reference, SignalBank, build_signals, supervised_from_log
 from .util import get_logger, json_safe
-from .privacy import privacy_audit
+from .privacy import K_RELEASE, generalize_profiles, minimize_log, privacy_audit, privacy_checks, suppress_small_groups
 from .zoo import Algo, algo_uses, build_zoo, score_algo
 
 BUNDLE_FILE = "bundle.pkl"
@@ -58,12 +58,12 @@ class Bundle:
     validation_audit: dict
     test_audit: dict
     dataset_meta: dict = None
-    profiles: pd.DataFrame = None       # 서빙에서 기존 학습자 조회용
-    log: pd.DataFrame = None            # 서빙에서 학습 이력 표시용(서빙 스냅샷 이전 주만)
+    profiles: pd.DataFrame = None       # 서빙에서 기존 학습자 조회용: 일반화 표(연령대·소득분위 코드, 원시 연령·연소득 없음)
+    log: pd.DataFrame = None            # 학습 이력 표시용(서빙 스냅샷 이전 주만): 주차·4개 시간대·주 안 순서(seq), 일·분 없음
     zoo_skipped: list = field(default_factory=list)
     test_users: np.ndarray = None       # predictions의 행 순서(오프라인·온라인 일치 검사용)
-    exposure: pd.DataFrame = None
-    privacy: dict = None                # k-익명성·최소화 점검(etfrec.privacy)
+    exposure: pd.DataFrame = None       # 심화 콘텐츠 노출(5명 미만 집단 제외)
+    privacy: dict = None                # 개인정보 감사(etfrec.privacy.privacy_audit): 준식별자 k=5·라우터 잎 크기·정책 구분
 
     @property
     def family_counts(self):
@@ -90,6 +90,7 @@ class Bundle:
         self.results.to_csv(os.path.join(out_dir, "test_results.csv"), index=False, encoding="utf-8-sig")
         self.group_results.to_csv(os.path.join(out_dir, "group_results.csv"), index=False, encoding="utf-8-sig")
         self.validation_jobs.to_csv(os.path.join(out_dir, "validation_configurations.csv"), index=False, encoding="utf-8-sig")
+        # 내부 서빙용 학습자 요약(연령대·소득분위 이름, 원시 연령·연소득 없음). k-익명 반출 표가 아니다 → 반출은 export-deid
         self.store.users.to_csv(os.path.join(out_dir, "learner_profiles.csv"), index=False, encoding="utf-8-sig")
 
     @classmethod
@@ -257,15 +258,21 @@ def train(dataset: Dataset, cfg: TrainConfig = None, out_dir: str = None, enable
                 m = c == val
                 exposure_rows.append(dict(method=method, variable=variable, group=int(val), users=int(m.sum()),
                                           advanced_share=float(adv[m].sum() / max(ok[m].sum(), 1))))
-    qa = run_qa(cands_test, catalog, results, predictions, F_test, models, selection, dataset, allowed_ngi, uses, lb_test)
-    privacy = privacy_audit(F_test.codes, SEG_VARS, profiles)
+    # 개인정보(etfrec.privacy): 모델 입력은 그대로 두고 저장물만 줄인다. 원시 연령·연소득·일·분은 번들에 넣지 않고,
+    # 공개 집단표는 5명 미만 셀을 처리한 뒤 넣는다. 감사 → QA(개인정보 검사 포함) 순서로 저장 전에 확인한다.
+    group_results, cells_g = suppress_small_groups(group_results, K_RELEASE)
+    exposure, cells_e = suppress_small_groups(pd.DataFrame(exposure_rows), K_RELEASE)
     bundle = Bundle(version=__version__, created_at=time.strftime("%Y-%m-%dT%H:%M:%S"), config=cfg, catalog=catalog, store=F_test,
                     reference=ref_test, models=models, algos=algos, signal_meta=signal_meta, selection=selection, routers=routers,
                     router_tuning=router_tunes, results=results, group_results=group_results, validation_jobs=jobs,
-                    predictions=predictions, per_user=per_user, qa=qa, dataset_summary=dataset.summary(),
-                    validation_audit=cands_val.audit, test_audit=cands_test.audit, dataset_meta=dataset.meta, profiles=profiles,
-                    log=LOG[LOG.week < cfg.test_week].reset_index(drop=True), zoo_skipped=skipped,
-                    test_users=cands_test.user.copy(), exposure=pd.DataFrame(exposure_rows), privacy=privacy)
+                    predictions=predictions, per_user=per_user, qa=[], dataset_summary=dataset.summary(),
+                    validation_audit=cands_val.audit, test_audit=cands_test.audit, dataset_meta=dataset.meta,
+                    profiles=generalize_profiles(profiles, F_test.codes), log=minimize_log(LOG[LOG.week < cfg.test_week]),
+                    zoo_skipped=skipped, test_users=cands_test.user.copy(), exposure=exposure, privacy=None)
+    bundle.privacy = privacy_audit(bundle.profiles, bundle.routers, store=bundle.store,
+                                   published=dict(group_results=cells_g, advanced_exposure=cells_e))
+    qa = bundle.qa = run_qa(cands_test, catalog, results, predictions, F_test, models, selection, dataset, allowed_ngi, uses, lb_test,
+                            bundle=bundle)
     logger(f"QA {len(qa)}건 통과, 총 {time.time() - t0:.1f}초")
     if out_dir:
         bundle.save(out_dir)
@@ -293,8 +300,9 @@ def score_and_select_rows(algo: Algo, bank: SignalBank, lb: LearnerBatch, catalo
     return choose_items(bank.cands, lb, catalog, S, rows, K, guard)
 
 
-def run_qa(cands_test, catalog, results, predictions, F_test, models, selection, dataset, allowed_ngi, uses, lb_test) -> list:
-    """강의 지표 함수와 벡터화 구현의 일치, 빈칸·짧은 목록, 가드레일, 중복, 학습 감사 항목을 검사한다."""
+def run_qa(cands_test, catalog, results, predictions, F_test, models, selection, dataset, allowed_ngi, uses, lb_test, bundle=None) -> list:
+    """강의 지표 함수와 벡터화 구현의 일치, 빈칸·짧은 목록, 가드레일, 중복, 학습 감사 항목을 검사한다.
+    bundle을 주면(조립 직후·저장 전) 개인정보 검사 5개(etfrec.privacy.privacy_checks)도 같은 규칙으로 실행한다."""
     QA = []
 
     def check(name, condition, details=None):
@@ -357,4 +365,7 @@ def run_qa(cands_test, catalog, results, predictions, F_test, models, selection,
         passed_rec = F_test.und[cands_test.user[:, None], np.maximum(it, 0)] & valid
         check(f"no_passed_unit_recommended_{name}", not passed_rec.any())
     check("selection_operational_is_locked", selection["operational_algorithm"] is not None)
+    if bundle is not None:      # 개인정보: 원값·일분 비저장, 공개 셀 ≥ 5, 감사 열 누락 없음(실패하면 학습 중단, 번들 미저장)
+        for name, ok, details in privacy_checks(bundle):
+            check(name, ok, details)
     return QA

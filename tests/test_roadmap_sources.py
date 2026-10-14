@@ -121,7 +121,9 @@ def test_krx_classification_and_sample_universe():
     assert all(SOURCES[k]["name"] for k in SOURCES) and "kcie_etf_school" in SOURCES
 
 
-def test_sync_uses_manual_csv_and_official_apis_only(tmp_path):
+def test_sync_uses_manual_csv_and_official_apis_only(tmp_path, monkeypatch):
+    monkeypatch.delenv("KRX_OPEN_API_KEY", raising=False)        # 키가 설정된 기계에서도 실제 API를 부르지 않게
+    monkeypatch.delenv("DATA_GO_KR_KEY", raising=False)
     prov = sync_all(str(tmp_path), krx_csv=SAMPLE_ETF)            # 키 없음: 공식 API는 건너뛰고 수동 CSV만 정규화
     assert prov["policy"] == "official-apis-and-manual-download-only" and prov["items"]["krx_etf_list"]["status"] == "ok"
     assert prov["items"]["krx_etf_daily"]["status"] == "skipped" and prov["items"]["datagokr_etf_prices"]["status"] == "skipped"
@@ -133,9 +135,10 @@ def test_sync_uses_manual_csv_and_official_apis_only(tmp_path):
 def test_k_anonymity_and_generalization():
     df = pd.DataFrame(dict(age_band=[0, 0, 0, 1, 1, 1, 2], income_q=[0, 0, 0, 1, 1, 1, 4], gender=[0, 0, 0, 1, 1, 1, 0]))
     r = k_anonymity(df, ["age_band", "income_q", "gender"], k=3)
-    assert r["groups"] == 3 and r["min_group"] == 1 and r["users_below_k"] == 1 and not r["satisfied"]
+    assert r["groups"] == 3 and r["min_group"] == 1 and r["users_below_k"] == 1 and not r["satisfied"] and r["missing"] == []
     plan = generalization_plan(df, ["age_band", "income_q", "gender"], k=3)
-    assert plan and plan[-1]["satisfied"]
+    assert plan["satisfied"] and not plan["impossible"] and plan["kept"] == ["gender"] and plan["steps"][-1]["satisfied"]
+    assert [s["drop"] for s in plan["steps"]] == ["age_band", "income_q"]
 
 
 def test_bpr_models_train_and_rank():
