@@ -15,7 +15,7 @@ from .catalog import LABELS, LEVEL_NAMES, Catalog
 from .config import GOALS, HORIZONS, K, NOTICE, SEG_KO, SEG_VARS, GuardrailConfig
 from .quiz import public_questions, score_quiz
 from .roadmap import build_roadmap
-from .sources import load_etf_universe, type_stats
+from .sources import load_etf_universe, public_info, type_stats
 from .sources.registry import SOURCES, source_info, sources_for_items
 from .taxonomy import ETF_TYPES, ROADMAP_TEMPLATES, TYPE_BY_KEY, goal_label, horizon_label, learn_only_types, types_for_goal
 from .data import score_attempts
@@ -51,7 +51,8 @@ class LearnerInput:
 
 
 class RecommendationService:
-    def __init__(self, bundle: Bundle):
+    def __init__(self, bundle: Bundle, sources_dir: str = None):
+        """sources_dir: 공개 데이터 스냅샷 폴더(기본: 환경변수 ETFREC_SOURCES_DIR, 없으면 data/sources — CLI sync와 같은 규칙)."""
         self.b = bundle
         self.catalog: Catalog = bundle.catalog
         self.store = bundle.store
@@ -72,7 +73,8 @@ class RecommendationService:
         rep = getattr(self.store, "income_rep", None)
         self.income_rep = np.asarray(rep if rep is not None else income_representatives(old, self.store.income_edges), float)
         self.store.users = generalize_users_table(self.store.users, self.store.codes)   # 이전 형식 번들의 원값 열은 내보내지 않는다
-        self.universe, self.universe_prov = load_etf_universe()
+        self.universe, self.universe_prov = load_etf_universe(sources_dir)      # 서버 시작 때 한 번 읽는다(다시 동기화하면 재시작)
+        self.universe_public = public_info(self.universe_prov)                   # 화면·API용(로컬 경로·오류 원문 제외)
         self._type_stats = type_stats(self.universe)
 
     # ---------- 조회 ----------
@@ -393,7 +395,7 @@ class RecommendationService:
                               cautions=t["cautions"], concepts=concepts, concepts_passed=n_pass, concepts_total=len(concepts),
                               unlocked=(passed is not None and n_pass == len(concepts)), stats=stats.get(key),
                               sources=[source_info(k) for k in (["kifin_leverage", "krx_data", "krx_etf_info"] if key == "leverage_inverse" else ["krx_data", "krx_etf_info", "am_guidebooks"])]))
-        return json_safe(dict(goal=goal, goal_label=goal_label(goal), risk=risk, cards=cards, universe=self.universe_prov,
+        return json_safe(dict(goal=goal, goal_label=goal_label(goal), risk=risk, cards=cards, universe=self.universe_public,
                               universe_rows=int(len(self.universe)), notice=NOTICE + " 유형 안내는 학습 순서를 돕기 위한 분류이며 개별 상품의 적합성 판단이 아닙니다."))
 
     def quiz_questions(self) -> list:
@@ -403,7 +405,7 @@ class RecommendationService:
         return json_safe(score_quiz(answers, self.catalog))
 
     def sources(self) -> dict:
-        return json_safe(dict(sources=[source_info(k) for k in SOURCES], universe=self.universe_prov, universe_rows=int(len(self.universe)),
+        return json_safe(dict(sources=[source_info(k) for k in SOURCES], universe=self.universe_public, universe_rows=int(len(self.universe)),
                               type_stats=self._type_stats))
 
     def evaluation(self) -> dict:
@@ -426,7 +428,7 @@ class RecommendationService:
                               family_label=FAMILY_KO.get(op.family, op.family), name=op.name, formula=explain(op, self.info)),
                               methods=self.method_names(), neural_enabled=self.models.enable_neural, guardrail=self.b.config.guardrail.__dict__,
                               configurations=len(self.algos), signal_count=len(self.b.signal_meta), quiz_questions=len(public_questions()),
-                              goals=GOALS, horizons=HORIZONS, catalog_version=int(self.catalog.version), universe=self.universe_prov,
+                              goals=GOALS, horizons=HORIZONS, catalog_version=int(self.catalog.version), universe=self.universe_public,
                               templates={g: dict(types=t["types"]) for g, t in ROADMAP_TEMPLATES.items()}, type_names={t["key"]: t["name"] for t in ETF_TYPES},
                               dataset=self.b.dataset_summary, labels=LABELS, seg_vars=SEG_VARS, seg_ko=SEG_KO, notice=NOTICE,
                               test_ndcg=self.b.results.set_index("method").ndcg.to_dict()))

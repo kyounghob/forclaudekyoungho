@@ -58,7 +58,7 @@ SOURCES = {
         menu="오픈 API › 증권상품시세정보 › getETFPriceInfo", kind="REST API(JSON·XML)", access="API 키(serviceKey) 발급 후 무료",
         topics=["유동성", "ETF 구조"],
         use="종가·NAV·거래량 → 유형 카드의 괴리율·거래량 중앙값(KRX 일별 시세보다 기준일이 최근일 때 이 파일을 씀). sync는 totalCount까지 "
-            "페이지를 넘겨 받고(최대 10쪽) 다 못 받으면 partial로 기록",
+            "페이지를 넘겨 받고(최대 10쪽) 페이지 상한·빈 쪽으로 일부만 받으면 partial, 호출 오류는 fail(받은 쪽은 버리고 기존 파일 유지)로 기록",
         license="공공데이터 이용허락(포털 고지의 이용허락 범위 확인)", verified="page(검색 결과: 공통 요청변수·무료·JSON/XML 확인)"),
     "datagokr_listed": dict(
         name="공공데이터포털 금융위원회_KRX상장종목정보", publisher="금융위원회 / 공공데이터포털", url="https://www.data.go.kr/data/15094775/openapi.do",

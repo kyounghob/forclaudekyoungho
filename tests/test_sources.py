@@ -179,7 +179,7 @@ def test_datagokr_pages_until_total_count(tmp_path, monkeypatch):
     seen = fake_urlopen(monkeypatch, _datagokr(2500))
     c = DataGoKrClient("KEY%2BABC", min_interval=0)                         # 포털의 인코딩 키도 한 번만 인코딩
     df = c.etf_prices(bas_dt="20261013")
-    assert len(df) == 2500 and c.last_meta == dict(total_count=2500, pages=3, truncated=False) and c.calls == 3
+    assert len(df) == 2500 and c.last_meta == dict(total_count=2500, pages=3, truncated=False, stop="complete") and c.calls == 3
     assert [qs(r.full_url)["pageNo"] for r in seen] == ["1", "2", "3"]
     assert {k: qs(seen[0].full_url)[k] for k in ("serviceKey", "resultType", "basDt", "numOfRows")} == \
         dict(serviceKey="KEY+ABC", resultType="json", basDt="20261013", numOfRows="1000")
@@ -190,7 +190,7 @@ def test_datagokr_pages_until_total_count(tmp_path, monkeypatch):
     assert it["status"] == "partial" and it["truncated"] and it["total_count"] == 2500 and it["rows"] == 2000 and it["pages"] == 2 and it["calls"] == 2
     fake_urlopen(monkeypatch, _datagokr(1))
     one = DataGoKrClient("KEY", min_interval=0)
-    assert len(one.etf_prices()) == 1 and one.last_meta == dict(total_count=1, pages=1, truncated=False)
+    assert len(one.etf_prices()) == 1 and one.last_meta == dict(total_count=1, pages=1, truncated=False, stop="complete")
 
 
 def test_listed_info_cross_check(tmp_path, monkeypatch):
@@ -281,3 +281,190 @@ def test_check_sources_sends_one_head_per_root_with_honest_user_agent(monkeypatc
     assert len(seen) == len(roots) == len({u for u, _, _ in seen}) < sum(1 for r in out if r["url"])
     assert all(m == "HEAD" and ua == net.USER_AGENT and urllib.parse.urlsplit(u).path == "/" for u, m, ua in seen)
     assert net.USER_AGENT == "etfrec/1.0 (non-commercial education project)" and all(r["status"] in ("ok 200", "n/a") for r in out)
+
+
+# ---------- 최종 검토(데이터 수집) 반영: 원자적 교체·기록 일치·형식 검사·키 가림·페이지 넘김·CLI ----------
+def _krx_file(tmp_path, name="krx4.csv"):
+    p = tmp_path / name
+    p.write_text("\n".join([KRX_HEADER] + KRX_ROWS) + "\n", encoding="utf-8")
+    return str(p)
+
+
+def _rows(path):
+    return len(pd.read_csv(path, encoding="utf-8-sig"))
+
+
+def test_failed_write_keeps_old_snapshot_and_record(tmp_path, monkeypatch):
+    sync_all(str(tmp_path), krx_csv=SAMPLE_ETF, krx_csv_date="20261013")
+    snap = tmp_path / "krx_etf_list.csv"
+    before = snap.read_bytes()
+    real = pd.DataFrame.to_csv
+
+    def broken(self, path=None, *a, **k):                    # 디스크 가득 참처럼 쓰는 도중에 실패
+        if path is not None and str(path).endswith(".tmp"):
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("code,name\n")
+            raise OSError(27, "File too large")
+        return real(self, path, *a, **k)
+    monkeypatch.setattr(pd.DataFrame, "to_csv", broken)
+    it = sync_all(str(tmp_path), krx_csv=_krx_file(tmp_path), krx_csv_date="20261016")["items"]["krx_etf_list"]
+    monkeypatch.setattr(pd.DataFrame, "to_csv", real)
+    assert it["status"] == "fail" and it["file_kept"] and it["rows"] == 45 and it["data_as_of"] == "2026-10-13"
+    assert snap.read_bytes() == before and not [f for f in os.listdir(tmp_path) if f.endswith(".tmp")]
+    df, info = load_etf_universe(str(tmp_path), today=date(2026, 10, 14))
+    assert len(df) == 45 and not info["record_mismatch"] and "기준일 2026-10-13" in info["label"]
+
+
+def test_unreadable_snapshot_falls_back_to_sample(tmp_path):
+    (tmp_path / "krx_etf_list.csv").write_bytes(b"")
+    df, info = load_etf_universe(str(tmp_path))
+    assert info["kind"] == "sample" and "빈 파일" in info["fallback_reason"] and "샘플" in info["label"] and len(df) == 45
+
+
+def test_interrupted_sync_keeps_file_and_record_together(tmp_path, monkeypatch):
+    sync_all(str(tmp_path), krx_csv=SAMPLE_ETF, krx_csv_date="20260801")
+
+    def stop(self, *a, **k):
+        raise KeyboardInterrupt
+    monkeypatch.setattr(DataGoKrClient, "etf_prices", stop)
+    with pytest.raises(KeyboardInterrupt):
+        sync_all(str(tmp_path), krx_csv=_krx_file(tmp_path), krx_csv_date="20261016", datagokr_key="KEY", min_interval=0)
+    prov = json.loads((tmp_path / "provenance.json").read_text(encoding="utf-8"))
+    assert prov["complete"] is False and prov["items"]["krx_etf_list"]["rows"] == 4 and prov["items"]["krx_etf_list"]["data_as_of"] == "2026-10-16"
+    info = load_etf_universe(str(tmp_path), today=date(2026, 10, 17))[1]
+    assert info["as_of"] == "2026-10-16" and not info["stale"] and not info["record_mismatch"]
+    # 기록 없이 파일만 바뀌면(기록 직전 중단·손으로 덮어씀) 기록의 기준일을 믿지 않는다
+    pd.read_csv(SAMPLE_ETF, encoding="utf-8-sig").to_csv(tmp_path / "krx_etf_list.csv", index=False, encoding="utf-8-sig")
+    info = load_etf_universe(str(tmp_path), today=date(2026, 10, 17))[1]
+    assert info["record_mismatch"] and "기록(provenance.json)과 파일 내용이 달라" in info["label"] and "저장일" in info["label"]
+
+
+def test_schema_check_rejects_other_files_and_renamed_fields(tmp_path, monkeypatch):
+    sync_all(str(tmp_path), krx_csv=SAMPLE_ETF, krx_csv_date="20261013")
+    stock = tmp_path / "stocks.csv"                          # KRX 주식 전종목 기본정보(ETF 파일이 아님)
+    stock.write_text("표준코드,단축코드,한글 종목명,한글 종목약명,영문 종목명,상장일,시장구분,증권구분,소속부,주식종류,액면가,상장주식수\n"
+                     "KR7005930003,005930,삼성전자보통주,삼성전자,SamsungElectronics,1975/06/11,KOSPI,주권,,보통주,100,5969782550\n"
+                     "KR7105560007,105560,KB금융지주보통주,KB금융,KB Financial Group,2008/10/10,KOSPI,주권,,보통주,5000,381462103\n", encoding="utf-8")
+    it = sync_all(str(tmp_path), krx_csv=str(stock), krx_csv_date="20261016")["items"]["krx_etf_list"]
+    assert it["status"] == "fail" and it["reason"] == "schema" and it["file_kept"] and _rows(tmp_path / "krx_etf_list.csv") == 45
+    good = [dict(BAS_DD="20261013", ISU_CD="S00001", ISU_NM="샘플 코스피200", TDD_CLSPRC="10,010", NAV="10,000.00", ACC_TRDVOL="1,000")]
+    fake_urlopen(monkeypatch, lambda url: {"OutBlock_1": good})
+    assert sync_all(str(tmp_path), krx_key="TESTKEY", bas_dt="20261013", min_interval=0)["items"]["krx_etf_daily"]["status"] == "ok"
+    renamed = [dict(BAS_DD="20261014", ISU_CD="S00001", ISU_NM="샘플 코스피200", CLSPRC="10,020", ETF_NAV="10,000.00", TRDVOL="1,000")]
+    fake_urlopen(monkeypatch, lambda url: {"OutBlock_1": renamed})
+    d = sync_all(str(tmp_path), krx_key="TESTKEY", bas_dt="20261014", min_interval=0)["items"]["krx_etf_daily"]
+    assert d["status"] == "fail" and d["reason"] == "schema" and d["file_kept"] and d["data_as_of"] == "2026-10-13"
+    assert load_etf_universe(str(tmp_path), today=date(2026, 10, 15))[1]["prices"]["as_of"] == "2026-10-13"
+
+
+def test_keys_are_trimmed_validated_and_never_recorded(tmp_path, monkeypatch):
+    seen = fake_urlopen(monkeypatch, lambda url: {"OutBlock_1": []})
+    sync_all(str(tmp_path), krx_key="MY-SECRET-KRX-KEY-1234567890\r\n", bas_dt="20261013", min_interval=0)
+    assert seen[-1].get_header("Auth_key") == "MY-SECRET-KRX-KEY-1234567890"       # CRLF .env의 줄바꿈은 지운다
+    prov = sync_all(str(tmp_path), krx_key="MY-SECRET\rKEY", datagokr_key="SVC%0DKEY", bas_dt="20261013", min_interval=0)
+    assert prov["items"]["krx_etf_daily"]["reason"] == "invalid_key" and prov["items"]["datagokr_etf_prices"]["reason"] == "invalid_key"
+
+    def leaky(req, timeout=None, **kw):                       # 키가 실린 오류 메시지도 가려서 기록한다
+        raise ValueError(f"Invalid header value b'{req.headers.get('Auth_key')}' url={req.full_url}")
+    monkeypatch.setattr(urllib.request, "urlopen", leaky)
+    prov = sync_all(str(tmp_path), krx_key="MY-SECRET-KRX-KEY-1234567890", datagokr_key="SERVICE-KEY-ABCDEF", bas_dt="20261013", min_interval=0)
+    text = (tmp_path / "provenance.json").read_text(encoding="utf-8") + json.dumps(prov, ensure_ascii=False)
+    assert "MY-SECRET" not in text and "SERVICE-KEY-ABCDEF" not in text and "***" in prov["items"]["krx_etf_daily"]["error"]
+    assert net.redact("x serviceKey=ABC%2BDEF&pageNo=1", ()) == "x serviceKey=***&pageNo=1"
+
+
+def test_truncated_flag_survives_runs_that_keep_the_file(tmp_path, monkeypatch):
+    sync_all(str(tmp_path), krx_csv=SAMPLE_ETF, krx_csv_date="20261013")
+    fake_urlopen(monkeypatch, _datagokr(2500))
+    first = sync_all(str(tmp_path), datagokr_key="KEY", bas_dt="20261013", min_interval=0, max_pages=1)["items"]["datagokr_etf_prices"]
+    assert first["status"] == "partial" and first["truncated"] and "페이지 상한 1쪽" in first["note"]
+    kept = sync_all(str(tmp_path))["items"]["datagokr_etf_prices"]                    # 키 없이 다시 실행 → 파일과 기록을 그대로 둔다
+    assert kept["status"] == "skipped" and kept["file_kept"] and kept["truncated"] and kept["total_count"] == 2500
+    info = load_etf_universe(str(tmp_path), today=date(2026, 10, 14))[1]
+    assert info["prices"]["truncated"] and "일부만 받음" in info["label"]
+
+
+def test_datagokr_envelope_short_pages_and_errors(tmp_path, monkeypatch):
+    fake_urlopen(monkeypatch, lambda url: {"resultCode": "30", "resultMsg": "SERVICE_KEY_IS_NOT_REGISTERED_ERROR"})
+    it = sync_all(str(tmp_path), datagokr_key="KEY", bas_dt="20261013", min_interval=0)["items"]["datagokr_etf_prices"]
+    assert it["status"] == "fail" and "응답 형식" in it["error"]                     # 오류 응답을 '0행·휴장일'로 오인하지 않는다
+
+    def small_pages(url):                                      # 서버가 쪽 크기를 100으로 줄여 보내는 경우
+        page = int(qs(url)["pageNo"])
+        items = [dict(basDt="20261013", srtnCd=f"{i:06d}", itmsNm=f"예시 {i}", clpr="100", nav="100") for i in range((page - 1) * 100, min(page * 100, 1050))]
+        return {"response": {"header": {"resultCode": "00"}, "body": {"totalCount": 1050, "items": {"item": items} if items else ""}}}
+    fake_urlopen(monkeypatch, small_pages)
+    c = DataGoKrClient("KEY", min_interval=0)
+    assert len(c.etf_prices(bas_dt="20261013", max_pages=11)) == 1050 and c.last_meta["stop"] == "complete" and not c.last_meta["truncated"]
+    it = sync_all(str(tmp_path), datagokr_key="KEY", bas_dt="20261013", min_interval=0, max_pages=10)["items"]["datagokr_etf_prices"]
+    assert it["status"] == "partial" and it["rows"] == 1000 and it["stop"] == "page_cap" and "페이지 상한 10쪽" in it["note"]
+    calls = {"n": 0}
+
+    def fails_on_page3(req, timeout=None, **kw):
+        calls["n"] += 1
+        if calls["n"] == 3:
+            raise TimeoutError("timed out")
+        return _Resp(json.dumps(_datagokr(5000)(req.full_url)).encode("utf-8"))
+    monkeypatch.setattr(urllib.request, "urlopen", fails_on_page3)
+    it = sync_all(str(tmp_path), datagokr_key="KEY", bas_dt="20261013", min_interval=0)["items"]["datagokr_etf_prices"]
+    assert it["status"] == "fail" and it["attempt"]["rows_received"] == 2000 and it["file_kept"] and it["rows"] == 1000
+
+
+def test_dates_are_validated_and_keys_are_not_cli_arguments(tmp_path):
+    from etfrec.cli import main
+    from etfrec.sources.sync import parse_day
+    assert parse_day("2026-10-13") == "20261013"
+    for bad in ("20261310", "2026-10-1", "abc"):
+        with pytest.raises(ValueError):
+            parse_day(bad)
+    with pytest.raises(ValueError):
+        sync_all(str(tmp_path), krx_csv=SAMPLE_ETF, krx_csv_date="20261310")
+    assert not (tmp_path / "krx_etf_list.csv").exists()
+    for argv in (["sources", "sync", "--date", "2026-10-1"], ["sources", "sync", "--krx-csv-date", "20261310"],
+                 ["sources", "sync", "--krx-key", "SECRET"], ["sources", "sync", "--datagokr-key", "SECRET"]):
+        with pytest.raises(SystemExit) as e:
+            main(argv + ["--out", str(tmp_path)])
+        assert e.value.code == 2
+
+
+def test_cli_and_server_use_the_same_sources_dir(tmp_path, monkeypatch):
+    from etfrec.cli import main
+    monkeypatch.setenv("ETFREC_SOURCES_DIR", str(tmp_path / "served"))
+    monkeypatch.chdir(tmp_path)
+    main(["sources", "sync", "--krx-csv", SAMPLE_ETF, "--krx-csv-date", "20261013"])
+    assert (tmp_path / "served" / "krx_etf_list.csv").exists() and not (tmp_path / "data").exists()
+    assert load_etf_universe()[1]["kind"] == "snapshot"
+
+
+def test_endpoints_can_be_overridden_by_environment(tmp_path, monkeypatch):
+    seen = fake_urlopen(monkeypatch, lambda url: {"OutBlock_1": []})
+    monkeypatch.setenv("ETFREC_KRX_API_BASE", "https://example.test/api/")
+    monkeypatch.setenv("ETFREC_KRX_ETF_DAILY_PATH", "etp/other_path")
+    it = sync_all(str(tmp_path), krx_key="TESTKEY", bas_dt="20261013", min_interval=0)["items"]["krx_etf_daily"]
+    assert seen[-1].full_url.startswith("https://example.test/api/etp/other_path?") and it["endpoint"] == "https://example.test/api/etp/other_path"
+
+
+def test_sample_snapshot_is_package_data():
+    import fnmatch
+    import tomllib
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, "pyproject.toml"), "rb") as f:
+        pkg = tomllib.load(f)["tool"]["setuptools"]["package-data"]["etfrec"]
+    rel = os.path.relpath(SAMPLE_ETF, os.path.join(root, "etfrec")).replace(os.sep, "/")
+    assert any(fnmatch.fnmatch(rel, pat) for pat in pkg), (rel, pkg)
+
+
+def test_public_info_hides_local_paths_and_raw_errors(tmp_path):
+    from etfrec.sources import public_info
+    home = tmp_path / "Users" / "hong.gildong" / "Downloads"
+    home.mkdir(parents=True)
+    src = home / "data_4601_20261013.csv"
+    src.write_bytes(open(SAMPLE_ETF, "rb").read())
+    sync_all(str(tmp_path / "snap"), krx_csv=str(src), krx_csv_date="20261013")
+    sync_all(str(tmp_path / "snap"), krx_csv=str(home / "없는파일.csv"))
+    info = load_etf_universe(str(tmp_path / "snap"))[1]
+    pub = json.dumps(public_info(info), ensure_ascii=False)
+    assert "hong.gildong" not in pub and "Downloads" not in pub and str(tmp_path) not in pub
+    assert json.loads(pub)["file"] == "krx_etf_list.csv" and json.loads(pub)["status"] == "fail"
+    prov = (tmp_path / "snap" / "provenance.json").read_text(encoding="utf-8")
+    assert "hong.gildong" not in prov and "없는파일.csv" in prov                 # 내려받은 파일은 이름만 기록(폴더 경로 제외)

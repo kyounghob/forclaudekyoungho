@@ -54,18 +54,23 @@ python -m etfrec serve --bundle artifacts/bundle_v2     # http://127.0.0.1:8000
 | 전국투자자교육협의회 ETF스쿨·연금스쿨·생애자산관리스쿨 | 기초·연금·자산배분 단원의 학습 자료와 용어, 퀴즈 문항 출처 | 웹(무료). 단원마다 출처 링크 표시 |
 | 금융투자교육원 레버리지 ETP 사전교육 | 레버리지·인버스 유형으로 넘어가기 전 필수 관문(의무 이러닝 약 1시간, 단일종목형은 총 3시간과 한국거래소 모의거래 5시간) | 웹. 로드맵 심화 단계와 유형 카드에 안내(기본예탁금 1,000만원, 단일종목형 현금 3,000만원 포함) |
 | 한국거래소 ETF 정보·지수 정보 | 기초지수·PDF·투자설명서·용어집: 단원 예시와 용어 정의 | 웹(무료) |
-| KRX 정보데이터시스템 ETF 전종목 기본정보 | 종목명·운용사·기초지수·총보수·과세유형·기초시장·자산 분류 → 유형 분류·유형 통계 | 화면에서 **직접 내려받은 파일**을 `sources sync --krx-csv 파일 [--krx-csv-date YYYYMMDD]`로 정규화. CSV는 UTF-8·cp949 모두, Excel은 openpyxl(.xlsx)·xlrd(.xls)가 설치된 경우에만 읽음(없으면 `fail`로 기록). 화면용 JSON 엔드포인트의 프로그램 호출은 이용약관·서버 부하 때문에 하지 않음 |
-| KRX Open API(ETF 일별매매정보) | 종가·NAV·거래량 → 유형 카드의 괴리율 절댓값 중앙값·거래량 중앙값 | `--krx-key` 또는 환경변수 `KRX_OPEN_API_KEY`(openapi.krx.co.kr 인증키·서비스 신청, 비상업 이용·재배포 금지·출처 표기). 코드는 실행당 호출 상한과 호출 간격(기본 30회·1초)을 지키며, 인증키별 호출 한도는 KRX 이용 조건으로 확인 |
-| 공공데이터포털 증권상품시세정보(ETF) | 종가·NAV·거래량 → 같은 통계(KRX 시세보다 기준일이 최근일 때) | `--datagokr-key` 또는 환경변수 `DATA_GO_KR_KEY`. totalCount까지 페이지를 넘겨 받고(최대 10쪽) 다 못 받으면 `partial` |
+| KRX 정보데이터시스템 ETF 전종목 기본정보 | 종목명·운용사·기초지수·총보수·과세유형·기초시장·자산 분류 → 유형 분류·유형 통계 | 화면에서 **직접 내려받은 파일**을 `sources sync --krx-csv 파일 [--krx-csv-date YYYYMMDD]`로 정규화. CSV는 UTF-8·cp949 모두, Excel은 openpyxl(.xlsx)·xlrd(.xls)가 설치된 경우에만 읽음(없으면 `fail`로 기록). 단축코드·종목명이 비었거나 기초지수명·총보수 열이 없는 파일(다른 화면의 파일)은 `fail`(reason `schema`)로 기록하고 기존 스냅샷을 바꾸지 않음. 화면용 JSON 엔드포인트의 프로그램 호출은 이용약관·서버 부하 때문에 하지 않음 |
+| KRX Open API(ETF 일별매매정보) | 종가·NAV·거래량 → 유형 카드의 괴리율 절댓값 중앙값·거래량 중앙값 | 환경변수 `KRX_OPEN_API_KEY`(openapi.krx.co.kr 인증키·서비스 신청, 비상업 이용·재배포 금지·출처 표기). 코드는 실행당 호출 상한과 호출 간격(기본 30회·1초)을 지키며, 인증키별 호출 한도는 KRX 이용 조건으로 확인. 엔드포인트는 활용 가이드 기준이며 `ETFREC_KRX_API_BASE`·`ETFREC_KRX_ETF_DAILY_PATH`로 바꿀 수 있음 |
+| 공공데이터포털 증권상품시세정보(ETF) | 종가·NAV·거래량 → 같은 통계(KRX 시세보다 기준일이 최근일 때) | 환경변수 `DATA_GO_KR_KEY`. totalCount까지 페이지를 넘겨 받고(최대 10쪽), 페이지 상한·빈 쪽으로 일부만 받으면 `partial`(멈춘 이유 기록), 호출 오류는 `fail`(받은 쪽은 버리고 기존 파일 유지). 엔드포인트는 `ETFREC_DATAGOKR_BASE`·`ETFREC_DATAGOKR_OPERATION`·`ETFREC_DATAGOKR_LISTED_URL`로 바꿀 수 있음 |
 | 공공데이터포털 KRX상장종목정보 | 단축코드·ISIN 교차 확인(선택, 결과는 provenance에 기록만) | 같은 serviceKey, `--no-cross-check`로 끔. `getItemInfo` 경로는 활용 가이드 기준이며 키 발급 후 확인 |
 | 자산운용사 가이드북(KODEX·TIGER·RISE 등) | 용어·시각 자료 → 콘텐츠 텍스트 특징으로 확장할 후보(현재 TF-IDF는 주제 이름과 단원 제목만 사용) | 웹(무료 PDF). 인용·요약만 |
 
-수집 전에는 `etfrec/sources/data/etf_list_sample.csv`(가상 종목 45개, 화면에 "샘플" 표시)로 유형 통계를 계산하고,
-`sources sync` 뒤에는 `data/sources/` 스냅샷과 수집 경로(provenance, `policy: official-apis-and-manual-download-only`)를 씁니다.
+수집 전에는 `etfrec/sources/data/etf_list_sample.csv`(가상 종목 45개, 패키지 데이터에 포함, 화면에 "샘플" 표시)로 유형 통계를 계산하고,
+`sources sync` 뒤에는 스냅샷 폴더와 수집 경로(provenance, `policy: official-apis-and-manual-download-only`)를 씁니다.
+스냅샷 폴더는 `sources sync·stats`와 서버가 같은 규칙으로 정합니다: `--out`·`serve --sources-dir`, 없으면 환경변수 `ETFREC_SOURCES_DIR`, 없으면 `data/sources`.
+서버는 시작할 때 한 번 읽으므로 동기화한 뒤에는 서버를 다시 시작합니다. 인증키는 환경변수로만 받습니다(명령줄 인자는 `ps`·셸 기록에 남음).
 
-- API 기준일 기본값은 직전 평일(토·일만 건너뜀)입니다. 응답이 0행이면 `empty`(휴장일·미공개 가능)로 기록하고 기존 파일을 지우지 않습니다.
-- `provenance.json`에는 파일마다 자료 기준일(`data_as_of`)과 저장 시각(`synced_at`)을 남깁니다. 이번 실행에서 다시 쓰지 않은 파일
-  (`kept`·`fail`·`empty`·`skipped`)은 이전 기록을 그대로 두므로, 화면 라벨은 그 파일의 기준일을 보여 주고 30일이 지나면 경고합니다.
+- API 기준일 기본값은 직전 평일(토·일만 건너뜀)입니다. `--date`·`--krx-csv-date`는 실제 날짜(YYYYMMDD)만 받습니다. 응답이 0행이면 `empty`(휴장일·미공개 가능)로 기록하고 기존 파일을 지우지 않습니다.
+- 파일은 같은 폴더의 임시 파일에 다 쓴 뒤 바꾸므로(쓰다가 실패하면 임시 파일만 지움) 기존 스냅샷이 반쯤 덮이지 않습니다. 파일을 바꾼 직후
+  `provenance.json`도 같은 방식으로 저장합니다(실행이 끊기면 `complete: false`).
+- `provenance.json`에는 파일마다 자료 기준일(`data_as_of`)·저장 시각(`synced_at`)·내용 해시(`sha256`)·일부만 받음(`truncated`)을 남깁니다. 이번 실행에서 다시 쓰지 않은 파일
+  (`kept`·`fail`·`empty`·`skipped`)은 이전 기록을 그대로 두므로, 화면 라벨은 그 파일의 기준일을 보여 주고 30일이 지나면 경고합니다. 해시가 기록과 다르면 '기록 불일치'로 표시합니다.
+  스냅샷을 읽지 못하면(빈 파일 등) 샘플로 내려가고 라벨에 사유를 적습니다. 오류 문구의 인증키 값은 가린 뒤 기록하고, API 응답에는 로컬 경로·오류 원문을 넣지 않습니다.
 - 시세 스냅샷(`krx_etf_daily.csv` 또는 `datagokr_etf_prices.csv` 중 기준일이 최근인 것)이 있으면 단축코드로 결합해
   괴리율 = (종가 − NAV) / NAV를 계산하고, 유형 카드에 괴리율 절댓값 중앙값과 거래량 중앙값을 시세 기준일과 함께 표시합니다. 없으면 표시하지 않습니다.
 - `sources check`는 출처 루트 주소마다 HEAD 요청 1회만 보내고(리다이렉트는 따라가지 않음) User-Agent는 `etfrec/1.0 (non-commercial education project)`입니다.
@@ -212,7 +217,7 @@ node scripts/ui_walkthrough.mjs # Playwright로 11단계 UI를 조작하며 docs
   인구통계를 쓰는 설정의 이점이 사라지는지로 파이프라인이 없는 효과를 만들어 내지 않는지 확인합니다.
 - 수준·선수 가드레일은 수업의 교육 처방이 아니라 이 프로젝트의 시연 정책입니다. 선수 가드레일은 모의 세계에서
   정확도 비용이 있으므로, 실제 로그에서는 선수 단원을 건너뛴 학습자의 통과율로 페널티 크기를 보정해야 합니다.
-- KRX 종목 기본정보는 정보데이터시스템 화면에서 사람이 내려받은 CSV로만 넣고, 시세는 KRX Open API·공공데이터포털
+- KRX 종목 기본정보는 정보데이터시스템 화면에서 사람이 내려받은 파일(CSV, 엔진이 설치된 경우 Excel)로만 넣고, 시세는 KRX Open API·공공데이터포털
   인증키로만 받습니다. Open API 이용 조건(비상업·재배포 금지·출처 표기)을 지켜야 하며, 교육 자료는 링크·출처만 저장합니다.
 - 성별 뒤집기 불변성은 코드 수준의 입력 의존성 점검이지 인과적 공정성 증명이 아닙니다.
 - 운영 인증, 실시간 재학습, 10주차 이후 NeuMF·AutoRec·순차 모델은 구현하지 않았습니다.

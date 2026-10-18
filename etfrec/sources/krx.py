@@ -4,7 +4,9 @@
 - ``read_krx_csv``: 정보데이터시스템 화면에서 이용자가 직접 내려받은 파일. CSV(UTF-8·cp949)는 항상 읽고, Excel은 pandas 엔진
   (.xlsx → openpyxl, .xls → xlrd)이 설치된 경우에만 읽는다. 엔진이 없으면 ``KrxFileError``로 원인을 알린다(동기화는 실패로 기록).
 - ``KrxOpenApiClient``: KRX Open API(openapi.krx.co.kr 인증키 발급·서비스별 이용 신청, 비상업적 이용·재배포 금지·출처 표기)로
-  ETF 일별매매정보(종가·NAV·거래량)를 받는다. 실행당 호출 상한과 호출 간격을 지킨다. 엔드포인트 경로는 활용 가이드 기준이며 ``path``로 바꿀 수 있다.
+  ETF 일별매매정보(종가·NAV·거래량)를 받는다. 실행당 호출 상한과 호출 간격을 지킨다. 엔드포인트는 활용 가이드 기준이며(키 발급 후 확인)
+  코드를 고치지 않고 환경변수 ``ETFREC_KRX_API_BASE``·``ETFREC_KRX_ETF_DAILY_PATH``로 바꿀 수 있다.
+- ``check_schema``: 정규화한 표가 기대한 자료인지(필수 열이 채워졌는지) 본다. 동기화는 통과하지 못한 파일·응답으로 기존 스냅샷을 바꾸지 않는다.
 """
 from __future__ import annotations
 
@@ -56,6 +58,41 @@ class KrxFileError(ValueError):
         self.reason = reason
 
 
+class SchemaError(KrxFileError):
+    """필수 열이 비었거나 다른 화면의 파일로 보이는 자료(``reason='schema'``)."""
+
+    def __init__(self, msg: str):
+        super().__init__(msg, reason="schema")
+
+
+# 필수 열과 채워져야 하는 최소 비율. 기본정보는 ETF 전종목 기본정보에만 있는 열(기초지수명·총보수) 중 하나가 채워져야 한다
+SCHEMA = dict(list=dict(required={"code": 0.9, "name": 0.9}, any_of=(("index_name", "total_fee"), 0.5)),
+              prices=dict(required={"code": 0.9, "close": 0.9, "nav": 0.5}, any_of=None))
+SCHEMA_LABEL = {"code": "단축코드", "name": "종목명", "close": "종가", "nav": "NAV", "index_name": "기초지수명", "total_fee": "총보수"}
+
+
+def _filled(df: pd.DataFrame, col: str) -> float:
+    if col not in df.columns or not len(df):
+        return 0.0
+    s = df[col].map(_text) if df[col].dtype == object else df[col]
+    return float(s.notna().mean())
+
+
+def check_schema(df: pd.DataFrame, kind: str) -> list:
+    """정규화한 표(``kind``: 'list' = 전종목 기본정보, 'prices' = 일별 시세)의 문제 목록. 비어 있으면 통과.
+    예: KRX 주식 전종목 기본정보처럼 다른 화면의 파일, 필드 이름이 바뀐 API 응답(종가·NAV가 비어 있음)을 거른다."""
+    rule, out = SCHEMA[kind], []
+    for c, need in rule["required"].items():
+        got = _filled(df, c)
+        if got < need:
+            out.append(f"{SCHEMA_LABEL[c]} 채움 {got:.0%} < {need:.0%}")
+    if rule["any_of"]:
+        cols, need = rule["any_of"]
+        if max(_filled(df, c) for c in cols) < need:
+            out.append("·".join(SCHEMA_LABEL[c] for c in cols) + " 열이 비어 있음(ETF 전종목 기본정보 파일이 아닐 수 있음)")
+    return out
+
+
 class KrxOpenApiClient:
     """KRX Open API 클라이언트. 인증키는 인자 또는 환경변수 ``KRX_OPEN_API_KEY``(요청 헤더 AUTH_KEY).
 
@@ -63,9 +100,13 @@ class KrxOpenApiClient:
     인증키별 일 호출 한도는 제공처 이용 조건이므로 KRX 고지에서 확인한다(코드가 강제하지 않음).
     """
 
-    def __init__(self, auth_key: str = None, base_url: str = KRX_OPENAPI_BASE, timeout: int = 20, max_calls: int = 30, min_interval: float = 1.0):
-        self.key = auth_key or os.environ.get("KRX_OPEN_API_KEY")
-        self.base_url, self.timeout = base_url, timeout
+    def __init__(self, auth_key: str = None, base_url: str = None, timeout: int = 20, max_calls: int = 30, min_interval: float = 1.0,
+                 daily_path: str = None):
+        self.raw_key = auth_key or os.environ.get("KRX_OPEN_API_KEY")
+        self.key, self.key_error = net.clean_key(self.raw_key)          # 앞뒤 줄바꿈은 지우고, 안에 제어 문자가 있으면 키를 쓰지 않는다
+        self.base_url = (base_url or os.environ.get("ETFREC_KRX_API_BASE") or KRX_OPENAPI_BASE).rstrip("/")
+        self.daily_path = daily_path or os.environ.get("ETFREC_KRX_ETF_DAILY_PATH") or KRX_OPENAPI_ETF_DAILY
+        self.timeout = timeout
         self.budget = net.CallBudget(max_calls, min_interval)
 
     @property
@@ -76,7 +117,13 @@ class KrxOpenApiClient:
     def calls(self) -> int:
         return self.budget.calls
 
+    @property
+    def endpoint(self) -> str:
+        return f"{self.base_url}/{self.daily_path}"
+
     def get(self, path: str, **params) -> list:
+        if self.key_error:
+            raise ValueError(self.key_error)
         if not self.key:
             raise RuntimeError("KRX_OPEN_API_KEY가 없습니다. openapi.krx.co.kr에서 인증키를 발급받고 서비스 이용을 신청하세요")
         url = f"{self.base_url}/{path}?{urllib.parse.urlencode(params)}" if params else f"{self.base_url}/{path}"
@@ -86,9 +133,9 @@ class KrxOpenApiClient:
                 return payload[key]
         raise ValueError(f"예상하지 못한 KRX Open API 응답 형식: {str(payload)[:160] if isinstance(payload, dict) else type(payload)}")
 
-    def etf_daily(self, bas_dd: str, path: str = KRX_OPENAPI_ETF_DAILY) -> pd.DataFrame:
+    def etf_daily(self, bas_dd: str, path: str = None) -> pd.DataFrame:
         """기준일(YYYYMMDD)의 ETF 일별매매정보 → 표준 열(code·name·close·nav·volume·index_name·index_close)과 괴리율 premium."""
-        return normalize(pd.DataFrame(self.get(path, basDd=bas_dd)))
+        return normalize(pd.DataFrame(self.get(path or self.daily_path, basDd=bas_dd)))
 
 
 def _has_module(name: str) -> bool:

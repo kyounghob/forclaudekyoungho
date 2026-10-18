@@ -132,9 +132,9 @@ def _learner_input(req, allow_none: bool = False):
     return LearnerInput(**d)
 
 
-def create_app(bundle: Union[Bundle, str], designs_dir: str = None) -> FastAPI:
+def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir: str = None) -> FastAPI:
     bundle = Bundle.load(bundle) if isinstance(bundle, str) else bundle
-    svc = RecommendationService(bundle)
+    svc = RecommendationService(bundle, sources_dir=sources_dir)
     designs_dir = designs_dir or os.path.join(os.getcwd(), "artifacts", "designs")
     os.makedirs(designs_dir, exist_ok=True)
     app = FastAPI(title="ETF 교육 콘텐츠 추천 시스템", version=__version__,

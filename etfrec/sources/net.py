@@ -3,16 +3,47 @@
 - 정직한 User-Agent(``USER_AGENT``)만 쓴다(브라우저 흉내 없음).
 - ``CallBudget``: 실행당 호출 상한과 호출 간격. 인증키별 일 호출 한도는 제공처 이용 조건이라 코드가 강제하지 않으므로 고지에서 확인한다.
 - ``probe``: 루트 주소에 HEAD 요청 1회(리다이렉트는 따라가지 않음).
+- ``clean_key``·``redact``: 인증키 앞뒤 공백·줄바꿈 정리와 형식 검사, 오류 문구에서 키 값 가리기(기록·출력에 키가 남지 않게).
 """
 from __future__ import annotations
 
 import json
+import re
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 
 USER_AGENT = "etfrec/1.0 (non-commercial education project)"
+KEY_FORMAT_ERROR = "인증키 형식 오류(공백·제어 문자 포함, 키 값은 기록하지 않음)"
+
+
+def clean_key(value) -> tuple:
+    """(키, 오류 문구). 앞뒤 공백·줄바꿈(CRLF .env 파일, Windows에서 저장한 키 파일 등)은 지운다. 안에 공백·제어 문자가 남으면
+    헤더·쿼리에 넣을 수 없으므로 키를 버리고 ``KEY_FORMAT_ERROR``만 돌려준다(키 값은 오류 문구에 넣지 않는다)."""
+    if value is None:
+        return None, None
+    s = str(value).strip()
+    if not s:
+        return None, None
+    if any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in s):
+        return None, KEY_FORMAT_ERROR
+    return s, None
+
+
+def redact(text: str, secrets=()) -> str:
+    """오류 문구에서 키 값(원문·앞뒤 공백 제거·URL 인코딩 형태)과 serviceKey=…·AUTH_KEY 값을 ***로 가린다."""
+    out = str(text)
+    forms = set()
+    for v in secrets:
+        if not v:
+            continue
+        for x in (str(v), str(v).strip()):
+            if len(x) >= 4:                                     # 너무 짧은 값은 일반 글자를 지우지 않게 건너뛴다
+                forms |= {x, urllib.parse.quote(x, safe=""), urllib.parse.quote_plus(x), urllib.parse.unquote(x)}
+    for f in sorted(forms, key=len, reverse=True):
+        out = out.replace(f, "***")
+    return re.sub(r"(?i)(serviceKey=|AUTH_KEY['\"]?\s*[:=]\s*['\"]?)[^&\s'\"]+", r"\1***", out)
 
 
 class CallBudget:

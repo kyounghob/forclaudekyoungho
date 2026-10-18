@@ -23,7 +23,7 @@ etfrec = "etfrec.cli:main"
 include = ["etfrec*"]
 
 [tool.setuptools.package-data]
-etfrec = ["ui/*"]
+etfrec = ["ui/*", "sources/data/*.csv"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

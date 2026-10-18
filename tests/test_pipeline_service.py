@@ -221,3 +221,25 @@ def test_pair_pools_use_full_rows_when_training_rows_are_subsampled():
     pairs = neural._observed_pairs(pr["u"], pr["i"], pr["y"], ds.catalog.n_items, np.random.default_rng(0), mode="unobserved")
     seen = set(zip(pr["u"].tolist(), pr["i"].tolist()))
     assert not any((u, j) in seen for u, j in zip(pairs["u"].tolist(), pairs["j"].tolist()))   # 미관측 음성은 실제로 시도한 단원이 아니다
+
+
+def test_api_universe_has_no_local_paths(small_bundle, tmp_path, monkeypatch):
+    """/api/types·/api/sources·/api/meta의 universe에는 화면에 필요한 필드만 있다(로컬 경로·내려받은 파일 경로·오류 원문 없음)."""
+    import json
+    from etfrec.sources import sync_all
+    from etfrec.sources.sync import SAMPLE_ETF
+    monkeypatch.delenv("KRX_OPEN_API_KEY", raising=False)
+    monkeypatch.delenv("DATA_GO_KR_KEY", raising=False)
+    home = tmp_path / "Users" / "hong.gildong" / "Downloads"
+    home.mkdir(parents=True)
+    src = home / "data_4601_20261013.csv"
+    src.write_bytes(open(SAMPLE_ETF, "rb").read())
+    snap = str(tmp_path / "snap")
+    sync_all(snap, krx_csv=str(src), krx_csv_date="20261013")
+    sync_all(snap, krx_csv=str(home / "없는파일.csv"))
+    c = TestClient(create_app(small_bundle, designs_dir=str(tmp_path / "d"), sources_dir=snap))
+    for r in (c.get("/api/sources"), c.get("/api/meta"), c.post("/api/types", json={"goal": "pension", "risk": 1})):
+        assert r.status_code == 200
+        u = r.json()["universe"]
+        text = json.dumps(u, ensure_ascii=False)
+        assert u["kind"] == "snapshot" and "path" not in u and "detail" not in u and "hong.gildong" not in text and str(tmp_path) not in text

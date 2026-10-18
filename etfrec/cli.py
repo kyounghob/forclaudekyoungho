@@ -3,11 +3,13 @@
     python -m etfrec generate --out data/synthetic [--n 15000] [--seed 42] [--effect 1.0]
     python -m etfrec train --out artifacts/bundle_v1 [--data data/synthetic] [--n 15000] [--no-neural]
     python -m etfrec recommend --bundle artifacts/bundle_v1 --user 1 [--k 5] [--algorithm RULE]
-    python -m etfrec serve --bundle artifacts/bundle_v1 [--host 127.0.0.1] [--port 8000]
+    python -m etfrec serve --bundle artifacts/bundle_v1 [--host 127.0.0.1] [--port 8000] [--sources-dir data/sources]
     python -m etfrec demo [--n 3000]      # 작은 규모로 학습한 뒤 바로 서버를 띄운다
     ETFREC_PSEUDO_KEY=... python -m etfrec pseudonymize --profiles A.csv --log B.csv --id-col member_id --out DIR --mapping-out PATH
     python -m etfrec export-deid --bundle artifacts/bundle_v2 --k 5 --out FILE.csv [--report FILE.json]
-    python -m etfrec sources list|check|sync|stats [--out data/sources] [--krx-csv 내려받은.csv|.xlsx] [--krx-csv-date YYYYMMDD] [--date YYYYMMDD] [--krx-key KEY] [--datagokr-key KEY] [--no-cross-check]
+    [KRX_OPEN_API_KEY=… DATA_GO_KR_KEY=…] python -m etfrec sources list|check|sync|stats [--out data/sources] [--krx-csv 내려받은.csv|.xlsx]
+        [--krx-csv-date YYYYMMDD] [--date YYYYMMDD] [--no-cross-check]
+    (인증키는 환경변수로만 받는다. 명령줄 인자는 ps·셸 기록에 남는다. 스냅샷 폴더 기본값은 ETFREC_SOURCES_DIR, 없으면 data/sources)
 """
 from __future__ import annotations
 
@@ -21,9 +23,19 @@ from .data import Dataset
 from .util import get_logger, json_safe
 
 
+def _day_arg(v: str) -> str:
+    """argparse 형식 검사: 숫자 8자리의 실제 날짜(YYYYMMDD)만 받는다."""
+    from .sources.sync import parse_day
+    try:
+        return parse_day(v)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e)) from None
+
+
 def cmd_sources(a):
-    from .sources import SOURCES, load_etf_universe, sync_all, type_stats
+    from .sources import SOURCES, default_dir, load_etf_universe, public_info, sync_all, type_stats
     from .sources.sync import check_sources
+    a.out = a.out or default_dir()
     if a.action == "list":
         for k, v in SOURCES.items():
             print(f"- {k}: {v['name']} | {v['url'] or '-'} | {v['menu']} | 접근: {v['access']} | 확인: {v['verified']}")
@@ -31,12 +43,12 @@ def cmd_sources(a):
         for r in check_sources():
             print(f"{r['status']:40s} {r['name']}  {r['url']}")
     elif a.action == "sync":
-        prov = sync_all(a.out, datagokr_key=a.datagokr_key, bas_dt=a.date, krx_csv=a.krx_csv, krx_key=a.krx_key,
-                        krx_csv_date=a.krx_csv_date, cross_check=not a.no_cross_check)
-        print(json.dumps(prov, ensure_ascii=False, indent=2))
+        prov = sync_all(a.out, bas_dt=a.date, krx_csv=a.krx_csv, krx_csv_date=a.krx_csv_date, cross_check=not a.no_cross_check)
+        print(json.dumps(prov, ensure_ascii=False, indent=2))                   # 오류 문구의 인증키 값은 sync가 가린 뒤 기록한다
+        print(f"스냅샷 폴더: {os.path.abspath(a.out)} (서버는 시작할 때 한 번 읽으므로 실행 중인 서버는 다시 시작하세요)", file=sys.stderr)
     elif a.action == "stats":
         df, prov = load_etf_universe(a.out)
-        print(prov["label"], "| rows", len(df))
+        print(public_info(prov)["label"], "| rows", len(df))
         for t in type_stats(df):
             px = (f"  괴리율 절댓값 중앙값 {t['premium_abs_median'] * 100:.2f}%" if t["premium_abs_median"] is not None else "") + \
                  (f"  거래량 중앙값 {t['volume_median']:,}" if t["volume_median"] is not None else "")
@@ -71,7 +83,7 @@ def cmd_recommend(a):
 def cmd_serve(a):
     import uvicorn
     from .api import create_app
-    app = create_app(a.bundle, designs_dir=a.designs)
+    app = create_app(a.bundle, designs_dir=a.designs, sources_dir=getattr(a, "sources_dir", None))
     print(f"http://{a.host}:{a.port}  (번들 {a.bundle})")
     uvicorn.run(app, host=a.host, port=a.port, log_level="info")
 
@@ -82,7 +94,7 @@ def cmd_demo(a):
     if not os.path.exists(os.path.join(out, "bundle.pkl")):
         cfg = TrainConfig(n_learners=a.n)
         train(Dataset.synthetic(cfg), cfg, out_dir=out, enable_neural=not a.no_neural)
-    a.bundle = out; a.designs = None
+    a.bundle = out; a.designs = None; a.sources_dir = None
     cmd_serve(a)
 
 
@@ -148,19 +160,19 @@ def main(argv=None):
     t.add_argument("--effect", type=float, default=TrainConfig().effect_scale); t.add_argument("--no-neural", action="store_true")
     versions(t); t.set_defaults(fn=cmd_train)
     so = sub.add_parser("sources", help="공개 데이터 출처 목록·접근 점검·스냅샷 동기화·유형 통계")
-    so.add_argument("action", choices=["list", "check", "sync", "stats"]); so.add_argument("--out", default=os.path.join("data", "sources"))
-    so.add_argument("--datagokr-key", default=None, help="공공데이터포털 serviceKey (환경변수 DATA_GO_KR_KEY도 가능)")
-    so.add_argument("--date", default=None, help="API 기준일 YYYYMMDD(기본: 직전 평일. 휴장일·미공개면 응답 0행 → empty로 기록)")
+    so.add_argument("action", choices=["list", "check", "sync", "stats"])
+    so.add_argument("--out", default=None, help="스냅샷 폴더(기본: 환경변수 ETFREC_SOURCES_DIR, 없으면 data/sources — 서버와 같은 규칙)")
+    so.add_argument("--date", default=None, type=_day_arg, help="API 기준일 YYYYMMDD(기본: 직전 평일. 휴장일·미공개면 응답 0행 → empty로 기록)")
     so.add_argument("--krx-csv", default=None, help="KRX 정보데이터시스템에서 직접 내려받은 'ETF 전종목 기본정보' 파일(CSV, 또는 openpyxl·xlrd 설치 시 Excel). 화면 자동 호출은 하지 않음")
-    so.add_argument("--krx-csv-date", default=None, help="내려받은 파일의 기준일 YYYYMMDD(없으면 파일 수정일을 '내려받은 날'로 기록)")
+    so.add_argument("--krx-csv-date", default=None, type=_day_arg, help="내려받은 파일의 기준일 YYYYMMDD(없으면 파일 수정일을 '내려받은 날'로 기록)")
     so.add_argument("--no-cross-check", action="store_true", help="공공데이터포털 KRX상장종목정보로 단축코드·ISIN을 교차 확인하지 않음")
-    so.add_argument("--krx-key", default=None, help="KRX Open API 인증키(환경변수 KRX_OPEN_API_KEY도 가능)"); so.set_defaults(fn=cmd_sources)
+    so.set_defaults(fn=cmd_sources)          # 인증키는 환경변수 KRX_OPEN_API_KEY·DATA_GO_KR_KEY로만(명령줄 인자는 ps·셸 기록에 남음)
     r = sub.add_parser("recommend", help="번들로 한 학습자 추천"); r.add_argument("--bundle", required=True)
     r.add_argument("--user", type=int, required=True); r.add_argument("--k", type=int, default=5); r.add_argument("--algorithm", default=None)
     r.set_defaults(fn=cmd_recommend)
     s = sub.add_parser("serve", help="API + UI 서버"); s.add_argument("--bundle", required=True)
     s.add_argument("--host", default="127.0.0.1"); s.add_argument("--port", type=int, default=8000); s.add_argument("--designs", default=None)
-    s.set_defaults(fn=cmd_serve)
+    s.add_argument("--sources-dir", default=None, help="공개 데이터 스냅샷 폴더(기본: ETFREC_SOURCES_DIR, 없으면 data/sources)"); s.set_defaults(fn=cmd_serve)
     d = sub.add_parser("demo", help="작은 규모 학습 후 바로 서버 실행"); d.add_argument("--n", type=int, default=3000)
     d.add_argument("--out", default="artifacts/demo_bundle"); d.add_argument("--host", default="127.0.0.1"); d.add_argument("--port", type=int, default=8000)
     d.add_argument("--no-neural", action="store_true"); d.set_defaults(fn=cmd_demo)
