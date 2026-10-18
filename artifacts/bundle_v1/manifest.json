@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "created_at": "2026-10-14T08:04:41",
+  "created_at": "2026-10-18T17:29:04",
   "config": {
     "n_learners": 15000,
     "seed": 42,
@@ -51,6 +51,7 @@
       "quiz_from_pass": 0,
       "complete_from_quiz": 0,
       "drop_cleared_by_complete": 0,
+      "flag_fixes": 0,
       "rows_changed": 0
     },
     "attempts_by_week": {
@@ -489,7 +490,10 @@
       "pairs": 38198,
       "pairs_with_observed_negative": 35390,
       "loss": "BPR pairwise −ln σ(f(u,i) − f(u,j)); j = 같은 사용자의 미통과 시도 단원(없으면 미시도 단원)",
-      "users_with_pairs": 10146,
+      "users_with_pairs": 7769,
+      "pair_users": 7769,
+      "items_with_pairs": 60,
+      "pair_source_rows": 56443,
       "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
     },
     {
@@ -505,7 +509,10 @@
       "pairs": 40800,
       "pairs_with_observed_negative": 0,
       "loss": "BPR pairwise −ln σ(f(u,i) − f(u,j)); j = 같은 사용자가 시도하지 않은 단원",
-      "users_with_pairs": 10146,
+      "users_with_pairs": 7769,
+      "pair_users": 7769,
+      "items_with_pairs": 60,
+      "pair_source_rows": 56443,
       "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
     },
     {
@@ -522,6 +529,9 @@
       "pairs_with_observed_negative": 0,
       "loss": "BPR pairwise −ln σ(f(u,i) − f(u,j)); j = 학습 주 w 이전에 통과하지 않았고 w에도 통과하지 않은 단원(양성 = w의 통과 단원)",
       "users_with_pairs": 7769,
+      "pair_users": 7769,
+      "items_with_pairs": 60,
+      "pair_source_rows": 56443,
       "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
     },
     {
@@ -602,7 +612,10 @@
       "pairs": 57435,
       "pairs_with_observed_negative": 54549,
       "loss": "BPR pairwise −ln σ(f(u,i) − f(u,j)); j = 같은 사용자의 미통과 시도 단원(없으면 미시도 단원)",
-      "users_with_pairs": 11722,
+      "users_with_pairs": 9370,
+      "pair_users": 9370,
+      "items_with_pairs": 60,
+      "pair_source_rows": 83021,
       "snapshot": "B:42:(15000, 60):3:a8b11695a67fc02f6ab5"
     },
     {
@@ -618,7 +631,10 @@
       "pairs": 60212,
       "pairs_with_observed_negative": 0,
       "loss": "BPR pairwise −ln σ(f(u,i) − f(u,j)); j = 같은 사용자가 시도하지 않은 단원",
-      "users_with_pairs": 11722,
+      "users_with_pairs": 9370,
+      "pair_users": 9370,
+      "items_with_pairs": 60,
+      "pair_source_rows": 83021,
       "snapshot": "B:42:(15000, 60):3:a8b11695a67fc02f6ab5"
     },
     {
@@ -635,6 +651,9 @@
       "pairs_with_observed_negative": 0,
       "loss": "BPR pairwise −ln σ(f(u,i) − f(u,j)); j = 학습 주 w 이전에 통과하지 않았고 w에도 통과하지 않은 단원(양성 = w의 통과 단원)",
       "users_with_pairs": 9370,
+      "pair_users": 9370,
+      "items_with_pairs": 60,
+      "pair_source_rows": 83021,
       "snapshot": "B:42:(15000, 60):3:a8b11695a67fc02f6ab5"
     }
   ],
@@ -821,23 +840,23 @@
     },
     {
       "method": "MLP_BPRU",
-      "ndcg": 0.10932697648345083,
-      "diversity": 0.9983908401671051,
-      "hit_diagnostic": 0.2404456134921863,
-      "ndcg_active": 0.15178952717777502,
-      "hit_active": 0.33383458646616543,
+      "ndcg": 0.10638058303031166,
+      "diversity": 0.9690236732167723,
+      "hit_diagnostic": 0.2368868946309763,
+      "ndcg_active": 0.1476987557733414,
+      "hit_active": 0.3288936627282492,
       "active_users": 4655,
       "coverage_diagnostic": 1.0,
       "short_list_rate": 0.0,
-      "prereq_violation_rate": 0.8875754293671669,
+      "prereq_violation_rate": 0.8720408479034504,
       "users": 6463,
       "requests": 6463,
-      "difference_vs_global": -0.061904482311161795,
-      "ci_low": -0.06893818120629155,
-      "ci_high": -0.05505359921997471,
-      "difference_vs_global_active": -0.08594815664383217,
-      "ci_low_active": -0.09543634044276729,
-      "ci_high_active": -0.07724336414984162
+      "difference_vs_global": -0.06485087576430096,
+      "ci_low": -0.07151595003337112,
+      "ci_high": -0.05783184657834832,
+      "difference_vs_global_active": -0.09003892804826577,
+      "ci_low_active": -0.09971348296725698,
+      "ci_high_active": -0.08071959249685595
     },
     {
       "method": "MF_BPR",
@@ -941,23 +960,23 @@
     },
     {
       "method": "MLP_BPR",
-      "ndcg": 0.07295270658295239,
-      "diversity": 0.9867553767600187,
-      "hit_diagnostic": 0.17546031254835215,
-      "ndcg_active": 0.1012875064759659,
-      "hit_active": 0.24360902255639097,
+      "ndcg": 0.07473602834717682,
+      "diversity": 0.957388209809686,
+      "hit_diagnostic": 0.17731703543246172,
+      "ndcg_active": 0.10376346964721885,
+      "hit_active": 0.24618689581095596,
       "active_users": 4655,
       "coverage_diagnostic": 1.0,
       "short_list_rate": 0.0,
-      "prereq_violation_rate": 0.8120377533653103,
+      "prereq_violation_rate": 0.8231161999071639,
       "users": 6463,
       "requests": 6463,
-      "difference_vs_global": -0.09827875221166024,
-      "ci_low": -0.10505576262518415,
-      "ci_high": -0.09115537460885152,
-      "difference_vs_global_active": -0.13645017734564127,
-      "ci_low_active": -0.14505347897848686,
-      "ci_high_active": -0.1267953401754412
+      "difference_vs_global": -0.09649543044743582,
+      "ci_low": -0.1031558518418132,
+      "ci_high": -0.0891146517046031,
+      "difference_vs_global_active": -0.13397421417438832,
+      "ci_low_active": -0.14288733549981436,
+      "ci_high_active": -0.1251498471252419
     },
     {
       "method": "MF_OBS",
@@ -2104,6 +2123,42 @@
       "details": null
     },
     {
+      "test": "pairwise_models_score_only_pair_users",
+      "passed": true,
+      "details": [
+        [
+          "mlp9_bpr",
+          7769,
+          7769
+        ],
+        [
+          "mlp9_bpru",
+          7769,
+          7769
+        ],
+        [
+          "mlp9_next",
+          7769,
+          7769
+        ],
+        [
+          "mlp9_bpr",
+          9370,
+          9370
+        ],
+        [
+          "mlp9_bpru",
+          9370,
+          9370
+        ],
+        [
+          "mlp9_next",
+          9370,
+          9370
+        ]
+      ]
+    },
+    {
       "test": "per_user_interest_broadcast",
       "passed": true,
       "details": null
@@ -2529,6 +2584,11 @@
       "details": null
     },
     {
+      "test": "no_future_leakage_feature_store",
+      "passed": true,
+      "details": "기준 주 [2, 3]: 이후 행(정답 주 포함)을 섞은 뒤 특징 저장소 비교, 달라진 주 []"
+    },
+    {
       "test": "bundle_profiles_no_raw_age_income",
       "passed": true,
       "details": "번들 프로필 열 ['age_band', 'exp', 'gender', 'goal', 'horizon', 'income_q', 'interest1', 'interest2', 'mobile', 'placement', 'risk', 'user']"
@@ -2803,15 +2863,12 @@
         ],
         "threshold": 20,
         "min_users_param": 20,
-        "lam": 3000.0,
         "leaves": 540,
         "leaves_below": 432,
         "users_in_small_leaves": 3000,
         "min_leaf": 1,
         "users": 6597,
         "decision_min_n": 20,
-        "distinct_leaf_champions": 4,
-        "leaf_champion_is_root_share": 0.6611111111111111,
         "levels": [
           {
             "level": 0,
@@ -2878,15 +2935,12 @@
         ],
         "threshold": 20,
         "min_users_param": 20,
-        "lam": 3000.0,
         "leaves": 288,
         "leaves_below": 179,
         "users_in_small_leaves": 1385,
         "min_leaf": 1,
         "users": 6597,
         "decision_min_n": 20,
-        "distinct_leaf_champions": 2,
-        "leaf_champion_is_root_share": 0.6666666666666666,
         "levels": [
           {
             "level": 0,
@@ -2943,15 +2997,12 @@
         ],
         "threshold": 20,
         "min_users_param": 20,
-        "lam": 500.0,
         "leaves": 60,
         "leaves_below": 12,
         "users_in_small_leaves": 124,
         "min_leaf": 2,
         "users": 6597,
         "decision_min_n": 21,
-        "distinct_leaf_champions": 18,
-        "leaf_champion_is_root_share": 0.11666666666666667,
         "levels": [
           {
             "level": 0,
@@ -3098,7 +3149,7 @@
     "numpy": "2.5.4",
     "pandas": "3.0.6",
     "torch": "2.14.1+cu130",
-    "os": "Linux-6.18.44-fc-v114-x86_64-with-glibc2.39"
+    "os": "Linux-6.18.44-fc-v139-x86_64-with-glibc2.39"
   },
   "implementation_status": "executed prototype; synthetic data unless a real log directory was given"
 }

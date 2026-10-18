@@ -5,7 +5,8 @@ CSV 스키마(운영 로그를 연결할 때 그대로 맞추면 된다)
                   interest1, interest2(주제 이름 또는 번호), placement(1~3)
     study_log.csv user, item, week, day, hour, minute, complete, quiz, quiz_pass, save, drop, replay
                   (한 행 = 한 번의 학습 시도, 불리언 열은 그 시도의 다중 플래그. 퀴즈 통과 ⇒ 퀴즈 ⇒ 완료, 이탈 ⇒ 미완료로
-                   정규화하고 고친 행 수를 summary.event_repairs 에 남긴다. score·understood 열이 없으면 행동 점수 규칙으로 만든다)
+                   정규화하고 고친 행 수와 플래그별 수정 건수를 summary.event_repairs 에 남긴다. score·understood 열이 없으면
+                   행동 점수 규칙으로 만들고, 열이 있으면 그대로 쓰되 플래그를 고친 행만 규칙으로 다시 채점한다)
     catalog.csv   item, title, topic, level, short
 """
 from __future__ import annotations
@@ -35,20 +36,25 @@ def score_attempts(log: pd.DataFrame) -> pd.DataFrame:
     return log
 
 
-def normalize_event_flags(log: pd.DataFrame) -> tuple:
+def normalize_event_flags(log: pd.DataFrame, return_mask: bool = False) -> tuple:
     """한 시도(행)의 플래그 논리를 맞춘다: 퀴즈 통과 ⇒ 퀴즈 시도 ⇒ 완료, 이탈 ⇒ 미완료(완료 증거가 있으면 이탈을 끈다).
-    모의 생성기는 구성상 이미 만족하므로 바뀌는 행이 없고, 운영 로그를 연결할 때 고친 행 수를 보고한다(학습 QA가 최종 확인)."""
+    모의 생성기는 구성상 이미 만족하므로 바뀌는 행이 없고, 운영 로그를 연결할 때 고친 내용을 보고한다(학습 QA가 최종 확인).
+    rows_changed = 플래그가 하나라도 바뀐 행 수(행 단위), flag_fixes = 플래그 수정 건수의 합(한 행이 최대 3건).
+    return_mask=True면 바뀐 행의 불리언 배열도 돌려준다(그 행만 다시 채점할 때 쓴다)."""
     log = log.copy()
     for c in BOOL_COLUMNS:
         log[c] = log[c].astype(bool)
+    before = log[["quiz", "complete", "drop"]].values.copy()
     rep = dict(quiz_from_pass=int((log.quiz_pass & ~log.quiz).sum()))
     log["quiz"] = log.quiz | log.quiz_pass
     rep["complete_from_quiz"] = int((log.quiz & ~log.complete).sum())
     log["complete"] = log.complete | log.quiz
     rep["drop_cleared_by_complete"] = int((log["drop"] & log.complete).sum())
     log["drop"] = log["drop"] & ~log.complete
-    rep["rows_changed"] = int(sum(rep.values()))
-    return log, rep
+    changed = (log[["quiz", "complete", "drop"]].values != before).any(1)
+    rep["flag_fixes"] = int(rep["quiz_from_pass"] + rep["complete_from_quiz"] + rep["drop_cleared_by_complete"])
+    rep["rows_changed"] = int(changed.sum())
+    return (log, rep, changed) if return_mask else (log, rep)
 
 
 def resolve_topics(values, catalog: Catalog) -> np.ndarray:
@@ -86,9 +92,14 @@ class Dataset:
             raise ValueError(f"study_log에 {missing} 열이 없습니다")
         if not np.array_equal(self.profiles.user.values, np.arange(self.n_users)):
             raise ValueError("profiles.user는 0부터 연속된 번호여야 합니다(외부 ID는 user_id 열로 따로 두세요)")
-        self.log, self.event_repairs = normalize_event_flags(self.log)
-        if "score" not in self.log.columns or "understood" not in self.log.columns or self.event_repairs["rows_changed"]:
-            self.log = score_attempts(self.log)
+        self.log, self.event_repairs, changed = normalize_event_flags(self.log, return_mask=True)
+        if "score" not in self.log.columns or "understood" not in self.log.columns:
+            self.log = score_attempts(self.log)                       # 점수 열이 없으면 모든 행을 규칙으로 채점
+        elif changed.any():                                           # 플래그를 고친 행만 다시 채점(입력 점수는 나머지 행에서 유지)
+            fixed = score_attempts(self.log.loc[changed])
+            self.log["score"] = self.log["score"].astype(float)
+            self.log.loc[changed, "score"] = fixed["score"].values
+            self.log.loc[changed, "understood"] = fixed["understood"].values
         bad_item = (self.log.item < 0) | (self.log.item >= self.catalog.n_items)
         if bad_item.any():
             raise ValueError(f"카탈로그 범위를 벗어난 item이 {int(bad_item.sum())}건 있습니다")

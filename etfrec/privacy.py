@@ -430,9 +430,7 @@ def export_deid(bundle, k: int = K_RELEASE, hierarchy=None) -> tuple:
 def router_leaf_audit(router, threshold: int = MIN_LEAF_DISPLAY) -> dict:
     """학습된 라우터 levels의 N(검증 사용자 수)으로 실제 잎(마지막 수준 노드) 크기를 센다.
     MIN_ROUTER_USERS는 잎 크기를 보장하지 않는다. 그보다 작은 노드는 상위 노드의 추정을 그대로 써서 챔피언을 정할 뿐이다.
-    decision_min_n = 잎마다 '표본 ≥ min_users인 가장 깊은 조상(자기 포함)'의 크기 중 최솟값(챔피언 추정에 쓰인 평균의 최소 표본).
-    λ가 매우 크면(교차 선택 결과 ∞) 수축 추정이 상위 값과 같아져 모든 잎이 루트 챔피언을 쓴다. 그래서 잎 챔피언의 종류 수
-    (distinct_leaf_champions)와 루트 챔피언과 같은 잎의 비율(leaf_champion_is_root_share)을 함께 남긴다."""
+    decision_min_n = 잎마다 '표본 ≥ min_users인 가장 깊은 조상(자기 포함)'의 크기 중 최솟값(챔피언 추정에 쓰인 평균의 최소 표본)."""
     levels, dec = [], None
     for lv, L in enumerate(router.levels):
         N = np.asarray(L["N"], float)
@@ -441,13 +439,9 @@ def router_leaf_audit(router, threshold: int = MIN_LEAF_DISPLAY) -> dict:
         levels.append(dict(level=lv, variable=None if lv == 0 else router.order[lv - 1], nodes=int(len(N)), nodes_below=int(small.sum()),
                            users_in_nodes_below=int(N[small].sum()), min_n=int(N.min()) if len(N) else 0, users=int(N.sum())))
     leaf = levels[-1]
-    champs = np.asarray(router.levels[-1]["champ"]) if router.levels else np.array([], int)
-    root = int(router.levels[0]["champ"][0]) if router.levels else None
-    return dict(variables=list(router.order), threshold=int(threshold), min_users_param=int(router.min_users), lam=float(router.lam),
-                leaves=leaf["nodes"], leaves_below=leaf["nodes_below"], users_in_small_leaves=leaf["users_in_nodes_below"], min_leaf=leaf["min_n"],
-                users=leaf["users"], decision_min_n=int(dec.min()) if dec is not None and len(dec) else 0,
-                distinct_leaf_champions=int(len(np.unique(champs))), leaf_champion_is_root_share=float(np.mean(champs == root)) if len(champs) else None,
-                levels=levels)
+    return dict(variables=list(router.order), threshold=int(threshold), min_users_param=int(router.min_users), leaves=leaf["nodes"],
+                leaves_below=leaf["nodes_below"], users_in_small_leaves=leaf["users_in_nodes_below"], min_leaf=leaf["min_n"],
+                users=leaf["users"], decision_min_n=int(dec.min()) if dec is not None and len(dec) else 0, levels=levels)
 
 
 def _store_quasi(store) -> list:

@@ -193,9 +193,6 @@ def test_router_leaf_audit_matches_router_levels(small_bundle):
         assert a["leaves"] == len(N) and a["leaves_below"] == int((N < 20).sum()) and a["min_leaf"] == int(N.min())
         assert a["users_in_small_leaves"] == int(N[N < 20].sum()) and a["users"] == int(N.sum())
         assert a["decision_min_n"] >= rt.min_users                       # 챔피언 추정은 20명 이상 노드의 평균으로만
-        ch = np.asarray(rt.levels[-1]["champ"])
-        assert a["lam"] == float(rt.lam) and a["distinct_leaf_champions"] == len(np.unique(ch))
-        assert a["leaf_champion_is_root_share"] == float(np.mean(ch == rt.levels[0]["champ"][0]))
     assert b.privacy["router_leaves"]["RouterNoGender"]["leaves_below"] > 0   # MIN_ROUTER_USERS는 잎 크기를 보장하지 않는다
     q = b.privacy["quasi"]
     assert q["requested"] == list(QUASI_IDENTIFIERS) and q["missing"] == [] and q["k"] == 5

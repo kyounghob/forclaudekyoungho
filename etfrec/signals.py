@@ -220,11 +220,13 @@ def supervised_from_log(log_before, cap: int = 200000, seed: int = SEED, n_items
     original = len(u)
     n_items = int(n_items if n_items is not None else (int(i.max()) + 1 if len(i) else 0))
     pairs = next_week_pairs(log_before, n_items, seed) if n_items else None
-    if len(u) > cap:
+    pair_rows = None
+    if len(u) > cap:                         # 점별 학습 행만 줄인다. 쌍별 모델의 양성·음성 풀은 전체 관측 행(pair_rows)으로 만든다
+        pair_rows = dict(u=u.astype(np.int64), i=i.astype(np.int64), y=y)
         ix = np.sort(np.random.default_rng(seed + 23).choice(len(u), cap, replace=False))
         u, i, y, score = u[ix], i[ix], y[ix], score[ix]
     return dict(u=u.astype(np.int64), i=i.astype(np.int64), y=y, score=score, label="quiz-pass during observed study attempt",
-                source_rows=int(original), used_rows=int(len(u)), seed=seed + 23, next_pairs=pairs)
+                source_rows=int(original), used_rows=int(len(u)), seed=seed + 23, next_pairs=pairs, pair_rows=pair_rows)
 
 
 @dataclass
@@ -311,7 +313,8 @@ class ModelStore:
             if sup is None or len(sup["u"]) == 0:
                 raise ValueError("관측 학습 라벨이 필요합니다")
             w = neural.fit_observed_model(sup["u"], sup["i"], sup["y"], sup["score"], ref.n_users, ref.n_items, kind, seed=SEED,
-                                          pairs=sup.get("next_pairs") if kind == "mlp9_next" else None)
+                                          pairs=sup.get("next_pairs") if kind == "mlp9_next" else None,
+                                          pair_rows=sup.get("pair_rows") if kind in ("mlp9_bpr", "mlp9_bpru") else None)
             w.audit.update(snapshot=ref.snapshot_key)
             self.audit.append(w.audit)
             self.observed[key] = w

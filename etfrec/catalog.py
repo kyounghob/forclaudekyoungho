@@ -129,6 +129,30 @@ V2_CONCEPT_EXTRA = {("해외 ETF", 3): ["과표기준가", "보유기간과세"]
                     ("레버리지·인버스", 3): ["사전교육", "기본예탁금", "모의거래"]}
 
 
+def find_prereq_cycle(prereqs: dict) -> list:
+    """선수 관계 {단원: [선수 단원]}에서 순환 하나를 [a, b, …, a]로 돌려준다. 없으면 []."""
+    state, stack = {}, []
+
+    def visit(u):
+        state[u] = 1; stack.append(u)
+        for p in prereqs.get(u, []):
+            if state.get(p) == 1:
+                return stack[stack.index(p):] + [p]
+            if state.get(p) is None:
+                found = visit(p)
+                if found:
+                    return found
+        state[u] = 2; stack.pop()
+        return []
+
+    for u in list(prereqs):
+        if state.get(u) is None:
+            found = visit(u)
+            if found:
+                return found
+    return []
+
+
 @dataclass
 class Catalog:
     """단원 배열(아이템 번호 순)과 그로부터 만든 특징."""
@@ -235,7 +259,16 @@ class Catalog:
         short = df["short"].astype(bool).values if "short" in df else np.zeros(len(df), bool)
         prereqs = None
         if "prereqs" in df.columns:
-            prereqs = {int(r.item): [int(x) for x in str(r.prereqs).split(";") if x.strip().lstrip("-").isdigit()] for r in df.itertuples()}
+            n, prereqs = len(df), {}
+            for r in df.itertuples():
+                vals = [x.strip() for x in str(r.prereqs).split(";") if x.strip() and x.strip().lower() not in ("nan", "none")]
+                bad = [x for x in vals if not x.isdigit() or not (0 <= int(x) < n) or int(x) == int(r.item)]
+                if bad:                                     # 음수(예: -1은 마지막 단원을 가리키게 된다)·범위 밖·자기 자신은 거부
+                    raise ValueError(f"item {int(r.item)}의 prereqs에 쓸 수 없는 값 {bad}(0 이상 {n} 미만, 자기 자신 제외)")
+                prereqs[int(r.item)] = [int(x) for x in vals]
+            cyc = find_prereq_cycle(prereqs)
+            if cyc:
+                raise ValueError(f"선수 관계에 순환이 있습니다: {' → '.join(map(str, cyc))}")
         sources = None
         if "sources" in df.columns:
             sources = {int(r.item): [x.strip() for x in str(r.sources).split(";") if x.strip() and x.strip() != "nan"] for r in df.itertuples()}

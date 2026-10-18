@@ -10,10 +10,10 @@ import re
 
 from .catalog import Catalog
 
-# 길이가 긴 키워드부터 검사한다("연금"이 "금"보다 먼저 잡히도록).
+# 길이가 긴 키워드부터 검사한다. "금 etf"처럼 짧은 키워드는 바로 앞 글자가 한글이면 단어 일부로 보고 건너뛴다(연금 ETF·현금 ETF ≠ 금 ETF).
 TOPIC_KEYWORDS = {
-    "ETF 구조": ["etf 구조", "etf란", "etf 기초", "nav", "괴리율", "설정·환매", "lp", "유동성공급자", "구조"],
-    "지수": ["지수", "코스피", "s&p", "kospi", "시가총액 가중", "동일 가중", "편입"],
+    "ETF 구조": ["etf 구조", "etf의 구조", "etf란", "etf 기초", "nav", "괴리율", "설정·환매", "lp", "유동성공급자"],
+    "지수": ["지수", "코스피", "s&p", "kospi", "시가총액 가중", "동일 가중", "구성 종목", "정기변경"],
     "추적오차": ["추적오차", "추적차이", "트래킹"],
     "비용": ["비용", "총보수", "보수", "수수료", "스프레드", "총비용"],
     "분배금": ["분배금", "배당", "배당소득세"],
@@ -22,6 +22,7 @@ TOPIC_KEYWORDS = {
     "금 ETF": ["금 etf", "골드", "금값", "금 가격", "인플레이션"],
     "환헤지": ["환헤지", "환율", "환노출", "달러", "금리차"],
     "레버리지·인버스": ["레버리지", "인버스", "곱버스", "2배", "음의 복리"],
+    "커버드콜 ETF": ["커버드콜", "covered call", "옵션 프리미엄", "콜옵션 매도"],
     "리밸런싱": ["리밸런싱", "재조정", "밴드"],
     "자산배분": ["자산배분", "분산투자", "분산", "포트폴리오", "상관관계", "주식·채권"],
     "해외 ETF": ["해외", "미국", "나스닥", "글로벌", "양도소득세", "환전"],
@@ -34,9 +35,15 @@ TOPIC_KEYWORDS = {
     "액티브 ETF": ["액티브", "패시브", "비교지수"],
     "ESG ETF": ["esg", "그린워싱", "친환경"],
 }
+LEFT_BOUNDARY = {"금 etf", "금값", "금 가격"}            # 앞 글자가 한글이면 다른 단어의 일부(연금 ETF, 현금 가격)
+NOT_FOLLOWED_BY = {"보수": "적"}                          # '보수적'(위험성향)은 비용 주제가 아니다
+INTEREST_CUES = ["관심", "궁금", "배우고", "알고 싶", "공부하고 싶"]
 LEVEL_WORDS = [(3, ["고급", "심화", "상급", "전문", "어려운"]), (2, ["중급", "중간"]), (1, ["초급", "입문", "처음", "기초", "초보", "왕초보", "쉬운"])]
-EXP_WORDS = [(2, ["3년 이상", "오래", "베테랑", "3년", "4년", "5년", "10년"]), (1, ["1~3년", "1년", "2년", "조금", "약간"]),
-             (0, ["경험 없", "경험이 없", "경험은 없", "경험도 없", "경험 무", "투자해 본 적 없", "무경험", "처음 투자", "시작하는"])]
+# 경험은 '경험'이라는 말 주변(앞 8자 ~ 뒤 14자)에서만 읽고, 가장 긴 표현을 고른다('1~3년'이 '3년'보다, '3년 이상'이 '3년'보다 우선).
+EXP_WORDS = [(0, ["경험 없", "경험이 없", "경험은 없", "경험도 없", "경험 무"]),
+             (1, ["1~3년", "1-3년", "2~3년", "1년", "2년", "조금", "약간"]),
+             (2, ["3년 이상", "3년", "4년", "5년", "10년", "오래"])]
+EXP_ANYWHERE = [(0, ["무경험", "투자해 본 적 없", "처음 투자"]), (2, ["베테랑"])]   # '경험'이 없어도 경험으로 읽는 표현
 RISK_WORDS = [(2, ["공격적", "적극", "고위험", "high risk"]), (0, ["안정", "보수적", "저위험", "안전"]), (1, ["중립", "보통"])]
 DEVICE_WORDS = [(1, ["모바일", "스마트폰", "휴대폰", "폰으로", "앱으로", "앱에서"]), (0, ["pc", "데스크톱", "데스크탑", "노트북", "컴퓨터"])]
 HOUR_WORDS = [(0, ["출근", "아침", "오전"]), (1, ["점심"]), (2, ["저녁", "퇴근", "오후"]), (3, ["심야", "밤", "새벽", "자기 전"])]
@@ -45,8 +52,9 @@ GOAL_WORDS = [("pension", ["연금", "노후", "은퇴", "irp", "퇴직"]), ("in
               ("trading", ["단기 매매", "단타", "트레이딩", "매매", "단기 투자", "레버리지로", "급등주"]),
               ("diversify", ["분산", "안정적으로", "안전하게", "잃지 않", "방어"]),
               ("long_term", ["장기", "적립식", "지수 투자", "노후 자산", "자산형성", "꾸준히", "10년"])]
-HORIZON_WORDS = [("short", ["1년 미만", "몇 달", "6개월", "단기간", "단기"]), ("long", ["5년 이상", "10년", "20년", "장기간", "장기", "노후", "은퇴"]),
-                 ("mid", ["1~5년", "3년", "2~3년", "중기", "몇 년"])]
+# 투자 기간은 경험으로 읽은 구간을 빼고 찾는다(가장 긴 표현 우선).
+HORIZON_WORDS = [("short", ["1년 미만", "몇 달", "몇 개월", "개월", "단기간", "단기"]), ("long", ["5년 이상", "10년", "20년", "장기간", "장기", "노후", "은퇴"]),
+                 ("mid", ["1~5년", "2~3년", "3년", "중기", "몇 년"])]
 EXAMPLES = [
     dict(title="기초 입문 예시", text="ETF 구조와 비용에 관심 있는 초급 학습자야. 투자 경험은 없고 모바일로 저녁에 공부해. 5개 추천해 줘."),
     dict(title="수준 2 학습자 예시", text="30대 중급 학습자, 채권 ETF와 자산배분에 관심. 투자 경험 1~3년, 위험성향 중립, PC로 점심시간에 학습."),
@@ -68,6 +76,45 @@ def _find(text, table):
     return None, None
 
 
+def _occurrences(text, w):
+    start = text.find(w)
+    while start >= 0:
+        yield start
+        start = text.find(w, start + 1)
+
+
+def _ok_at(text, w, pos):
+    """키워드 경계: LEFT_BOUNDARY 키워드는 앞 글자가 한글이면, NOT_FOLLOWED_BY 키워드는 뒤에 금지 글자가 오면 일치로 보지 않는다."""
+    if w in LEFT_BOUNDARY and pos > 0 and "가" <= text[pos - 1] <= "힣":
+        return False
+    nf = NOT_FOLLOWED_BY.get(w)
+    return not (nf and text.startswith(nf, pos + len(w)))
+
+
+def _longest(text, table, lo=0, hi=None, exclude=()):
+    """[lo, hi) 구간에서 표의 표현 중 가장 긴 일치(같으면 앞쪽)를 (값, 표현, 시작, 끝)으로. exclude 구간과 겹치면 건너뛴다."""
+    hi = len(text) if hi is None else hi
+    best = None
+    for value, words in table:
+        for w in words:
+            for pos in _occurrences(text, w):
+                end = pos + len(w)
+                if pos < lo or end > hi or any(pos < e and end > s for s, e in exclude) or not _ok_at(text, w, pos):
+                    continue
+                if best is None or len(w) > len(best[1]) or (len(w) == len(best[1]) and pos < best[2]):
+                    best = (value, w, pos, end)
+    return best
+
+
+def _clauses(text):
+    """문장부호(. , ! ? 줄바꿈)로 나눈 구간 [(시작, 끝)]."""
+    out, start = [], 0
+    for m in re.finditer(r"[.,!?\n]", text):
+        out.append((start, m.start())); start = m.end()
+    out.append((start, len(text)))
+    return out
+
+
 def parse_onboarding(text: str, catalog: Catalog) -> dict:
     """문장 → {fields, evidence, warnings}. 못 읽은 항목은 fields에 넣지 않는다(화면 기본값 유지)."""
     raw = text or ""
@@ -80,10 +127,12 @@ def parse_onboarding(text: str, catalog: Catalog) -> dict:
         if topic not in catalog.ti:
             continue
         for w in sorted(words, key=len, reverse=True):
-            pos = t.find(w)
+            pos = next((p for p in _occurrences(t, w) if _ok_at(t, w, p)), -1)
             if pos >= 0:
                 hits.append((pos, len(w), topic, w)); break
-    hits.sort(key=lambda x: (x[0], -x[1]))
+    cue_spans = [c for c in _clauses(t) if any(cue in t[c[0]:c[1]] for cue in INTEREST_CUES)]
+    in_cue = lambda pos: any(a <= pos < b for a, b in cue_spans)
+    hits.sort(key=lambda x: (not in_cue(x[0]), x[0], -x[1]))          # '관심·궁금' 구간의 주제를 먼저, 그다음 등장 순
     seen, topics = set(), []
     for pos, _, topic, w in hits:
         if topic in seen:
@@ -95,11 +144,22 @@ def parse_onboarding(text: str, catalog: Catalog) -> dict:
         if len(topics) > 2:
             warnings.append(f"관심 주제가 {len(topics)}개 읽혔습니다. 앞의 2개({topics[0]}, {topics[1]})만 사용했습니다.")
     # 수준·경험·성향·기기·시간대·성별
-    for key, table in (("placement", LEVEL_WORDS), ("exp", EXP_WORDS), ("risk", RISK_WORDS), ("mobile", DEVICE_WORDS),
-                       ("hour", HOUR_WORDS), ("gender", GENDER_WORDS), ("goal", GOAL_WORDS), ("horizon", HORIZON_WORDS)):
+    for key, table in (("placement", LEVEL_WORDS), ("risk", RISK_WORDS), ("mobile", DEVICE_WORDS),
+                       ("hour", HOUR_WORDS), ("gender", GENDER_WORDS), ("goal", GOAL_WORDS)):
         v, w = _find(t, table)
         if v is not None:
             fields[key] = v; evidence.append(dict(field=key, value=v, matched=w))
+    exp_hit, used = None, []
+    for m in re.finditer("경험", t):                                   # 경험: '경험' 주변에서만
+        h = _longest(t, EXP_WORDS, max(0, m.start() - 8), m.end() + 14)
+        if h and (exp_hit is None or len(h[1]) > len(exp_hit[1])):
+            exp_hit = h
+    exp_hit = exp_hit or _longest(t, EXP_ANYWHERE)
+    if exp_hit:
+        fields["exp"] = exp_hit[0]; used.append(exp_hit[2:]); evidence.append(dict(field="exp", value=exp_hit[0], matched=exp_hit[1]))
+    hz = _longest(t, HORIZON_WORDS, exclude=used)                      # 기간: 경험으로 읽은 구간은 빼고
+    if hz:
+        fields["horizon"] = hz[0]; evidence.append(dict(field="horizon", value=hz[0], matched=hz[1]))
     # 연령
     m = re.search(r"(\d{2})\s*(세|살)", t)
     if m:
@@ -109,29 +169,38 @@ def parse_onboarding(text: str, catalog: Catalog) -> dict:
         if m:
             fields["age"] = int(m.group(1)) * 10 + 5; evidence.append(dict(field="age", value=fields["age"], matched=m.group(0)))
     # 소득
-    m = re.search(r"(연소득|연봉|소득)\s*(\d{3,5})\s*만\s*원?", t)
+    m = re.search(r"(연소득|연봉|소득)\s*(약\s*)?(\d{1,3}(?:,\d{3})+|\d{3,5})\s*만\s*원?", t)
     if m:
-        fields["income"] = float(m.group(2)); evidence.append(dict(field="income", value=fields["income"], matched=m.group(0)))
+        fields["income"] = float(m.group(3).replace(",", "")); evidence.append(dict(field="income", value=fields["income"], matched=m.group(0)))
     else:
         m = re.search(r"(\d)\s*천\s*만\s*원", t)
         if m:
             fields["income"] = float(m.group(1)) * 1000; evidence.append(dict(field="income", value=fields["income"], matched=m.group(0)))
     # 요청 개수
-    m = re.search(r"(\d{1,2})\s*개", t)
+    m = re.search(r"(\d{1,2})\s*개(?!월)", t)
     if m and 1 <= int(m.group(1)) <= 20:
         fields["k"] = int(m.group(1)); evidence.append(dict(field="k", value=fields["k"], matched=m.group(0)))
     # 학습 이력: 따옴표 안의 단원 제목 + 통과/완료 동사
     events = []
-    for quote in re.findall(r"['‘’\"“”]([^'‘’\"“”]{2,40})['‘’\"“”]", raw):
-        q = quote.strip()
+    quotes = list(re.finditer(r"['‘’\"“”]([^'‘’\"“”]{2,40})['‘’\"“”]", raw))
+    verbs = []                                                       # 따옴표마다 그 뒤 동사 구간의 (통과, 완료)
+    for k, mq in enumerate(quotes):
+        nxt = quotes[k + 1].start() if k + 1 < len(quotes) else min(len(raw), mq.end() + 40)
+        gap = raw[mq.end():nxt]
+        verbs.append((any(w in gap for w in ("통과", "합격", "맞췄", "끝냈")), any(w in gap for w in ("완료", "다 봤", "끝까지", "수강")),
+                      k + 1 < len(quotes) and re.fullmatch(r"\s*(와|과|,|및|하고|랑|이랑)\s*", gap) is not None))
+    for k in range(len(verbs) - 2, -1, -1):                         # 'A와 B는 통과' → A는 B의 동사를 따른다
+        if verbs[k][2]:
+            verbs[k] = (verbs[k + 1][0], verbs[k + 1][1], True)
+    for k, mq in enumerate(quotes):
+        q = mq.group(1).strip()
         matches = [i for i, title in enumerate(catalog.item_title) if q in title or title in q]
         if not matches:
             warnings.append(f"'{q}'와 일치하는 단원 제목을 찾지 못했습니다.")
             continue
         item = matches[0]
-        tail = raw[raw.find(quote) + len(quote): raw.find(quote) + len(quote) + 40]
-        passed = any(w in tail for w in ("통과", "합격", "맞췄", "끝냈"))
-        done = passed or any(w in tail for w in ("완료", "다 봤", "끝까지", "수강"))
+        passed = verbs[k][0]
+        done = passed or verbs[k][1]
         events.append(dict(item=int(item), week=0, complete=bool(done), quiz=bool(passed), quiz_pass=bool(passed), save=False, drop=False, replay=False))
         evidence.append(dict(field="events", value=catalog.item_title[item], matched=("통과" if passed else "완료" if done else "조회")))
     if events:

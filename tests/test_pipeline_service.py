@@ -131,9 +131,23 @@ def test_full_regression_matches_notebook():
     cfg = TrainConfig(catalog_version=1, generator_version=1)
     b = train(Dataset.synthetic(cfg), cfg, out_dir=None, log=lambda *a, **k: None)
     got = b.results.set_index("method").ndcg
-    expected = {"RULE": 0.17123, "RouterNoGender": 0.17119, "UCF": 0.14268, "POP": 0.11875, "ICF": 0.11112, "CONTENT": 0.09957,
-                "MF": 0.09264, "MF_OBS": 0.07099, "Random": 0.05993, "MLP": 0.05325}
-    for k, v in expected.items():
+    for k, v in NOTEBOOK_V1.items():
+        assert abs(got[k] - v) < 5e-5, (k, got[k], v)
+
+
+NOTEBOOK_V1 = {"RULE": 0.17123, "Global": 0.17123, "RouterNoGender": 0.17119, "RouterFull": 0.17116, "RouterNoGenderIncome": 0.15702,
+               "NoDemographics": 0.15355, "UCF": 0.14268, "POP": 0.11875, "ICF": 0.11112, "CONTENT": 0.09957, "MF": 0.09264,
+               "MF_OBS": 0.07099, "Random": 0.05993, "MLP": 0.05325}
+
+
+def test_committed_v1_results_match_notebook():
+    """저장소에 커밋된 v1 결과가 노트북 B의 14개 기록과 5자리까지 같은지(코드 재학습 검사는 ETFREC_FULL=1의 전체 재현)."""
+    import pandas as pd
+    path = os.path.join(os.path.dirname(__file__), "..", "artifacts", "bundle_v1", "test_results.csv")
+    if not os.path.exists(path):
+        pytest.skip("artifacts/bundle_v1 없음")
+    got = pd.read_csv(path, encoding="utf-8-sig").set_index("method").ndcg
+    for k, v in NOTEBOOK_V1.items():
         assert abs(got[k] - v) < 5e-5, (k, got[k], v)
 
 
@@ -159,3 +173,51 @@ def test_dataset_normalizes_event_flags():
     fixed, rep = normalize_event_flags(bad)
     assert rep["drop_cleared_by_complete"] >= 1 and rep["quiz_from_pass"] >= 1 and rep["complete_from_quiz"] >= 1
     assert not (fixed["drop"] & fixed.complete).any() and (fixed.quiz_pass <= fixed.quiz).all() and (fixed.quiz <= fixed.complete).all()
+    one = ds.log.head(1).copy()                                     # 한 행에 세 가지 수정 → 행 수 1, 플래그 수정 3
+    one.loc[one.index[0], ["quiz_pass", "quiz", "complete", "drop"]] = [True, False, False, True]
+    _, rep1 = normalize_event_flags(one)
+    assert rep1["rows_changed"] == 1 and rep1["flag_fixes"] == 3
+    lg = ds.log.copy(); lg["score"] = 7                              # 입력 점수는 고치지 않은 행에서 유지되고, 고친 행만 다시 채점
+    lg.loc[lg.index[0], ["complete", "drop"]] = [True, True]
+    ds2 = Dataset(ds.profiles, lg, ds.catalog)
+    assert ds2.event_repairs["rows_changed"] == 1 and (ds2.log.score.values[1:] == 7).all() and ds2.log.score.values[0] in (2, 3)
+
+
+def test_pairwise_models_cover_only_pair_users(small_bundle):
+    obs = small_bundle.models.observed
+    for (snap, kind), w in obs.items():
+        if kind in ("mlp9_bpr", "mlp9_bpru", "mlp9_next"):          # 쌍에 나온 사용자만 '학습됨'
+            assert int(w.user_seen.sum()) == w.audit["pair_users"] == w.audit["users_with_pairs"]
+    m = {k: w for (s, k), w in obs.items() if s == small_bundle.reference.snapshot_key}
+    assert m["mlp9"].user_seen.sum() > m["mlp9_bpru"].user_seen.sum()   # 통과가 없는 사용자는 쌍별 모델에서 콘텐츠 대체 점수
+
+
+def test_leakage_probe_detects_future_reads(monkeypatch):
+    from etfrec import pipeline
+    from etfrec.config import TrainConfig
+    from etfrec.data import Dataset
+    from etfrec.features import build_features
+    ds = Dataset.synthetic(TrainConfig(n_learners=300))
+    ok, _ = pipeline.leakage_probe(ds, ds.catalog, (2, 3))
+    assert ok
+    monkeypatch.setattr(pipeline, "feature_store", lambda p, lg, c, w: build_features(p, lg[lg.week <= w], c, w))   # 정답 주를 읽는 잘못된 구현
+    ok2, detail = pipeline.leakage_probe(ds, ds.catalog, (2, 3))
+    assert not ok2 and "달라진 주 [2, 3]" in detail
+
+
+def test_pair_pools_use_full_rows_when_training_rows_are_subsampled():
+    from etfrec import neural
+    from etfrec.config import TrainConfig
+    from etfrec.data import Dataset
+    from etfrec.signals import supervised_from_log
+    ds = Dataset.synthetic(TrainConfig(n_learners=400))
+    lg = ds.log[ds.log.week < 3]
+    sup = supervised_from_log(lg, cap=int(len(lg) * 0.6), n_items=ds.catalog.n_items)
+    assert len(sup["u"]) < len(lg) and sup["pair_rows"] is not None and len(sup["pair_rows"]["u"]) == len(lg)
+    w = neural.fit_observed_model(sup["u"], sup["i"], sup["y"], sup["score"], ds.n_users, ds.catalog.n_items, "mlp9_bpru", epochs=1,
+                                  pair_rows=sup["pair_rows"])
+    assert w.audit["pair_source_rows"] == len(lg)
+    pr = sup["pair_rows"]
+    pairs = neural._observed_pairs(pr["u"], pr["i"], pr["y"], ds.catalog.n_items, np.random.default_rng(0), mode="unobserved")
+    seen = set(zip(pr["u"].tolist(), pr["i"].tolist()))
+    assert not any((u, j) in seen for u, j in zip(pairs["u"].tolist(), pairs["j"].tolist()))   # 미관측 음성은 실제로 시도한 단원이 아니다

@@ -220,7 +220,7 @@
     const ex = isExisting();
     $("#quiz-count").textContent = `${QUIZ.length}문항 · ${new Set(QUIZ.map(q => q.topic + "·" + q.level)).size}개 단원`;
     $("#quiz-note").textContent = ex ? "기존 학습자는 스냅샷 기록으로 수준을 추정합니다. 진단을 적용하려면 2단계에서 '이 프로필을 새 학습자로 복사'하세요."
-      : (state.learner.diagnosis ? `적용된 진단: ${state.learner.diagnosis.summary}` : "답한 문항만 채점합니다. 수준 2는 답한 수준1 문항 60%·수준2 문항 50% 이상, 수준 3은 여기에 수준2 75% 이상, 서로 다른 주제의 수준3 문항 2개 이상 정답, 수준3 정답률 60% 이상일 때 부여합니다. 한 단원에 문항이 둘이면 둘 다 맞혀야 통과로 기록하고, 규제 상식 문항(표시)은 수준 판정에만 씁니다.");
+      : (state.learner.diagnosis ? `적용된 진단: ${state.learner.diagnosis.summary}` : "정답률은 답한 문항으로 계산합니다. 수준 2는 수준1 문항 5개·수준2 문항 3개 이상을 답하고 수준1 60%·수준2 50% 이상 맞혔을 때, 수준 3은 여기에 수준3 문항 3개 이상을 답하고 수준2 75% 이상, 서로 다른 주제의 수준3 문항 2개 이상 정답, 수준3 정답률 60% 이상일 때 부여합니다(최소 응답 수를 못 채우면 판정 보류). 한 단원에 문항이 둘이면 둘 다 답하고 맞혀야 통과로 기록하고, 규제 상식 문항(표시)은 수준 판정에만 씁니다.");
     const A = state.quiz.answers;
     $("#quiz-list").innerHTML = QUIZ.map((q, i) => `<div class="qcard" id="qc-${q.id}"><div class="qhead"><span class="qnum">Q${i + 1}</span><span class="muted small">${esc(q.topic)} · 수준 ${q.level}${q.diagnostic_only ? " · 규제 상식(수준 판정용)" : ""}</span></div><div class="qtext">${esc(q.text)}</div><div class="qopts">` +
       q.options.map((o, j) => `<label><input type="radio" name="quiz-${q.id}" value="${j}" ${A[q.id] === j ? "checked" : ""}> ${esc(o)}</label>`).join("") + `</div><div class="qresult" id="qr-${q.id}"></div></div>`).join("");
@@ -231,7 +231,7 @@
     const R = state.quiz.result; const box = $("#quiz-result");
     if (!R) { box.hidden = true; $$(".qresult").forEach(el => { el.className = "qresult"; el.innerHTML = ""; }); return; }
     box.hidden = false;
-    $("#quiz-summary").innerHTML = `<span class="badge ok">진단 수준 ${R.level} · ${LEVEL_NAME[R.level]}</span><span class="badge">정답 ${R.correct}/${R.total}</span>` +
+    $("#quiz-summary").innerHTML = `<span class="badge ok">진단 수준 ${R.level} · ${LEVEL_NAME[R.level]}</span><span class="badge">정답 ${R.correct}/${R.answered} (전체 ${R.total}문항)</span>` +
       [1, 2, 3].map(l => `<span class="badge">수준${l} 문항 ${R.by_level[l].correct}/${R.by_level[l].total}</span>`).join("") + `<span class="badge">진단 통과 단원 ${R.mastered.length}개</span>`;
     R.results.forEach(r => {
       const el = $(`#qr-${r.id}`); if (!el) return;
@@ -249,7 +249,7 @@
     if (isExisting()) return toast("기존 학습자에는 적용할 수 없습니다. 2단계에서 새 학습자로 복사하세요");
     const L = state.learner;
     L.placement = R.level; state.touched.placement = true;
-    L.diagnosis = { level: R.level, correct: R.correct, total: R.total, summary: R.summary };
+    L.diagnosis = { level: R.level, correct: R.correct, answered: R.answered, total: R.total, summary: R.summary };
     L.events = L.events.filter(e => e.source !== "diagnosis").concat(R.events.map(e => ({ ...e, source: "diagnosis" })));
     invalidate(); renderTopics(); renderQuiz(); renderChecklist(); save();
     toast(`진단 적용: 수준 ${R.level}, 진단 통과 ${R.events.length}개 단원을 학습 기록에 추가했습니다`, 3500);
@@ -298,6 +298,7 @@
       `<div class="utitle">${esc(u.title)} ${u.item === nextItem ? '<span class="tag">다음 단원</span>' : ""}</div>` +
       `<div class="meta"><span>${esc(u.topic)}</span><span>수준 ${u.level}</span><span>약 ${u.minutes}분</span><span>${STATUS_KO[u.status]}</span>${u.concepts && u.concepts.length ? `<span>개념: ${esc(u.concepts.join(", "))}</span>` : ""}</div>` +
       (u.missing_prereqs.length ? `<div class="small warn-text">선수 단원 미이수: ${esc(u.missing_prereqs.join(", "))}</div>` : "") +
+      (u.caution ? `<div class="small warn-text">주의: ${esc(u.caution)}</div>` : "") +
       (u.sources && u.sources.length ? `<div class="small muted">자료: ${sourceLinks(u.sources)}</div>` : "") + lessonBlock(u.lesson) + `</div></li>`;
   }
   function lessonBlock(L) {
@@ -452,7 +453,7 @@
       const st = c.stats || {};
       return `<article class="type-card ${c.recommended_for_goal ? "rec" : ""} ${c.unlocked ? "unlocked" : ""}">
         <header><div><h3>${esc(c.name)}</h3><div class="muted small">위험 ${riskDots(c.risk)} · 적합 목적: ${esc(c.goals.join(", "))}</div></div>
-        <div class="tags">${c.recommended_for_goal ? '<span class="tag">이 목적에 권장</span>' : ""}<span class="tag ${c.unlocked ? "ok" : "lock"}">${c.unlocked ? "개념 모두 통과 · 열림" : `개념 ${c.concepts_passed}/${c.concepts_total} · 잠김`}</span></div></header>
+        <div class="tags">${c.recommended_for_goal ? '<span class="tag">이 목적에 권장</span>' : ""}${c.learn_only ? '<span class="tag lock">안정 성향: 학습용(권장 아님)</span>' : ""}<span class="tag ${c.unlocked ? "ok" : "lock"}">${c.unlocked ? "개념 모두 통과 · 열림" : `개념 ${c.concepts_passed}/${c.concepts_total} · 잠김`}</span></div></header>
         <p>${esc(c.description)}</p>
         <div class="concepts">${c.concepts.map(k => `<span class="chip ${k.passed ? "passed" : ""}" title="${esc(k.topic)} · 수준 ${k.level}">${k.passed ? "✓ " : ""}${esc(k.title)}</span>`).join("")}</div>
         <dl class="kvl"><dt>세금</dt><dd>${esc(c.tax)}</dd><dt>연금계좌</dt><dd>${esc(c.pension)}</dd>${c.regulation ? `<dt>규제·사전교육</dt><dd class="warn-text">${esc(c.regulation)}</dd>` : ""}<dt>주의</dt><dd>${c.cautions.map(x => esc(x)).join(" / ")}</dd></dl>
@@ -496,7 +497,7 @@
     if (ds.goals) html += `<p class="muted small">투자 목적 분포: ${Object.entries(ds.goals).map(([g, n]) => `${esc(META.goals[g] || g)} ${Number(n).toLocaleString()}`).join(" · ")}</p>`;
     if (EVAL.privacy && EVAL.privacy.quasi) { const P = EVAL.privacy, q = P.quasi, lf = (P.router_leaves || {})[EVAL.selection.operational], rl = P.release || {};   // 측정한 것만 표시(충족 여부를 꾸미지 않는다)
       html += `<p class="muted small">개인정보 점검: 저장 준식별자 ${q.columns.length}개 조합(k=${q.k}) ${q.groups.toLocaleString()}개 셀 중 k 미만 ${q.groups_below_k.toLocaleString()}개(${q.users_below_k.toLocaleString()}명)${q.satisfied ? "" : " → 학습자 단위 표는 export-deid로 일반화·억제한 것만 반출"}${rl.satisfied ? `(k=${q.k} 표 ${rl.rows_out.toLocaleString()}/${rl.rows_in.toLocaleString()}행)` : ""}` +
-        (lf ? ` · 운영 라우터 잎 ${lf.leaves}개 중 ${lf.threshold}명 미만 ${lf.leaves_below}개(${lf.users_in_small_leaves.toLocaleString()}명), 최소 ${lf.min_leaf}명 — 잎 크기는 보장되지 않으며 ${lf.min_users_param}명 미만 노드는 상위 노드 추정으로 챔피언을 정함${lf.distinct_leaf_champions != null ? ` · 잎 챔피언 ${lf.distinct_leaf_champions}종${lf.lam >= 1e8 ? "(λ=∞: 모든 잎이 전역 챔피언)" : ""}` : ""}` : "") + `</p>`; }
+        (lf ? ` · 운영 라우터 잎 ${lf.leaves}개 중 ${lf.threshold}명 미만 ${lf.leaves_below}개(${lf.users_in_small_leaves.toLocaleString()}명), 최소 ${lf.min_leaf}명 — 잎 크기는 보장되지 않으며 ${lf.min_users_param}명 미만 노드는 상위 노드 추정으로 챔피언을 정함` : "") + `</p>`; }
     html += `<h4>방법별 NDCG@5 (사용자 평균, 테스트 ${EVAL.test_audit.week}주차)</h4>` + res.map(r => `<div class="evbar ${r.method === opName ? "op" : ""}"><span title="${esc(r.method)}">${esc(r.method)}</span><div class="ebar"><i style="width:${(100 * r.ndcg / maxN).toFixed(1)}%"></i></div><span class="num">${fmt(r.ndcg, 4)}</span></div>`).join("");
     const hasAct = res.some(r => r.ndcg_active != null);
     html += `<div class="table-wrap"><table class="table"><tr><th>방법</th><th>NDCG@5 (전체)</th>${hasAct ? "<th>NDCG@5 (활성 사용자)</th>" : ""}<th>Diversity@5</th><th>Hit@5</th>${hasAct ? "<th>Hit@5 (활성)</th>" : ""}${hasPre ? "<th>선수 미이수 비율</th>" : ""}<th>전역 1위 대비 차이 [95% 구간]</th></tr>` + res.map(r => `<tr><td>${esc(r.method)}</td><td class="num">${fmt(r.ndcg)}</td>${hasAct ? `<td class="num">${fmt(r.ndcg_active)}</td>` : ""}<td class="num">${fmt(r.diversity, 3)}</td><td class="num">${fmt(r.hit_diagnostic, 3)}</td>${hasAct ? `<td class="num">${fmt(r.hit_active, 3)}</td>` : ""}${hasPre ? `<td class="num">${r.prereq_violation_rate != null ? fmt(r.prereq_violation_rate, 3) : "–"}</td>` : ""}<td class="num">${fmt(r.difference_vs_global)} [${fmt(r.ci_low)}, ${fmt(r.ci_high)}]</td></tr>`).join("") + `</table></div>`;

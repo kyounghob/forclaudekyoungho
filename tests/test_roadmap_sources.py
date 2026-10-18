@@ -164,3 +164,56 @@ def test_bpr_models_train_and_rank():
     pairs = next_week_pairs(log, 20, seed=1)
     wn = neural.fit_observed_model(u, i, y, y, 30, 20, "mlp9_next", seed=1, epochs=5, pairs=pairs)
     assert wn.audit["pairs"] == len(pairs["u"]) > 0 and np.isfinite(wn.score(np.array([1]), np.array([2]))).all()
+
+
+def test_quiz_unit_needs_all_its_questions_and_levels_need_minimum_answers():
+    A = {q["id"]: q["answer"] for q in QUESTIONS}
+    tax3 = cat.unit("해외 ETF", 3)
+    r = score_quiz({"q13": A["q13"]}, cat)                          # 같은 단원의 다른 문항(q18)을 건너뛰면 통과로 기록하지 않는다
+    assert tax3 not in [e["item"] for e in r["events"]] and r["withheld_units"]
+    r = score_quiz({k: A[k] for k in ("q01", "q10", "q13", "q14")}, cat)   # 네 문항만 골라 맞혀도 높은 수준이 나오지 않는다
+    assert r["level"] == 1 and r["withheld_levels"] == [2, 3]
+    r = score_quiz({q["id"]: q["answer"] for q in QUESTIONS if q["level"] > 1}, cat)   # 수준1 문항을 건너뛰면 판정 보류
+    assert r["level"] == 1 and 2 in r["withheld_levels"]
+    full = score_quiz(A, cat)
+    assert full["level"] == 3 and not full["withheld_levels"] and not full["withheld_units"]
+    assert score_quiz({k: v for k, v in A.items() if k != "q18"}, cat)["withheld_units"]
+
+
+def test_core_compounding_unit_types_and_classification():
+    from types import SimpleNamespace as NS
+    from etfrec.roadmap import build_roadmap
+    from etfrec.sources.krx import classify_row
+    from etfrec.taxonomy import COMMON_CORE, learn_only_types, types_for_goal
+    lev2 = cat.unit("레버리지·인버스", 2)
+    assert ("레버리지·인버스", 2) in COMMON_CORE
+    for goal in ROADMAP_TEMPLATES:                                    # 모든 목적·성향의 필수 기초에 음의 복리 단원이 있다
+        for risk in (0, 1, 2):
+            rm = build_roadmap(cat, goal, risk, "mid", 1, np.zeros(cat.n_items, bool))
+            core = next(s for s in rm["stages"] if s["key"] == "core")
+            assert lev2 in [u["item"] for u in core["units"]], (goal, risk)
+    for t in ETF_TYPES:                                               # 적합 목적 = 템플릿 연결(한 원천)
+        assert t["goals"] == [g for g, tpl in ROADMAP_TEMPLATES.items() if t["key"] in tpl["types"]] and t["goals"], t["key"]
+    assert "leverage_inverse" not in types_for_goal("trading", 0) and learn_only_types("trading", 0) == ["leverage_inverse"]
+    assert "leverage_inverse" in types_for_goal("trading", 2) and not learn_only_types("trading", 2)
+    k = lambda nm: classify_row(NS(name=nm, asset_class="", market_class="", multiplier=""))
+    assert k("TIGER 200 금융") != "commodity_fx" and k("KODEX 금융지주") != "commodity_fx" and k("ACE KRX금현물") == "commodity_fx"
+    assert "2026-08-19부터 사전교육 총 3시간" in LEVERAGE_RULES
+
+
+def test_catalog_csv_rejects_bad_prereqs_and_cycles(tmp_path):
+    import pytest
+    from etfrec.catalog import find_prereq_cycle
+    df = cat.to_frame()
+    ok = tmp_path / "ok.csv"; df.to_csv(ok, index=False)
+    assert Catalog.from_csv(str(ok)).prereqs == cat.prereqs and not find_prereq_cycle(cat.prereqs)
+    for bad in ("-1", str(cat.n_items), "0"):                         # 음수·범위 밖·자기 자신(item 0)
+        d = df.copy(); d.loc[0, "prereqs"] = bad
+        p = tmp_path / f"bad{bad}.csv"; d.to_csv(p, index=False)
+        with pytest.raises(ValueError):
+            Catalog.from_csv(str(p))
+    d = df.copy(); first = int(df.loc[df.prereqs.astype(str).str.len() > 0, "item"].iloc[0])
+    pre = int(str(df.loc[first, "prereqs"]).split(";")[0]); d.loc[pre, "prereqs"] = str(first)   # 서로를 선수로 → 순환
+    p = tmp_path / "cycle.csv"; d.to_csv(p, index=False)
+    with pytest.raises(ValueError, match="순환"):
+        Catalog.from_csv(str(p))

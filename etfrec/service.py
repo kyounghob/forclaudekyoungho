@@ -17,7 +17,7 @@ from .quiz import public_questions, score_quiz
 from .roadmap import build_roadmap
 from .sources import load_etf_universe, type_stats
 from .sources.registry import SOURCES, source_info, sources_for_items
-from .taxonomy import ETF_TYPES, ROADMAP_TEMPLATES, TYPE_BY_KEY, goal_label, horizon_label, types_for_goal
+from .taxonomy import ETF_TYPES, ROADMAP_TEMPLATES, TYPE_BY_KEY, goal_label, horizon_label, learn_only_types, types_for_goal
 from .data import score_attempts
 from .evaluation import candidate_items, choose_items
 from .features import AGE_BAND_REP, build_features, income_representatives
@@ -378,15 +378,17 @@ class RecommendationService:
             goal = goal or ctx["goal"]; risk = int(lb.risk[0]) if risk is None else int(risk); passed = lb.und[0]
         goal = goal if goal in GOALS else "long_term"; risk = 1 if risk is None else int(risk)
         keys = types_for_goal(goal, risk)
+        learn = learn_only_types(goal, risk)                         # 목적에는 있지만 안정 성향이라 권장하지 않는 유형
         stats = {t["key"]: t for t in self._type_stats}
         cards = []
-        for key in keys + [t["key"] for t in ETF_TYPES if t["key"] not in keys]:
+        for key in keys + learn + [t["key"] for t in ETF_TYPES if t["key"] not in keys and t["key"] not in learn]:
             t = TYPE_BY_KEY[key]
             units = [self.catalog.unit(tp, lv) for tp, lv in t["concepts"]]
             units = [u for u in units if u is not None]
             concepts = [dict(self.catalog.item_info(u), passed=bool(passed[u]) if passed is not None else None) for u in units]
             n_pass = sum(1 for c in concepts if c["passed"]) if passed is not None else 0
             cards.append(dict(key=key, name=t["name"], description=t["description"], risk=t["risk"], recommended_for_goal=key in keys,
+                              learn_only=key in learn,
                               goals=[goal_label(g) for g in t["goals"]], tax=t["tax"], pension=t["pension"], regulation=t["regulation"],
                               cautions=t["cautions"], concepts=concepts, concepts_passed=n_pass, concepts_total=len(concepts),
                               unlocked=(passed is not None and n_pass == len(concepts)), stats=stats.get(key),

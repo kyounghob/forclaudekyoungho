@@ -272,7 +272,7 @@ def train(dataset: Dataset, cfg: TrainConfig = None, out_dir: str = None, enable
     bundle.privacy = privacy_audit(bundle.profiles, bundle.routers, store=bundle.store,
                                    published=dict(group_results=cells_g, advanced_exposure=cells_e))
     qa = bundle.qa = run_qa(cands_test, catalog, results, predictions, F_test, models, selection, dataset, allowed_ngi, uses, lb_test,
-                            bundle=bundle)
+                            bundle=bundle, weeks=(cfg.val_week, cfg.test_week))
     logger(f"QA {len(qa)}건 통과, 총 {time.time() - t0:.1f}초")
     if out_dir:
         bundle.save(out_dir)
@@ -300,7 +300,30 @@ def score_and_select_rows(algo: Algo, bank: SignalBank, lb: LearnerBatch, catalo
     return choose_items(bank.cands, lb, catalog, S, rows, K, guard)
 
 
-def run_qa(cands_test, catalog, results, predictions, F_test, models, selection, dataset, allowed_ngi, uses, lb_test, bundle=None) -> list:
+def leakage_probe(dataset, catalog, weeks, seed: int = 42) -> tuple:
+    """누수 검사: 기준 주 이후의 로그 행(정답 주 포함)을 섞어도 각 스냅샷의 특징 저장소가 그대로인지 확인한다.
+    모델 학습 행(supervised_from_log)과 목표 정렬 쌍은 호출 쪽에서 LOG[LOG.week < 기준 주]로 잘라 넘기므로 특징 저장소가 남은 경로다."""
+    lg = dataset.log
+    rng = np.random.default_rng(seed + 97)
+    changed, checked = [], []
+    for w in weeks:
+        fut = np.flatnonzero((lg.week >= w).values)
+        if not len(fut):
+            continue
+        pert = lg.copy()
+        for c in ("item", "quiz_pass", "complete", "save", "drop", "score", "understood"):
+            vals = pert[c].values.copy(); vals[fut] = rng.permutation(vals[fut]); pert[c] = vals
+        A, B = feature_store(dataset.profiles, lg, catalog, w), feature_store(dataset.profiles, pert, catalog, w)
+        same = ((A.Rw != B.Rw).nnz == 0 and (A.Rw_conf != B.Rw_conf).nnz == 0 and A.users.equals(B.users)
+                and all(np.array_equal(getattr(A, k), getattr(B, k)) for k in ("nu", "codes", "pref", "level", "und", "ev_user", "ev_item")))
+        checked.append(int(w))
+        if not same:
+            changed.append(int(w))
+    return not changed and bool(checked), f"기준 주 {checked}: 이후 행(정답 주 포함)을 섞은 뒤 특징 저장소 비교, 달라진 주 {changed}"
+
+
+def run_qa(cands_test, catalog, results, predictions, F_test, models, selection, dataset, allowed_ngi, uses, lb_test, bundle=None,
+           weeks=None) -> list:
     """강의 지표 함수와 벡터화 구현의 일치, 빈칸·짧은 목록, 가드레일, 중복, 학습 감사 항목을 검사한다.
     bundle을 주면(조립 직후·저장 전) 개인정보 검사 5개(etfrec.privacy.privacy_checks)도 같은 규칙으로 실행한다."""
     QA = []
@@ -338,6 +361,10 @@ def run_qa(cands_test, catalog, results, predictions, F_test, models, selection,
             check("MF_BPR_trained_at_two_snapshots", len({x.get("snapshot") for x in bpr}) >= 2 and all(x["final_negative_collisions"] == 0 for x in bpr))
         check("observed_models_trained_at_validation_and_test_snapshots",
               len({x.get("snapshot") for x in models.audit if x["model"] in ("mf_observed", "mlp9")}) >= 2)
+        pw = [w for (_, kind), w in models.observed.items() if kind in ("mlp9_bpr", "mlp9_bpru", "mlp9_next")]
+        if pw:      # 쌍별 모델은 쌍에 나온 사용자만 모델 점수를 받고 나머지는 콘텐츠 대체 점수를 받는다
+            check("pairwise_models_score_only_pair_users", all(int(w.user_seen.sum()) == w.audit.get("pair_users", -1) for w in pw),
+                  [(w.kind, int(w.user_seen.sum()), w.audit.get("pair_users")) for w in pw])
     a = np.array([0, 1, 2, 0, 1, 2]); inter = np.array([[0], [1]])
     correct = (a[None, :, None] == inter[:, None, :]).any(-1)
     check("per_user_interest_broadcast", not np.array_equal(correct[0], correct[1]))
@@ -365,6 +392,9 @@ def run_qa(cands_test, catalog, results, predictions, F_test, models, selection,
         passed_rec = F_test.und[cands_test.user[:, None], np.maximum(it, 0)] & valid
         check(f"no_passed_unit_recommended_{name}", not passed_rec.any())
     check("selection_operational_is_locked", selection["operational_algorithm"] is not None)
+    if weeks:                   # 누수: 기준 주 이후 행을 섞어도 스냅샷 입력이 같아야 한다
+        ok_leak, leak_detail = leakage_probe(dataset, catalog, weeks)
+        check("no_future_leakage_feature_store", ok_leak, leak_detail)
     if bundle is not None:      # 개인정보: 원값·일분 비저장, 공개 셀 ≥ 5, 감사 열 누락 없음(실패하면 학습 중단, 번들 미저장)
         for name, ok, details in privacy_checks(bundle):
             check(name, ok, details)

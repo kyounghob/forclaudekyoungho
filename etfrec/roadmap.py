@@ -11,6 +11,7 @@ from .catalog import Catalog
 from .taxonomy import COMMON_CORE, ROADMAP_TEMPLATES, TYPE_BY_KEY, goal_label, horizon_label, types_for_goal
 
 STAGE_DEFS = [("diagnosis", "진단"), ("core", "필수 기초 개념"), ("goal", "목적별 핵심 개념"), ("advanced", "심화·리스크"), ("connect", "ETF 유형 연결")]
+SHORT_ISA_CAUTION = "투자 기간이 1년 미만이면 ISA 의무가입 3년(중도 해지 시 혜택 상실)과 맞지 않을 수 있다. 계좌를 열기 전에 자금 사용 시점을 확인한다"
 
 
 def _closure(catalog: Catalog, items: list) -> list:
@@ -65,7 +66,7 @@ def build_roadmap(catalog: Catalog, goal: str, risk: int, horizon: str, level: i
         if key == "diagnosis":
             d = diagnosis or {}
             stages.append(dict(key=key, name=name, units=[], passed=1 if d else 0, total=1, minutes_left=0, done=bool(d) or int(passed.sum()) > 0,
-                               note=(f"진단 수준 {d.get('level')} · 맞힌 문항 {d.get('correct')}/{d.get('total')}" if d else
+                               note=(f"진단 수준 {d.get('level')} · 맞힌 문항 {d.get('correct')}/{d.get('answered', d.get('total'))}(전체 {d.get('total')}문항)" if d else
                                      f"추정 수준 {level} (학습 기록 {int(passed.sum())}개 통과)")))
             continue
         if key == "connect":
@@ -86,9 +87,10 @@ def build_roadmap(catalog: Catalog, goal: str, risk: int, horizon: str, level: i
             total_min += info["minutes"]
             if not passed[i]:
                 left_min += info["minutes"]
+            caution = (SHORT_ISA_CAUTION if horizon == "short" and info["topic"] == "절세 계좌" else None)
             units.append(dict(item=i, item_id=info["item_id"], title=info["title"], topic=info["topic"], level=info["level"], status=status,
                               minutes=info["minutes"], missing_prereqs=[catalog.item_title[p] for p in missing], sources=info["sources"],
-                              concepts=info["concepts"], lesson=info.get("lesson")))
+                              concepts=info["concepts"], lesson=info.get("lesson"), caution=caution))
             if current is None and status == "available" and next_unit is None:
                 next_unit = i
         done = n_pass == len(units)

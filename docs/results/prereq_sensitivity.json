@@ -2,50 +2,50 @@
  {
   "prereq_penalty": 0.8,
   "users": 1284,
-  "validation_best": 0.14491938430621962,
+  "validation_best": 0.14499531694146164,
   "operational": "규칙[관심 주제+수준 일치+소득 구간 주제+모바일·짧은 콘텐츠+투자 목적 일치+로드맵 단계 우선순위](base=연령대+소득분위)",
-  "seconds": 27.7,
+  "seconds": 33.0,
   "quiz_pass": 4786,
   "attempts": 21634,
   "Global": {
-   "ndcg": 0.12633303917518804,
-   "prereq_violation_rate": 0.5390965732087227,
+   "ndcg": 0.12657321758221596,
+   "prereq_violation_rate": 0.5398753894080996,
    "short_list_rate": 0.0,
-   "diversity": 0.913317757009346,
+   "diversity": 0.9132398753894082,
    "ci_low": 0.0,
    "ci_high": 0.0
   },
   "RouterNoGender": {
-   "ndcg": 0.12561611227704392,
-   "prereq_violation_rate": 0.538785046728972,
+   "ndcg": 0.1258696916941606,
+   "prereq_violation_rate": 0.5394080996884735,
    "short_list_rate": 0.0,
-   "diversity": 0.9118380062305297,
-   "ci_low": -0.001791871158963873,
-   "ci_high": 0.0001916787688708352
+   "diversity": 0.9116822429906543,
+   "ci_low": -0.0017514666293190707,
+   "ci_high": 0.00017835963205558837
   },
   "RouterNoGender+prereq": {
    "ndcg": 0.10145711644606392,
    "prereq_violation_rate": 0.0,
    "short_list_rate": 0.5241433021806854,
    "diversity": 0.9977933541017652,
-   "ci_low": -0.03510884954553512,
-   "ci_high": -0.014327656269608661
+   "ci_low": -0.0354499678159708,
+   "ci_high": -0.014630031760212494
   },
   "POP": {
    "ndcg": 0.10155200088636837,
    "prereq_violation_rate": 0.37258566978193147,
    "short_list_rate": 0.0,
    "diversity": 1.0,
-   "ci_low": -0.03664704487191106,
-   "ci_high": -0.015177100600526823
+   "ci_low": -0.036938845199263146,
+   "ci_high": -0.015365652078931258
   },
   "UCF": {
    "ndcg": 0.10388918654593746,
    "prereq_violation_rate": 0.7601246105919003,
    "short_list_rate": 0.0,
    "diversity": 0.9609034267912774,
-   "ci_low": -0.034016058786911406,
-   "ci_high": -0.011027408182841918
+   "ci_low": -0.034340886488430485,
+   "ci_high": -0.01156995814940535
   }
  },
  {
@@ -53,22 +53,22 @@
   "users": 1284,
   "validation_best": 0.14097959219493988,
   "operational": "아이템 CF(λ=10, confidence) ⊕ 규칙[관심 주제+투자 목적 일치+로드맵 단계 우선순위] (α_u, λ=30)",
-  "seconds": 26.3,
+  "seconds": 30.5,
   "quiz_pass": 2312,
   "attempts": 21634,
   "Global": {
-   "ndcg": 0.12943281256277886,
-   "prereq_violation_rate": 0.3110591900311526,
+   "ndcg": 0.12945373967321758,
+   "prereq_violation_rate": 0.31121495327102805,
    "short_list_rate": 0.0,
-   "diversity": 0.9552959501557633,
+   "diversity": 0.9552180685358257,
    "ci_low": 0.0,
    "ci_high": 0.0
   },
   "RouterNoGender": {
-   "ndcg": 0.12943281256277886,
-   "prereq_violation_rate": 0.3110591900311526,
+   "ndcg": 0.12945373967321758,
+   "prereq_violation_rate": 0.31121495327102805,
    "short_list_rate": 0.0,
-   "diversity": 0.9552959501557633,
+   "diversity": 0.9552180685358257,
    "ci_low": 0.0,
    "ci_high": 0.0
   },
@@ -77,7 +77,7 @@
    "prereq_violation_rate": 0.0,
    "short_list_rate": 0.6978193146417445,
    "diversity": 0.999766355140187,
-   "ci_low": -0.007321328831022725,
+   "ci_low": -0.0073542890299636825,
    "ci_high": 0.0021839744555472262
   },
   "POP": {
@@ -86,15 +86,15 @@
    "short_list_rate": 0.0,
    "diversity": 1.0,
    "ci_low": -0.010309372542268613,
-   "ci_high": 0.0032472586153800688
+   "ci_high": 0.003206450750024598
   },
   "UCF": {
    "ndcg": 0.07871546082172068,
    "prereq_violation_rate": 0.7006230529595016,
    "short_list_rate": 0.0,
    "diversity": 0.9625389408099689,
-   "ci_low": -0.05998818271113935,
-   "ci_high": -0.03959900364310572
+   "ci_low": -0.06000910982157806,
+   "ci_high": -0.039608944020564106
   }
  },
  {
@@ -102,22 +102,22 @@
   "users": 1284,
   "validation_best": 0.15781659610235205,
   "operational": "규칙[관심 주제+로드맵 단계 우선순위](base=전체)",
-  "seconds": 25.4,
+  "seconds": 44.0,
   "quiz_pass": 1480,
   "attempts": 21634,
   "Global": {
    "ndcg": 0.14742303879330979,
-   "prereq_violation_rate": 0.24657320872274144,
+   "prereq_violation_rate": 0.2467289719626168,
    "short_list_rate": 0.0,
-   "diversity": 0.9735202492211839,
+   "diversity": 0.9732866043613707,
    "ci_low": 0.0,
    "ci_high": 0.0
   },
   "RouterNoGender": {
    "ndcg": 0.14742303879330979,
-   "prereq_violation_rate": 0.24657320872274144,
+   "prereq_violation_rate": 0.2467289719626168,
    "short_list_rate": 0.0,
-   "diversity": 0.9735202492211839,
+   "diversity": 0.9732866043613707,
    "ci_low": 0.0,
    "ci_high": 0.0
   },

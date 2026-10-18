@@ -185,9 +185,13 @@ class ObservedWeights:
         return (eu * ei).sum(1)
 
 
-def fit_observed_model(u, i, y, score, n_users, n_items, kind: str, seed: int = 42, epochs: int = 12, pairs: dict = None) -> ObservedWeights:
+def fit_observed_model(u, i, y, score, n_users, n_items, kind: str, seed: int = 42, epochs: int = 12, pairs: dict = None,
+                       pair_rows: dict = None, pair_cap: int = 400000) -> ObservedWeights:
     """관측된 (사용자, 아이템, 라벨) 행으로 학습한다(mlp9·mf_observed는 노출되지 않은 쌍을 만들어 넣지 않는다).
-    쌍별 종류: mlp9_bpr(음성 = 시도했지만 미통과), mlp9_bpru(음성 = 시도하지 않은 단원), mlp9_next(목표 정렬 쌍을 pairs로 받음)."""
+    쌍별 종류: mlp9_bpr(음성 = 시도했지만 미통과), mlp9_bpru(음성 = 시도하지 않은 단원), mlp9_next(목표 정렬 쌍을 pairs로 받음).
+    쌍별 종류는 쌍에 한 번이라도 나온 사용자·단원만 '학습됨'(user_seen·item_seen)으로 표시한다. 쌍이 없는 사용자(예: 학습 주에
+    통과가 없는 사용자)는 학습되지 않은 임베딩 대신 신호 계산 단계의 콘텐츠 유사도 대체 점수를 받는다(signals.build_signals).
+    pair_rows: 학습 행을 부분표본으로 줄였을 때 쌍의 양성·음성 풀을 만들 전체 관측 행(u·i·y). 없으면 u·i·y를 쓴다."""
     require_torch("관측 모델 학습")
     u = np.asarray(u, np.int64); i = np.asarray(i, np.int64)
     y = np.asarray(y if kind in MLP_KINDS else score, np.float32)
@@ -197,17 +201,23 @@ def fit_observed_model(u, i, y, score, n_users, n_items, kind: str, seed: int = 
         raise ValueError("라벨은 [0, 1] 범위의 유한한 값이어야 합니다")
     user_seen = np.bincount(u, minlength=n_users) > 0; item_seen = np.bincount(i, minlength=n_items) > 0
     rng = np.random.default_rng(seed + 71); losses = []
-    if kind == "mlp9_bpr":                                       # 쌍별: 같은 사용자의 (통과 단원, 미통과 시도 단원) 쌍
-        pairs = _observed_pairs(u, i, y, n_items, rng, mode="observed")
-    elif kind == "mlp9_bpru":                                    # 쌍별: (통과 단원, 시도하지 않은 단원) — 양성 vs 미관측
-        pairs = _observed_pairs(u, i, y, n_items, rng, mode="unobserved")
+    if kind in ("mlp9_bpr", "mlp9_bpru"):                       # 쌍별: (통과 단원, 미통과 시도 단원) 또는 (통과 단원, 시도하지 않은 단원)
+        src = pair_rows if pair_rows is not None else dict(u=u, i=i, y=y)
+        pairs = _observed_pairs(np.asarray(src["u"], np.int64), np.asarray(src["i"], np.int64), np.asarray(src["y"], np.float32), n_items, rng,
+                                mode="observed" if kind == "mlp9_bpr" else "unobserved")
+        if len(pairs["u"]) == 0:
+            raise ValueError("쌍별 학습 쌍이 없습니다(학습 행에 통과가 없음)")
+        if pair_cap and len(pairs["u"]) > pair_cap:                # 학습 배치만 줄인다(양성·음성 풀은 전체 행 기준)
+            ix = np.sort(rng.choice(len(pairs["u"]), pair_cap, replace=False))
+            pairs = {k: (v[ix] if isinstance(v, np.ndarray) else v) for k, v in pairs.items()}
     elif kind == "mlp9_next":
         if not pairs or len(pairs.get("u", [])) == 0:
             raise ValueError("목표 정렬 쌍(next_pairs)이 없습니다")
-        user_seen = np.bincount(pairs["u"], minlength=n_users) > 0
-        item_seen = (np.bincount(pairs["i"], minlength=n_items) + np.bincount(pairs["j"], minlength=n_items)) > 0
     else:
         pairs = None
+    if pairs is not None:                                        # 쌍별 모델은 쌍에 나온 사용자·단원만 학습된다
+        user_seen = np.bincount(pairs["u"], minlength=n_users) > 0
+        item_seen = (np.bincount(pairs["i"], minlength=n_items) + np.bincount(pairs["j"], minlength=n_items)) > 0
     with torch.random.fork_rng():
         torch.manual_seed(seed + 71)
         if kind in MLP_KINDS:
@@ -261,7 +271,9 @@ def fit_observed_model(u, i, y, score, n_users, n_items, kind: str, seed: int = 
         neg_desc = {"mlp9_bpr": "같은 사용자의 미통과 시도 단원(없으면 미시도 단원)", "mlp9_bpru": "같은 사용자가 시도하지 않은 단원",
                     "mlp9_next": "학습 주 w 이전에 통과하지 않았고 w에도 통과하지 않은 단원(양성 = w의 통과 단원)"}[kind]
         audit.update(pairs=int(len(pairs["u"])), pairs_with_observed_negative=int(np.asarray(pairs.get("observed_negative", np.zeros(0, bool))).sum()),
-                     loss=f"BPR pairwise −ln σ(f(u,i) − f(u,j)); j = {neg_desc}", users_with_pairs=int(user_seen.sum()))
+                     loss=f"BPR pairwise −ln σ(f(u,i) − f(u,j)); j = {neg_desc}", users_with_pairs=int(user_seen.sum()),
+                     pair_users=int(len(np.unique(pairs["u"]))), items_with_pairs=int(item_seen.sum()),
+                     pair_source_rows=int(len(pair_rows["u"])) if pair_rows is not None else int(len(u)))
     return ObservedWeights(kind, ue, ie, W1, b1, W2, b2, user_seen, item_seen, audit)
 
 

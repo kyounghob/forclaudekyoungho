@@ -1,9 +1,10 @@
 """진단 퀴즈: 20문항으로 수준(1~3)과 이미 아는 단원을 추정한다.
 
 맞힌 문항의 단원은 '진단 통과' 이벤트(quiz_pass)가 되어 추천 후보에서 빠지고, 틀린 문항은 기록하지 않는다
-(진단은 배치이지 실패 기록이 아니다). 문항은 카탈로그 단원 하나에 대응하며, 한 단원에 문항이 둘 이상이면 답한 문항을 모두
-맞혀야 그 단원을 통과로 기록한다(이벤트는 단원마다 한 번). ``marks_pass=False`` 문항(레버리지 거래 요건 같은 규제 상식)은
-단원 내용 전체를 검사하지 않으므로 수준 판정에만 쓰고 단원을 통과 처리하지 않는다. 정답 위치는 보기 4개에 고르게 나눴다.
+(진단은 배치이지 실패 기록이 아니다). 문항은 카탈로그 단원 하나에 대응하며, 한 단원에 문항이 둘 이상이면 그 문항을 모두
+답하고 모두 맞혀야 그 단원을 통과로 기록한다(하나라도 건너뛰면 판정 보류, 이벤트는 단원마다 한 번). ``marks_pass=False`` 문항(레버리지
+거래 요건 같은 규제 상식)은 단원 내용 전체를 검사하지 않으므로 수준 판정에만 쓰고 단원을 통과 처리하지 않는다. 수준은 수준별 최소
+응답 수(MIN_ANSWERED)를 채워야 판정한다. 정답 위치는 보기 4개에 고르게 나눴다.
 """
 from __future__ import annotations
 
@@ -70,7 +71,7 @@ QUESTIONS = [
     dict(id="q20", topic="레버리지·인버스", level=3, text="국내 개인투자자가 레버리지·인버스 ETP를 처음 매수하려면?",
          options=["아무 조건 없이 바로 살 수 있다", "사전교육 이수·증권사 등록과 기본예탁금(일반 1,000만원, 단일종목형은 현금 3,000만원)이 필요하다", "연금계좌를 먼저 개설해야 한다", "총보수만 확인하면 된다"], answer=1,
          marks_pass=False,
-         explain="사전교육(약 1시간)과 기본예탁금 1,000만원이 모두 필요하다. 단일종목 레버리지·인버스는 2026년 7월 31일부터 현금 3,000만원(추가 매수 포함, 대용증권 불인정), 사전교육 총 3시간, 8월 19일부터 신규 투자자 모의거래 5시간이 더 필요하다. 요건을 못 채우면 매수 주문이 들어가지 않는다(2026-10-13 기준). 이 문항은 규제 상식이라 수준 판정에만 쓰고 단원을 통과 처리하지 않는다."),
+         explain="사전교육(약 1시간)과 기본예탁금 1,000만원이 모두 필요하다. 단일종목 레버리지·인버스는 2026년 7월 31일부터 현금 3,000만원(추가 매수 포함, 대용증권 불인정)이 필요하고, 8월 19일부터는 사전교육이 총 3시간(기본 1 + 심화 2)으로 늘고 신규 투자자는 모의거래 5시간도 마쳐야 한다. 요건을 못 채우면 매수 주문이 들어가지 않는다(2026-10-13 기준). 이 문항은 규제 상식이라 수준 판정에만 쓰고 단원을 통과 처리하지 않는다."),
 ]
 
 
@@ -80,11 +81,16 @@ def public_questions() -> list:
                  diagnostic_only=not q.get("marks_pass", True)) for q in QUESTIONS]
 
 
+MIN_ANSWERED = {1: 5, 2: 3, 3: 3}      # 그 수준을 판정하려면 답해야 하는 최소 문항 수(몇 문항만 골라 답해 높은 수준이 나오지 않게)
+
+
 def score_quiz(answers: dict, catalog: Catalog) -> dict:
     """answers: {문항 id: 고른 보기 번호}. → 수준, 맞힌 단원, 진단 이벤트, 문항별 결과.
 
-    답한 문항만 채점한다(수준별 정답률의 분모 = 그 수준에서 답한 문항 수). 수준 2: 수준1 정답률 60% 이상이고 수준2 정답률 50% 이상.
-    수준 3: 수준 2 조건에 더해 수준2 정답률 75% 이상, 서로 다른 주제의 수준3 문항 2개 이상 정답, 수준3 정답률 60% 이상.
+    수준별 정답률의 분모는 그 수준에서 답한 문항 수다. 수준 2: 수준1 문항을 5개 이상·수준2 문항을 3개 이상 답했고 수준1 정답률 60%
+    이상, 수준2 정답률 50% 이상. 수준 3: 수준 2 조건에 더해 수준3 문항을 3개 이상 답했고 수준2 정답률 75% 이상, 서로 다른 주제의
+    수준3 문항 2개 이상 정답, 수준3 정답률 60% 이상. 최소 응답 수를 못 채운 수준은 판정을 보류한다(그 아래 수준으로 시작).
+    단원은 그 단원의 통과 판정 문항(marks_pass)을 모두 답하고 모두 맞혀야 '진단 통과'로 기록한다. 하나라도 답하지 않으면 판정 보류.
     """
     by_level = {1: [0, 0], 2: [0, 0], 3: [0, 0]}
     results, unit_ok, l3_topics = [], {}, set()
@@ -101,23 +107,37 @@ def score_quiz(answers: dict, catalog: Catalog) -> dict:
         item = catalog.unit(q["topic"], q["level"])
         results.append(dict(id=q["id"], topic=q["topic"], level=q["level"], answered=answered, correct=bool(correct),
                             correct_option=q["options"][q["answer"]], explain=q["explain"], item=item, marks_pass=marks))
-        if answered and marks and item is not None:
-            unit_ok[int(item)] = unit_ok.get(int(item), True) and bool(correct)
-    events, mastered = [], []
-    for item, ok in unit_ok.items():          # 문항 순서대로, 단원마다 한 번
-        if ok:
+        if marks and item is not None:                               # 단원 판정: 통과 판정 문항을 모두 답하고 모두 맞혀야 한다
+            st = unit_ok.setdefault(int(item), dict(all_answered=True, all_correct=True, any_answered=False))
+            st["all_answered"] &= answered; st["any_answered"] |= answered
+            if answered:
+                st["all_correct"] &= bool(correct)
+    events, mastered, withheld_units = [], [], []
+    for item, st in unit_ok.items():          # 문항 순서대로, 단원마다 한 번
+        if st["all_answered"] and st["all_correct"]:
             events.append(dict(item=item, week=0, complete=True, quiz=True, quiz_pass=True, save=False, drop=False, replay=False, source="diagnosis"))
             mastered.append(catalog.item_info(item))
+        elif st["any_answered"] and not st["all_answered"] and st["all_correct"]:
+            withheld_units.append(catalog.item_info(item)["title"])     # 둘 중 하나만 답하고 맞힘 → 통과로 기록하지 않음
     rate = {lv: (c / n if n else 0.0) for lv, (c, n) in by_level.items()}
+    enough = {lv: by_level[lv][1] >= MIN_ANSWERED[lv] for lv in by_level}
     level = 1
-    if rate[1] >= 0.6 and rate[2] >= 0.5:
+    if enough[1] and enough[2] and rate[1] >= 0.6 and rate[2] >= 0.5:
         level = 2
-    if level == 2 and rate[2] >= 0.75 and len(l3_topics) >= 2 and rate[3] >= 0.6:
+    if level == 2 and enough[3] and rate[2] >= 0.75 and len(l3_topics) >= 2 and rate[3] >= 0.6:
         level = 3
+    withheld = [lv for lv in (2, 3) if level < lv and not all(enough[x] for x in range(1, lv + 1))]
     correct_n = sum(r["correct"] for r in results)
     answered_n = sum(r["answered"] for r in results)
+    note = ""
+    if withheld:
+        need = "·".join(f"수준{x} {by_level[x][1]}/{MIN_ANSWERED[x]}" for x in range(1, max(withheld) + 1) if not enough[x])
+        note += f" · 수준 {'·'.join(map(str, withheld))} 판정 보류(답한 문항/최소 응답 수: {need})"
+    if withheld_units:
+        note += f" · 단원 판정 보류 {len(withheld_units)}개(그 단원의 문항을 모두 답해야 함)"
     return dict(level=level, correct=correct_n, answered=answered_n, total=len(QUESTIONS),
-                by_level={k: dict(correct=v[0], total=v[1]) for k, v in by_level.items()},
+                by_level={k: dict(correct=v[0], total=v[1]) for k, v in by_level.items()}, min_answered=dict(MIN_ANSWERED),
+                withheld_levels=withheld, withheld_units=withheld_units,
                 results=results, events=events, mastered=mastered,
                 summary=(f"{correct_n}/{answered_n} 정답(전체 {len(QUESTIONS)}문항) · 진단 수준 {level} (수준1 {by_level[1][0]}/{by_level[1][1]}, "
-                         f"수준2 {by_level[2][0]}/{by_level[2][1]}, 수준3 {by_level[3][0]}/{by_level[3][1]}) · 진단 통과 단원 {len(mastered)}개"))
+                         f"수준2 {by_level[2][0]}/{by_level[2][1]}, 수준3 {by_level[3][0]}/{by_level[3][1]}) · 진단 통과 단원 {len(mastered)}개" + note))
