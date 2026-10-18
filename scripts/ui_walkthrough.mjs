@@ -93,7 +93,9 @@ await page.click('#stepper li[data-step="1"]');
 await page.check('input[name=source][value=existing]');
 await page.waitForSelector(".learner-card button");
 await page.fill("#learner-query", "연금");
-await page.click("#learner-search");
+// 검색 응답으로 목록이 다시 그려진 뒤에 고른다(이전 목록의 카드를 누르면 다시 그릴 때 선택이 사라진다)
+await Promise.all([page.waitForResponse(r => r.url().includes("/api/learners?q=")), page.click("#learner-search")]);
+await page.waitForTimeout(300);
 await page.waitForSelector(".learner-card button");
 await page.click(".learner-card button");
 await page.waitForSelector(".learner-card.selected");
