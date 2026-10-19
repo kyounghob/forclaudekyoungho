@@ -76,6 +76,8 @@ b = Bundle.load(f"{ROOT}/artifacts/bundle_v2")
 data["operational_name"] = b.algos[b.selection["operational_algorithm"]].name
 data["global_name"] = b.algos[b.selection["families"]["Global"]].name
 data["family_best_names"] = {k: b.algos[v].name for k, v in b.selection["families"].items()}
+AB = b.selection.get("ab_control_algorithm")                     # A/B 대조군 A(평가 전용 행)의 설정 이름
+data["ab_control_name"] = b.algos[AB].name if AB is not None else None
 active = None
 pu = b.per_user
 if "RULE" in pu:
@@ -83,7 +85,8 @@ if "RULE" in pu:
     data["test_audit"] = tr
 PAIRS = [("MLP_NEXT", "MLP"), ("MLP_NEXT", "POP"), ("MLP_NEXT", "RULE"), ("MLP_NEXT", "Global"), ("MF_BPR", "MF"), ("MLP_BPR", "MLP"),
          ("MLP_BPRU", "MLP"), ("MLP_BPRU", "MLP_BPR"), ("MLP", "Random"), ("RouterNoGender", "Global"), ("RouterNoGender", "POP"),
-         ("RouterNoGender", "Random"), ("RouterNoGender+prereq", "POP"), ("MLP", "POP")]
+         ("RouterNoGender", "Random"), ("RouterNoGender+prereq", "POP"), ("MLP", "POP"),
+         ("RouterNoGender+prereq", "ABControl"), ("RouterNoGender", "ABControl"), ("ABControl", "POP")]
 paired = []
 for a, c in PAIRS:
     if a in pu and c in pu and len(pu[a]) == len(pu[c]):

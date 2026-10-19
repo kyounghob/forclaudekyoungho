@@ -72,6 +72,7 @@ def fig_architecture():
 def fig_roadmap_flow():
     from etfrec.catalog import Catalog
     from etfrec.roadmap import build_roadmap
+    from etfrec.quiz import QUESTIONS
     cat = Catalog.default()
     passed = np.zeros(cat.n_items, bool)
     rm = build_roadmap(cat, "pension", 0, "long", 1, passed)
@@ -84,7 +85,7 @@ def fig_roadmap_flow():
         ax.add_patch(FancyBboxPatch((x, 3.5), w, 0.8, boxstyle="round,pad=0.02", fc=cols[i], ec=edges[i], lw=1.4))
         ax.text(x + w / 2, 3.9, f"{i + 1}. {s['name']}", ha="center", va="center", fontsize=10.5, weight="bold")
         if s["key"] == "diagnosis":
-            body = "16문항 진단 퀴즈\n또는 학습 기록으로\n수준 1~3 추정\n맞힌 단원 = 진단 통과"
+            body = f"{len(QUESTIONS)}문항 진단 퀴즈\n또는 학습 기록으로\n수준 1~3 추정\n맞힌 단원 = 진단 통과"
         elif s["key"] == "connect":
             body = "\n".join(f"· {t['name']}" for t in s["types"]) + "\n(개념 통과 시 카드 열림)"
         else:
@@ -93,12 +94,12 @@ def fig_roadmap_flow():
         if i < 4:
             arrow(ax, x + w + 0.02, 3.9, x + w + 0.13, 3.9)
         x += w + 0.14
-    ax.text(0.1, 0.25, "예: 투자 목적 = 연금·노후 대비, 기간 5년 이상, 안정 성향, 수준 1 · 단원 21개 · 각 단원은 선수 단원을 통과해야 열린다(잠김 → 학습 가능 → 통과).",
+    ax.text(0.1, 0.25, f"예: 투자 목적 = 연금·노후 대비, 기간 5년 이상, 안정 성향, 수준 1 · 단원 {rm['units_total']}개 · 각 단원은 선수 단원을 통과해야 열린다(잠김 → 학습 가능 → 통과).",
             fontsize=8.5, color="#5d665d")
     fig.savefig(os.path.join(OUT, "fig2_roadmap_flow.png"), dpi=200, bbox_inches="tight"); plt.close(fig)
 
 
-# ---------- 그림 3: 선수 관계 그래프 (연금 로드맵 21단원) ----------
+# ---------- 그림 3: 선수 관계 그래프 (연금 로드맵) ----------
 def fig_prereq_graph():
     from etfrec.catalog import Catalog
     from etfrec.roadmap import build_roadmap
@@ -147,7 +148,7 @@ KO = {"RULE": "규칙(검증 1위)", "Global": "전역 1위", "RouterNoGender": 
       "RouterNoGenderIncome": "라우터(성별·소득 제외)", "NoDemographics": "인구통계 미사용", "UCF": "사용자 CF", "RouterNoGender+prereq": "운영 라우터+선수 가드레일",
       "POP": "인기", "ICF": "아이템 CF", "CONTENT": "콘텐츠", "MLP": "MLP(9주차)", "MF_OBS": "관측 MF", "MF": "표본 MF", "Random": "무작위",
       "MF_BPR": "BPR 행렬분해(미관측 음성)", "MLP_BPR": "MLP 쌍별(관측 음성)", "MLP_BPRU": "MLP 쌍별(미관측 음성)",
-      "MLP_NEXT": "MLP 목표 정렬(다음 주 통과)"}
+      "MLP_NEXT": "MLP 목표 정렬(다음 주 통과)", "ABControl": "세그먼트 인기(A/B 대조군 A)"}
 
 
 def fig_results():
@@ -173,8 +174,8 @@ def fig_results():
     # 그림 5: 정확도-선수 위반 트레이드오프
     fig, ax = plt.subplots(figsize=(7.4, 4.6))
     offs = {"RULE": (6, 3), "RouterNoGender": (-128, 3), "RouterFull": None, "RouterNoGenderIncome": (6, 4), "NoDemographics": (6, -11),
-            "RouterNoGender+prereq": (-4, -20), "UCF": (-60, 8), "ICF": (6, 5), "CONTENT": (6, -12), "MF": (6, -4), "MF_OBS": (6, -4), "MLP": (6, 4), "POP": (6, 4), "Random": (-45, 8),
-            "MF_BPR": (6, 6), "MLP_BPR": (6, -12), "MLP_BPRU": (6, 4), "MLP_NEXT": (-114, -3)}
+            "RouterNoGender+prereq": (-4, -20), "UCF": (-60, 8), "ICF": (6, 5), "CONTENT": (6, -12), "MF": (6, -4), "MF_OBS": (-44, -4), "MLP": (6, 4), "POP": (6, 4), "Random": (-45, 8),
+            "MF_BPR": (6, 6), "MLP_BPR": (6, -12), "MLP_BPRU": (-112, -13), "MLP_NEXT": (-116, 6), "ABControl": (-118, -3)}
     for _, r in res.iterrows():
         c = GOLD if r.method == "RouterNoGender" else (RED if r.method == "RouterNoGender+prereq" else GREEN)
         ax.scatter(r.prereq_violation_rate, r.ndcg, s=70, c=c, zorder=3, edgecolors="white")
@@ -187,7 +188,7 @@ def fig_results():
                 arrowprops=dict(arrowstyle="-|>", color=RED, lw=1.4, ls="--"))
     ax.set_xlabel("Top-5 중 선수 단원 미이수 비율"); ax.set_ylabel("NDCG@5")
     d_ = a.loc["RouterNoGender", "ndcg"] - a.loc["RouterNoGender+prereq", "ndcg"]; sl_ = a.loc["RouterNoGender+prereq", "short_list_rate"]
-    ax.set_title(f"정확도와 교육 순서 준수의 트레이드오프: 선수 가드레일은 위반을 0으로 만들지만 NDCG가 {d_:.3f} {'낮아진다' if d_ > 0 else '높아진다'}\n(테스트 사용자 {sl_:.1%}가 가드레일 통과 후보 5개 미만 → 짧은 목록)", fontsize=9.3, loc="left")
+    ax.set_title(f"정확도와 교육 순서 준수의 트레이드오프: 선수 가드레일은 위반을 0으로 만들지만 NDCG가 {d_:.3f} {'낮아진다' if d_ > 0 else '높아진다'}\n(가드레일을 켜면 테스트 사용자 {sl_:.1%}의 추천 목록이 5개 미만)", fontsize=9.3, loc="left")
     ax.grid(alpha=0.3); ax.set_axisbelow(True)
     fig.savefig(os.path.join(OUT, "fig5_prereq_tradeoff.png"), dpi=200, bbox_inches="tight"); plt.close(fig)
     # 그림 6: 라우터 λ
@@ -201,7 +202,8 @@ def fig_results():
     ax.set_xticks(range(len(xs))); ax.set_xticklabels(xl); ax.set_xlabel("수축 λ (0 = 세그먼트별 독립 선택, ∞ = 전역 1위만)"); ax.set_ylabel("검증 교차 NDCG@5")
     ax.legend(fontsize=8.5, frameon=False); ax.grid(alpha=0.3); ax.set_axisbelow(True)
     lam_sel = m["selection"]["router_lambdas"]["RouterNoGender"]; lam_txt = "∞" if lam_sel >= 1e8 else f"{lam_sel:g}"
-    ax.set_title(f"세그먼트 라우터 λ 교차 선택: λ가 커질수록(전역에 가까울수록) 나아지며 운영 라우터는 λ={lam_txt}가 선택됨", fontsize=9.5, loc="left")
+    sel_txt = ", ".join(f"{KO[k]} λ={'∞' if v >= 1e8 else f'{v:g}'}" for k, v in m["selection"]["router_lambdas"].items())
+    ax.set_title(f"세그먼트 라우터 λ 교차 선택(평균 ± 표준편차)\n선택: {sel_txt}", fontsize=9.5, loc="left")
     fig.savefig(os.path.join(OUT, "fig6_router_lambda.png"), dpi=200, bbox_inches="tight"); plt.close(fig)
     # 그림 7: 목적별·집단별 — 전체 기준(진한 막대)과 활성 기준(옅은 막대)
     g = pd.read_csv(os.path.join(ROOT, "artifacts/bundle_v2/group_results.csv"), encoding="utf-8-sig")

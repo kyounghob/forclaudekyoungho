@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from etfrec.api import create_app
 from etfrec.config import GuardrailConfig
 from etfrec.service import LearnerInput, RecommendationService
+from etfrec.zoo import algo_uses
 
 
 def test_pipeline_outputs(small_bundle):
@@ -21,6 +22,9 @@ def test_pipeline_outputs(small_bundle):
     assert {"ndcg_active", "active_share", "active_users"} <= set(g.columns) and (g.active_users <= g.users).all()
     assert b.test_audit["raw_positive_users"] >= b.test_audit["eligible_positive_users"] == int(r.active_users.iloc[0])
     assert b.selection["operational_algorithm"] is not None
+    ab = b.selection["ab_control_algorithm"]                     # A/B 대조군 A: 성별을 쓰지 않는 세그먼트 인기, 평가 전용 행(서빙 기법 목록 밖)
+    assert "ABControl" in set(b.results.method) and "ABControl" not in b.selection["families"]
+    assert b.algos[ab].family == "SEGPOP" and "gender" not in algo_uses(b.algos[ab], b.signal_meta)
     assert len(b.algos) > 1000 and len(b.signal_meta) >= 140
 
 

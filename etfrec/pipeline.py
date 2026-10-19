@@ -148,7 +148,12 @@ def train(dataset: Dataset, cfg: TrainConfig = None, out_dir: str = None, enable
             selectable[family] = int(ids[np.argmax(M_val[:, ids].mean(0))])
     selectable["Global"] = int(M_val.mean(0).argmax())
     selectable["NoDemographics"] = int(np.where(~(use_g | use_i | use_a), M_val.mean(0), -np.inf).argmax())
+    # 온라인 A/B 대조군 A(세그먼트 인기): 성별을 쓰지 않는 세그먼트 인기 설정 중 검증 1위. 실험 설계의 오프라인 근거로만 평가하고
+    # 서빙 기법 목록(families)에는 넣지 않는다(작은 세그먼트 설정을 API로 고르지 못하게 하는 개인정보 원칙과 같은 이유).
+    seg_ids = np.array([a.aid for a in algos if a.family == "SEGPOP" and allowed_ng[a.aid]])
+    ab_control = int(seg_ids[np.argmax(M_val[:, seg_ids].mean(0))]) if len(seg_ids) else None
     selection = dict(families=selectable, router_lambdas={k: rt.lam for k, rt in routers.items()}, operational=cfg.operational_router,
+                     ab_control_algorithm=ab_control,
                      operational_algorithm=None, no_gender_configs=int(allowed_ng.sum()), no_gender_income_configs=int(allowed_ngi.sum()),
                      min_leaf_users=routers["RouterFull"].min_users, validation_best_ndcg=float(jobs.ndcg.max()))
     logger(f"선택 잠금 {selection}")
@@ -159,7 +164,7 @@ def train(dataset: Dataset, cfg: TrainConfig = None, out_dir: str = None, enable
     cands_test, lb_test = primary_eval(cfg.test_week, F_test, LOG, catalog, guard)
     sup_test = supervised_from_log(LOG[LOG.week < cfg.test_week], cfg.train_max_rows, cfg.seed, n_items=catalog.n_items)
     ref_test = Reference.from_store(F_test, catalog, RADIX, sup_test)
-    needed_aids = set(selectable.values())
+    needed_aids = set(selectable.values()) | ({ab_control} if ab_control is not None else set())
     for rt in routers.values():
         for L in rt.levels:
             needed_aids.update(map(int, L["champ"]))
@@ -216,6 +221,8 @@ def train(dataset: Dataset, cfg: TrainConfig = None, out_dir: str = None, enable
         sel_pre[rr] = score_and_select_rows(algos[c], bank_pre, lb_pre, catalog, rr, guard_pre)
     active_pre = cands_pre.per_user(np.asarray(cands_pre.full_relevant_count, float)) > 0
     record(cfg.operational_router + "+prereq", sel_pre, cands=cands_pre, active=active_pre)
+    if ab_control is not None:                                              # A/B 대조군 A의 오프라인 값(평가 전용 행)
+        record("ABControl", select_test(score_algo(algos[ab_control], bank_test, lb_test.nu)))
     results = pd.DataFrame(rows)
     for idx, row in results.iterrows():
         diff = per_user[row["method"]] - per_user["Global"]; lo, hi = bootstrap_ci(diff, cfg.bootstrap_n, cfg.seed)
@@ -224,7 +231,7 @@ def train(dataset: Dataset, cfg: TrainConfig = None, out_dir: str = None, enable
         if len(diff) == len(act) and act.any():
             lo_a, hi_a = bootstrap_ci(diff[act], cfg.bootstrap_n, cfg.seed)
             results.loc[idx, "difference_vs_global_active"] = float(diff[act].mean()); results.loc[idx, "ci_low_active"] = lo_a; results.loc[idx, "ci_high_active"] = hi_a
-    results = results.sort_values("ndcg", ascending=False).reset_index(drop=True)
+    results = results.sort_values("ndcg", ascending=False, kind="mergesort").reset_index(drop=True)   # 안정 정렬: 동점 행은 기록 순서 유지
     logger("테스트 결과\n" + results[["method", "ndcg", "ndcg_active", "diversity", "hit_diagnostic", "prereq_violation_rate", "difference_vs_global", "ci_low", "ci_high"]].round(5).to_string(index=False))
     # 운영 설정: 운영 라우터가 테스트 사용자에게 배정한 챔피언 가운데 가장 많이 쓰인 것(전역 1위와 같은 경우가 보통)
     op_champ, _, _ = routers[cfg.operational_router].route(F_test.codes[cands_test.user])

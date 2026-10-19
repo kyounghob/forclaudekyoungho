@@ -6,7 +6,8 @@ KO = {"RULE": "규칙(검증 1위 = 전역)", "Global": None, "RouterNoGender": 
       "RouterNoGenderIncome": "라우터(성별·소득 제외)", "NoDemographics": "인구통계 미사용 1위", "UCF": "사용자 CF",
       "RouterNoGender+prereq": "운영 라우터 + 선수 가드레일", "POP": "인기", "ICF": "아이템 CF", "CONTENT": "콘텐츠",
       "MLP": "MLP(9주차, BCE)", "MLP_BPR": "MLP 쌍별(관측 음성)", "MLP_BPRU": "MLP 쌍별(미관측 음성)", "MLP_NEXT": "MLP 목표 정렬(다음 주 통과)",
-      "MF_OBS": "관측 MF", "MF": "표본 MF", "MF_BPR": "BPR MF", "Random": "무작위"}
+      "MF_OBS": "관측 MF", "MF": "표본 MF", "MF_BPR": "BPR MF", "Random": "무작위",
+      "ABControl": "세그먼트 인기(A/B 대조군 A)"}
 
 
 def table(bundle_dir: str) -> str:

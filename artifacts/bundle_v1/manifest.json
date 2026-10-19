@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "created_at": "2026-10-19T03:27:24",
+  "created_at": "2026-10-19T08:25:42",
   "config": {
     "n_learners": 15000,
     "seed": 42,
@@ -180,6 +180,7 @@
       "RouterNoGenderIncome": 500.0
     },
     "operational": "RouterNoGender",
+    "ab_control_algorithm": 39,
     "operational_algorithm": 247,
     "no_gender_configs": 884,
     "no_gender_income_configs": 438,
@@ -781,6 +782,26 @@
       "difference_vs_global_active": -0.024552929127339612,
       "ci_low_active": -0.030633617195576727,
       "ci_high_active": -0.018221449664993266
+    },
+    {
+      "method": "ABControl",
+      "ndcg": 0.1464035612495568,
+      "diversity": 0.9697044716076126,
+      "hit_diagnostic": 0.298932384341637,
+      "ndcg_active": 0.2032666415372472,
+      "hit_active": 0.4150375939849624,
+      "active_users": 4655,
+      "coverage_diagnostic": 0.7166666666666667,
+      "short_list_rate": 0.0,
+      "prereq_violation_rate": 0.8505647532105833,
+      "users": 6463,
+      "requests": 6463,
+      "difference_vs_global": -0.024827897545055818,
+      "ci_low": -0.030091129511770922,
+      "ci_high": -0.019364384024138814,
+      "difference_vs_global_active": -0.03447104228435998,
+      "ci_low_active": -0.04149953146392531,
+      "ci_high_active": -0.02697173161322756
     },
     {
       "method": "UCF",
@@ -2579,6 +2600,26 @@
     },
     {
       "test": "no_passed_unit_recommended_RouterNoGender+prereq",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_ABControl",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_ABControl",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_ABControl",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_ABControl",
       "passed": true,
       "details": null
     },

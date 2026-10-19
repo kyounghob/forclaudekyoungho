@@ -109,7 +109,7 @@ def build_roadmap(catalog: Catalog, goal: str, risk: int, horizon: str, level: i
 
 
 def roadmap_priority(catalog: Catalog, roadmap: dict) -> np.ndarray:
-    """(n_items,) 로드맵 우선순위: 현재 단계의 학습 가능 단원 1.0, 다음 단계 0.7, 선수 미이수 0.4, 로드맵 밖 0."""
+    """(n_items,) 로드맵 우선순위: 현재 단계의 학습 가능 단원 1.0, 이후 단계(심화 포함)의 학습 가능 단원 0.7, 선수 미이수 0.4, 로드맵 밖 0."""
     pr = np.zeros(catalog.n_items, np.float32)
     current = roadmap["current_stage"]
     seen_current = False
