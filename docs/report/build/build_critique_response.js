@@ -536,9 +536,24 @@ add(pageBreak(), h1("부록 A. 사실 확인 출처"),
   p("출처는 검색 결과 요약으로 확인했으며 기관 사이트 본문은 개발 환경의 네트워크 제한으로 직접 열지 못했다. 언론·블로그 출처는 공식 자료로 다시 확인해야 한다.", { size: 18, color: GREY }),
 );
 
+const CHG = D.changed_since_v1 || [];
+const CHG_GROUPS = [
+  ["모델·평가·특징", /^etfrec\/(neural|signals|zoo|pipeline|evaluation|router|features)\.py$/, "쌍별·목표 정렬 신경망과 학습 범위, 활성 사용자 지표, A/B 대조군 평가 행, 이벤트 논리·항등식·누수·개인정보 QA, 경로 크기 구간, 진단 행을 뺀 수준 갱신"],
+  ["데이터·카탈로그", /^etfrec\/(data|catalog|config|__init__)\.py$/, "이벤트 정규화, 스키마 밖 열 제거, 형 정규화, 출처 라벨, 절세 계좌 주제, 선수 관계 검사"],
+  ["교육 설계", /^etfrec\/(taxonomy|roadmap|quiz|lessons)\.py$/, "공통 기초, 유형 목적, 세제·규제 문구, 진단 채점 규칙, 학습 요점"],
+  ["개인정보", /^etfrec\/privacy\.py$/, "저장 최소화, 감사, k-익명 반출, 저장 설계 가림"],
+  ["공개 데이터", /^etfrec\/sources\//, "공식 API·파일 정규화, 원자적 스냅샷, 키 처리, 샘플 종목 CSV"],
+  ["서빙·화면", /^etfrec\/(service|api|cli|nlparse)\.py$|^etfrec\/ui\//, "학습자 조회 스위치, 기법 제한, 입력 검사, 오류 표시, 파서 규칙"],
+  ["테스트·스크립트·보고서 빌드", /^(tests|scripts|docs\/report\/build)\//, "회귀·개인정보·수집·파서 테스트, 결과 표·화면 점검 스크립트, 보고서 생성"],
+];
+const chgList = re => CHG.filter(f => re.test(f)).map(f => f.replace(/^etfrec\//, "")).join(", ");
+const chgOther = CHG.filter(f => !CHG_GROUPS.some(g => g[1].test(f)));
 add(h1("부록 B. 변경 파일 요약"),
-  p(D.changed_files_text || "코드 변경(2차본): etfrec/neural.py·signals.py·zoo.py·pipeline.py(쌍별·목표 정렬 신경망, 활성 사용자 지표, 이벤트 논리·항등식·개인정보 QA), etfrec/data.py(이벤트 정규화·요약), etfrec/catalog.py·taxonomy.py·quiz.py·lessons.py(절세 계좌, 세제·규제 문구, 진단 퀴즈, 학습 요점), etfrec/privacy.py, etfrec/sources/(공식 API·파일 정규화), etfrec/service.py·api.py·ui/(활성 지표·학습 요점·개인정보 표시), tests/, README.md, scripts/."),
+  p(`1차본 커밋(${D.v1_commit || "9322f6e"}) 이후 바뀐 파일 ${CHG.length}개(git diff --name-only, etfrec·scripts·tests·docs/report/build 범위).`),
+  ...CHG_GROUPS.filter(g => CHG.some(f => g[1].test(f))).map(g => bullet([{ t: `${g[0]}: `, bold: true }, `${chgList(g[1])} — ${g[2]}`])),
+  ...(chgOther.length ? [bullet([{ t: "기타: ", bold: true }, chgOther.join(", ")])] : []),
 );
+
 
 const doc = new Document({
   creator: "etfrec project", title: "중간보고서 비판 검토 및 보완 보고서", features: { updateFields: true },

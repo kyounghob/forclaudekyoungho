@@ -32,6 +32,9 @@ for g in GOALS:
                        types=[t["name"] for t in rm["stages"][-1]["types"]])
 diffstat = subprocess.run(["git", "-C", ROOT, "diff", "--stat", "HEAD~0", "--"], capture_output=True, text=True).stdout
 changed = subprocess.run(["git", "-C", ROOT, "log", "--since=6 hours ago", "--stat", "--format=%h %s"], capture_output=True, text=True).stdout
+V1_COMMIT = "9322f6e"                                   # 중간보고서 1차본(비판 대상)을 넣은 커밋
+changed_since_v1 = subprocess.run(["git", "-C", ROOT, "diff", "--name-only", V1_COMMIT, "HEAD", "--", "etfrec", "scripts", "tests", "docs/report/build"],
+                                  capture_output=True, text=True).stdout.split()
 FACTS = [
     dict(key="etf_market", fact="2025년 말 국내 상장 ETF 1,058종목, 순자산총액 297조 2천억 원(전년 대비 71% 증가); 2025년 7월 1,000종목 돌파",
          sources=["https://www.sidae.com/article/2025123016143338248", "https://www.heraldk.com/article/2025072215004989760"]),
@@ -67,7 +70,7 @@ data = dict(
     goals=GOALS, horizons=HORIZONS, common_core=COMMON_CORE, templates=ROADMAP_TEMPLATES, roadmaps=roadmaps,
     types=[{k: v for k, v in t.items()} for t in ETF_TYPES], questions=QUESTIONS, sources=[dict(key=k, **v) for k, v in SOURCES.items()],
     examples=EXAMPLES, policy=POLICY, strings=dict(leverage=LEVERAGE_RULES, tax_other=TAX_OTHER, tax_kr=TAX_KR_EQUITY, pension_ok=PENSION_OK),
-    facts=FACTS, changes=changed[:6000],
+    facts=FACTS, changes=changed[:6000], changed_since_v1=changed_since_v1, v1_commit=V1_COMMIT,
     lessons=[dict(topic=t, level=l, title=str(cat.item_title[cat.unit(t, l)]), asof=LESSON_ASOF, **v) for (t, l), v in LESSONS.items()],
 )
 # 운영 설정 이름, 쌍 비교(사용자 단위 쌍 부트스트랩), 학습 감사 요약
