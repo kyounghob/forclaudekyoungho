@@ -30,28 +30,32 @@ def arrow(ax, x1, y1, x2, y2, color="#5d665d"):
 
 # ---------- 그림 1: 시스템 아키텍처 ----------
 def fig_architecture():
+    m = json.load(open(os.path.join(ROOT, "artifacts/bundle_v2/manifest.json"), encoding="utf-8"))
+    from etfrec.catalog import Catalog
+    from etfrec.quiz import QUESTIONS
+    cat2 = Catalog.default(version=2); n_edges = int(sum(len(v) for v in cat2.prereqs.values()))
     fig, ax = plt.subplots(figsize=(9.2, 5.6)); ax.set_xlim(0, 10); ax.set_ylim(0, 6.2); ax.axis("off")
     # 데이터 계층
     ax.text(0.15, 5.95, "① 데이터 계층", fontsize=10, weight="bold", color=GREEN)
     box(ax, 0.15, 4.75, 2.1, 1.0, "학습 로그·프로필\n(profiles / study_log /\n목적·기간·진단)", fc="#f4f5f2", ec="#8a97b8")
-    box(ax, 2.45, 4.75, 2.1, 1.0, "콘텐츠 카탈로그 v2\n63단원·선수 관계 76\n개념·출처 태그", fc="#f4f5f2", ec="#8a97b8")
-    box(ax, 4.75, 4.75, 2.4, 1.0, "공개 데이터 커넥터\nKRX 전종목 기본정보\n공공데이터포털 시세(NAV)", fc="#f4f5f2", ec="#8a97b8")
+    box(ax, 2.45, 4.75, 2.1, 1.0, f"콘텐츠 카탈로그 v2\n{cat2.n_items}단원·선수 관계 {n_edges}\n개념·출처 태그·학습 요점", fc="#f4f5f2", ec="#8a97b8")
+    box(ax, 4.75, 4.75, 2.4, 1.0, "공개 데이터 커넥터(공식 경로)\nKRX 내려받은 파일·Open API\n공공데이터포털 시세(NAV)", fc="#f4f5f2", ec="#8a97b8")
     box(ax, 7.35, 4.75, 2.5, 1.0, "교육 자료 출처 등록부\nKCIE 스쿨·KIFIN 사전교육\nKRX 정보·운용사 가이드북", fc="#f4f5f2", ec="#8a97b8")
     # 학습 계층
     ax.text(0.15, 4.35, "② 학습·선택 (오프라인, python -m etfrec train)", fontsize=10, weight="bold", color=GREEN)
     box(ax, 0.15, 3.05, 2.4, 1.1, "특징 저장소\n반응 행렬·추정 수준·선호\n세그먼트 코드·목적", fc="#dcefe6")
-    box(ax, 2.75, 3.05, 2.6, 1.1, "신호 154개\n인기·세그먼트 인기·콘텐츠\nUCF·ICF·MF·MLP·규칙·목적·로드맵", fc="#dcefe6")
-    box(ax, 5.55, 3.05, 2.2, 1.1, "설정 풀 2,631개\n혼합 비중·λ·세그먼트 변수\n검증 주차 NDCG@5", fc="#dcefe6")
-    box(ax, 7.95, 3.05, 1.9, 1.1, "선택 잠금\n세그먼트 라우터\n테스트·QA 80건", fc="#dcefe6")
+    box(ax, 2.75, 3.05, 2.6, 1.1, f"신호 {m['signal_count']}개\n인기·세그먼트 인기·콘텐츠\nCF·MF·BPR·MLP·규칙·목적·로드맵", fc="#dcefe6")
+    box(ax, 5.55, 3.05, 2.2, 1.1, f"설정 풀 {m['configurations']:,}개\n혼합 비중·λ·세그먼트 변수\n검증 주차 NDCG@5", fc="#dcefe6")
+    box(ax, 7.95, 3.05, 1.9, 1.1, f"선택 잠금\n세그먼트 라우터\n테스트·QA {len(m['qa'])}건", fc="#dcefe6")
     # 로드맵 계층 (가로)
     ax.text(0.15, 2.65, "③ 교육 설계 모듈", fontsize=10, weight="bold", color=GOLD)
-    box(ax, 0.15, 1.55, 2.4, 0.9, "진단 퀴즈 16문항\n→ 수준·진단 통과 단원", fc="#fff3d6", ec=GOLD)
+    box(ax, 0.15, 1.55, 2.4, 0.9, f"진단 퀴즈 {len(QUESTIONS)}문항\n→ 수준·진단 통과 단원", fc="#fff3d6", ec=GOLD)
     box(ax, 2.75, 1.55, 2.6, 0.9, "로드맵 엔진\n진단→기초→목적별→심화→유형", fc="#fff3d6", ec=GOLD)
     box(ax, 5.55, 1.55, 2.2, 0.9, "가드레일\n수준·통과 제외·선수 단원", fc="#fff3d6", ec=GOLD)
     box(ax, 7.95, 1.55, 1.9, 0.9, "ETF 유형 분류 10종\n세금·연금·규제", fc="#fff3d6", ec=GOLD)
     # 서빙 계층
     ax.text(0.15, 1.15, "④ 서빙 (python -m etfrec serve)", fontsize=10, weight="bold", color=BLUE)
-    box(ax, 0.15, 0.1, 3.2, 0.9, "모델 번들 (bundle.pkl·manifest)\n요청 중 재학습 없음", fc="#e8eef8", ec=BLUE)
+    box(ax, 0.15, 0.1, 3.2, 0.9, "모델 번들 (bundle.pkl·manifest)\n요청 중 재학습 없음\n원시 연령·소득·분 단위 시각 미보관", fc="#e8eef8", ec=BLUE)
     box(ax, 3.55, 0.1, 3.0, 0.9, "REST API (FastAPI)\n/recommend /roadmap /types\n/quiz /sources /compare", fc="#e8eef8", ec=BLUE)
     box(ax, 6.75, 0.1, 3.1, 0.9, "학습 설계 스튜디오 (11단계 UI)\n자연어 초안·진단·로드맵·미리보기\n시뮬레이션·유형 연결·평가", fc="#e8eef8", ec=BLUE)
     # 화살표
@@ -134,7 +138,7 @@ def fig_prereq_graph():
     from matplotlib.lines import Line2D
     ax.legend(handles=[Line2D([], [], marker="o", color=c, ls="", ms=9, label=l) for l, c in (("필수 기초 개념", GREEN), ("목적별 핵심 개념(연금)", BLUE), ("심화·리스크", GOLD))],
               loc="upper right", fontsize=8.5, frameon=True, framealpha=0.9)
-    ax.set_title("연금·노후 대비 로드맵의 단원 21개와 선수 관계(화살표: 선수 → 후속, 숫자 = 단원 번호)", fontsize=9.5, loc="left")
+    ax.set_title(f"연금·노후 대비 로드맵의 단원 {len(units)}개와 선수 관계(화살표: 선수 → 후속, 숫자 = 단원 번호)", fontsize=9.5, loc="left")
     fig.savefig(os.path.join(OUT, "fig3_prereq_graph.png"), dpi=200, bbox_inches="tight"); plt.close(fig)
 
 
@@ -196,7 +200,8 @@ def fig_results():
         ax.errorbar(range(len(xs)), ys, yerr=sd, marker="o", label=KO[name], color=c, capsize=3)
     ax.set_xticks(range(len(xs))); ax.set_xticklabels(xl); ax.set_xlabel("수축 λ (0 = 세그먼트별 독립 선택, ∞ = 전역 1위만)"); ax.set_ylabel("검증 교차 NDCG@5")
     ax.legend(fontsize=8.5, frameon=False); ax.grid(alpha=0.3); ax.set_axisbelow(True)
-    ax.set_title("세그먼트 라우터 λ 교차 선택: λ가 커질수록(전역에 가까울수록) 나아지며 λ=3000이 선택됨", fontsize=9.5, loc="left")
+    lam_sel = m["selection"]["router_lambdas"]["RouterNoGender"]; lam_txt = "∞" if lam_sel >= 1e8 else f"{lam_sel:g}"
+    ax.set_title(f"세그먼트 라우터 λ 교차 선택: λ가 커질수록(전역에 가까울수록) 나아지며 운영 라우터는 λ={lam_txt}가 선택됨", fontsize=9.5, loc="left")
     fig.savefig(os.path.join(OUT, "fig6_router_lambda.png"), dpi=200, bbox_inches="tight"); plt.close(fig)
     # 그림 7: 목적별·집단별 — 전체 기준(진한 막대)과 활성 기준(옅은 막대)
     g = pd.read_csv(os.path.join(ROOT, "artifacts/bundle_v2/group_results.csv"), encoding="utf-8-sig")
