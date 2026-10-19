@@ -93,3 +93,26 @@ def test_count_income_and_history_clauses():
     by = {str(cat.item_title[e["item"]]).split(":")[0]: e for e in ev}
     assert by["추적오차가 생기는 이유"]["complete"] and not by["추적오차가 생기는 이유"]["quiz_pass"]   # 다음 절의 '통과'를 읽지 않는다
     assert by["추적오차의 기초"]["quiz_pass"]
+
+
+def test_unit_status_negation_and_sentence_scope():
+    def status(text):
+        ev = parse_onboarding(text, cat)["fields"]["events"]
+        return ["pass" if e["quiz_pass"] else "complete" if e["complete"] else "view" for e in ev]
+    assert status("'ETF란 무엇인가'는 아직 통과하지 못했어.") == ["view"]
+    assert status("'ETF란 무엇인가'는 완료했는데 퀴즈는 통과 못 했어.") == ["complete"]
+    assert status("'추적오차의 기초'는 미완료 상태야.") == ["view"]
+    assert status("'ETF란 무엇인가'를 조금 봤어. 퀴즈 통과가 목표야.") == ["view"]          # 다음 문장의 '통과'를 읽지 않는다
+    assert status("'ETF란 무엇인가'는 퀴즈에서 떨어졌어(통과 실패).") == ["view"]
+    assert status("'ETF란 무엇인가'는 통과 안 했어") == ["view"]
+    assert status("'ETF란 무엇인가'와 'ETF 총보수 이해하기'는 통과했고 'ETF 거래량과 유동성'은 수강 중이야.") == ["pass", "pass", "view"]
+    assert status("'ETF란 무엇인가'는 통과했어.") == ["pass"] and status("'ETF란 무엇인가'는 끝까지 다 봤어") == ["complete"]
+
+
+def test_experience_window_stays_in_its_clause():
+    for text in ("경험 없음. 3년 이상 장기 투자 예정", "ETF 구조에 관심 있는 초보, 경험 없어. 3년 이상 모을 거야", "경험 없고 3년 이상 장기 투자할 거야"):
+        assert parse_onboarding(text, cat)["fields"]["exp"] == 0, text      # 다음 문장·뒤의 기간 표현이 경험을 뒤집지 않는다
+    assert parse_onboarding("경험 없음. 3년 이상 장기 투자 예정", cat)["fields"]["horizon"] == "long"
+    assert parse_onboarding("3년 이상 모을 거야", cat)["fields"]["horizon"] == "mid"
+    f = parse_onboarding("투자 경험 3년 이상, 장기 투자", cat)["fields"]
+    assert f["exp"] == 2 and f["horizon"] == "long"

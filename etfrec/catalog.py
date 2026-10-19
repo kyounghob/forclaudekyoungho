@@ -247,7 +247,7 @@ class Catalog:
 
     @classmethod
     def from_csv(cls, path: str) -> "Catalog":
-        df = pd.read_csv(path)
+        df = pd.read_csv(path, dtype={"prereqs": str, "sources": str})    # 선수가 0~1개뿐인 사슬 카탈로그도 '0.0'이 아니라 '0'으로 읽는다
         need = {"item", "title", "topic", "level"}
         if not need <= set(df.columns):
             raise ValueError(f"카탈로그 CSV에 {sorted(need - set(df.columns))} 열이 없습니다")

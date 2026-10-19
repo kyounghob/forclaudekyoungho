@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import copy
+import dataclasses
 import json
 import os
 import pickle
@@ -16,6 +17,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
+import scipy.sparse as sp
 
 from . import __version__, neural
 from .catalog import RADIX, Catalog
@@ -308,9 +310,32 @@ def score_and_select_rows(algo: Algo, bank: SignalBank, lb: LearnerBatch, catalo
     return choose_items(bank.cands, lb, catalog, S, rows, K, guard)
 
 
+def _same_value(a, b) -> bool:
+    if sp.issparse(a) or sp.issparse(b):
+        return sp.issparse(a) and sp.issparse(b) and a.shape == b.shape and (a != b).nnz == 0
+    if isinstance(a, pd.DataFrame) or isinstance(b, pd.DataFrame):
+        return isinstance(a, pd.DataFrame) and isinstance(b, pd.DataFrame) and a.equals(b)
+    if isinstance(a, dict) or isinstance(b, dict):
+        return isinstance(a, dict) and isinstance(b, dict) and a.keys() == b.keys() and all(_same_value(a[k], b[k]) for k in a)
+    if a is None or b is None:
+        return a is None and b is None
+    x, y = np.asarray(a), np.asarray(b)
+    if x.shape != y.shape:
+        return False
+    return bool(np.array_equal(x, y, equal_nan=True)) if np.issubdtype(x.dtype, np.number) and np.issubdtype(y.dtype, np.number) \
+        else bool(np.array_equal(x, y))
+
+
+def store_diff(A: FeatureStore, B: FeatureStore) -> list:
+    """두 특징 저장소에서 값이 다른 필드 이름(모든 필드: 행렬·블록·통계·화면 요약 포함)."""
+    return [f.name for f in dataclasses.fields(A) if not _same_value(getattr(A, f.name), getattr(B, f.name))]
+
+
 def leakage_probe(dataset, catalog, weeks, seed: int = 42) -> tuple:
-    """누수 검사: 기준 주 이후의 로그 행(정답 주 포함)을 섞어도 각 스냅샷의 특징 저장소가 그대로인지 확인한다.
-    모델 학습 행(supervised_from_log)과 목표 정렬 쌍은 호출 쪽에서 LOG[LOG.week < 기준 주]로 잘라 넘기므로 특징 저장소가 남은 경로다."""
+    """누수 검사: 각 기준 주 w의 특징 저장소를 세 로그로 만들어 모든 필드를 비교한다 — (가) 원래 로그, (나) w 이후 행(정답 주 포함)의
+    모든 열(사용자·단원·주차·일·시각·플래그·점수)을 행끼리 섞고 미래 행을 더 붙인 로그, (다) w 이후 행을 모두 지운 로그.
+    미래 행의 내용·개수·사용자·시간대 어느 것을 읽어도 (나)나 (다)에서 달라진다. 모델 학습 행(supervised_from_log)과 목표 정렬 쌍은
+    호출 쪽에서 LOG[LOG.week < 기준 주]로 잘라 넘기므로 특징 저장소가 남은 경로다."""
     lg = dataset.log
     rng = np.random.default_rng(seed + 97)
     changed, checked = [], []
@@ -319,15 +344,19 @@ def leakage_probe(dataset, catalog, weeks, seed: int = 42) -> tuple:
         if not len(fut):
             continue
         pert = lg.copy()
-        for c in ("item", "quiz_pass", "complete", "save", "drop", "score", "understood"):
+        for c in pert.columns:                                         # 미래 행 안에서 열마다 따로 섞는다(주차는 w 이상끼리)
             vals = pert[c].values.copy(); vals[fut] = rng.permutation(vals[fut]); pert[c] = vals
-        A, B = feature_store(dataset.profiles, lg, catalog, w), feature_store(dataset.profiles, pert, catalog, w)
-        same = ((A.Rw != B.Rw).nnz == 0 and (A.Rw_conf != B.Rw_conf).nnz == 0 and A.users.equals(B.users)
-                and all(np.array_equal(getattr(A, k), getattr(B, k)) for k in ("nu", "codes", "pref", "level", "und", "ev_user", "ev_item")))
+        extra = pert.iloc[rng.choice(fut, size=max(1, len(fut) // 5))].copy()
+        extra["user"] = rng.integers(0, dataset.n_users, len(extra))
+        pert = pd.concat([pert, extra], ignore_index=True)
+        A = feature_store(dataset.profiles, lg, catalog, w)
+        diffs = sorted(set(store_diff(A, feature_store(dataset.profiles, pert, catalog, w)))
+                       | set(store_diff(A, feature_store(dataset.profiles, lg[lg.week < w], catalog, w))))
         checked.append(int(w))
-        if not same:
-            changed.append(int(w))
-    return not changed and bool(checked), f"기준 주 {checked}: 이후 행(정답 주 포함)을 섞은 뒤 특징 저장소 비교, 달라진 주 {changed}"
+        if diffs:
+            changed.append((int(w), diffs))
+    return not changed and bool(checked), (f"기준 주 {checked}: 이후 행을 섞고 더한 로그·지운 로그로 만든 특징 저장소를 모든 필드에서 비교, "
+                                           f"달라진 주 {[c[0] for c in changed]}" + (f" (필드 {changed})" if changed else ""))
 
 
 def run_qa(cands_test, catalog, results, predictions, F_test, models, selection, dataset, allowed_ngi, uses, lb_test, bundle=None,

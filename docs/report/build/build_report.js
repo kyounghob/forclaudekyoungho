@@ -8,7 +8,6 @@ const {
 
 const HERE = __dirname;
 const D = JSON.parse(fs.readFileSync(path.join(HERE, "report_data.json"), "utf8"));
-const DIMS = JSON.parse(fs.readFileSync(path.join(HERE, "fig_dims.json"), "utf8"));
 const FIG = path.join(HERE, "fig");
 const OUT = process.argv[2] || path.join(HERE, "중간보고서.docx");
 
@@ -51,10 +50,21 @@ const fmt = (x, d = 4) => (x == null || Number.isNaN(+x)) ? "–" : (+x).toFixed
 const pct = (x, d = 1) => (x == null) ? "–" : (100 * x).toFixed(d) + "%";
 const num = (x) => Number(x).toLocaleString("ko-KR");
 
+function imageSize(buf) {   // PNG(IHDR)·JPEG(SOF) 헤더에서 픽셀 크기 [너비, 높이]를 읽는다(그림을 다시 만들어도 비율이 맞게)
+  if (buf.readUInt32BE(0) === 0x89504e47) return [buf.readUInt32BE(16), buf.readUInt32BE(20)];
+  for (let i = 2; i + 9 < buf.length;) {
+    if (buf[i] !== 0xff) { i++; continue; }
+    const m = buf[i + 1];
+    if (m >= 0xc0 && m <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(m)) return [buf.readUInt16BE(i + 7), buf.readUInt16BE(i + 5)];
+    i += 2 + buf.readUInt16BE(i + 2);
+  }
+  throw new Error("이미지 크기를 읽지 못했습니다");
+}
+
 function img(name, cap, widthPx = CONTENT_PX, maxH = 760) {
-  const [w, h] = DIMS[name]; let W = widthPx, H = Math.round(widthPx * h / w);
-  if (H > maxH) { H = maxH; W = Math.round(maxH * w / h); }
   const data = fs.readFileSync(path.join(FIG, name));
+  const [w, h] = imageSize(data); let W = widthPx, H = Math.round(widthPx * h / w);
+  if (H > maxH) { H = maxH; W = Math.round(maxH * w / h); }
   const type = name.endsWith(".png") ? "png" : "jpg";
   figNo += 1;
   return [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 120, after: 40, line: 240, lineRule: LineRuleType.AUTO }, keepNext: true,
@@ -367,7 +377,7 @@ add(pageBreak(), h1("4. 데이터와 확보 계획"),
     ["export-deid 반출 표", PR_ ? `일반화 ${PR_.generalized.length}단계(${PR_.generalized.map(c => HIER_KO[c] || c).join("·")}) → 국소 억제 ${num(PR_.suppressed_rows)}행 → 삭제 ${num(PR_.removed_rows)}행, ${num(PR_.rows_out)}/${num(PR_.rows_in)}행, 최소 셀 ${PR_.final_min_group}명` : "–", "모든 셀 ≥ 5를 다시 검증한 뒤에만 파일을 씀. 행은 반출 값으로 정렬해 원래 학습자 순서(가명 번호)를 지움. 가명 번호·관심 주제·진단 수준은 내보내지 않음"],
     ["운영 라우터 잎 크기", LF ? `잎 ${LF.leaves}개 중 ${LF.threshold}명 미만 ${LF.leaves_below}개(${num(LF.users_in_small_leaves)}명), 최소 ${LF.min_leaf}명. ${RCH.RouterNoGender && RCH.RouterNoGender.lam >= 1e8 ? `λ=∞라 모든 잎이 전역 1위 설정을 씀(잎 챔피언 ${RCH.RouterNoGender.distinct_leaf_champions}종)` : `챔피언을 정한 노드의 최소 표본 ${LF.decision_min_n}명`}` : "–", `잎 크기는 보장되지 않음(1차본의 ‘잎 최소 20명’ 서술 정정): ${LF ? LF.min_users_param : 20}명 미만 노드는 상위 노드 추정을 그대로 씀. 추천 경로 출력은 노드 크기를 구간(‘20명 미만’·‘20~49명’ 등)으로만 보이고 원시 평균을 내보내지 않음(부모−형제 차분으로 숨긴 노드를 복원하지 못하게)`],
     ["공개 집단표(group_results·advanced_exposure)", PG ? `5명 미만 집단 ${PG.rows_removed}행 제외, 활성 5명 미만 ${PG.active_masked}행은 활성 기준 값 비움(보완 억제 ${(PG.complementary_removed || 0) + (PG.complementary_masked || 0)}건), 최소 셀 ${PG.min_users}명` : "–", "한 변수에서 하나만 숨기면 가장 작은 집단을 하나 더 숨김(보완 억제: 함께 공개되는 합계와의 차분으로 복원되지 않게). QA published_group_cells_ge_5"],
-    ["서빙 학습자 표(/api/learners, learner_profiles.csv)", UTX ? `준식별자 8개 + 학습 시간대 + 관심 주제 조합: ${num(UTX.groups)}개 셀 중 k 미만 ${num(UTX.groups_below_k)}개(${num(UTX.users_below_k)}명, ${pct(UTX.share_below_k)})` : "–", "학습자 단위 표라 k-익명 표가 아님. 학습자 조회 API는 로컬 실행에서만 기본으로 켜고 다른 주소로 열면 --expose-learners가 있어야 켬. 서빙 API로 고를 수 있는 기법은 화면의 기법 목록뿐(임의 설정 번호는 개발 모드)"],
+    ["서빙 학습자 표(/api/learners, learner_profiles.csv)", UTX ? `준식별자 8개 + 학습 시간대 + 관심 주제 조합: ${num(UTX.groups)}개 셀 중 k 미만 ${num(UTX.groups_below_k)}개(${num(UTX.users_below_k)}명, ${pct(UTX.share_below_k)})` : "–", "학습자 단위 표라 k-익명 표가 아님. 학습자 조회 API와 추천·비교·로드맵·유형 API의 learner_id(기준 학습자 번호) 입력은 로컬 실행에서만 기본으로 켜고 다른 주소로 열면 --expose-learners가 있어야 켬(꺼져 있으면 403). 서빙 API로 고를 수 있는 기법은 화면의 기법 목록뿐(임의 설정 번호는 개발 모드)"],
     ["개인정보 QA", `${PQ.filter(q => q.passed).length}/${PQ.length}건 통과: ${PQ.map(q => q.test).join(", ")}`, "번들 조립 직후·저장 전에 실행. 하나라도 실패하면 학습을 멈추고 번들을 저장하지 않음"],
   ], [3, 5, 4.5], { caption: "개인정보 점검(etfrec/privacy.py, manifest.privacy)", size: 16, zebra: true }),
   ...table(["코드로 강제되는 항목", "강제·확인하는 코드와 검사"], (PS.policy_implemented || []).map(x => [x.item, x.enforced_by.join(", ")]),
@@ -393,7 +403,7 @@ add(pageBreak(), h1("5. 시스템 설계와 구현 현황"),
     `${D.roadmaps[g].units_total}개 · 약 ${D.roadmaps[g].minutes_total}분`]), [1.8, 4.2, 3, 2.6, 1.6], { caption: "투자 목적별 로드맵 템플릿(주제 뒤 숫자는 수준)", size: 16, zebra: true }),
   p("로드맵은 추천 엔진에 두 방향으로 들어간다. 첫째, 로드맵 단계 우선순위 신호(현재 단계의 학습 가능 단원 1.0, 이후 단계의 학습 가능 단원 0.7, 선수 미이수 0.4, 로드맵 밖 0)와 투자 목적 일치 신호가 규칙·하이브리드 설정 풀에 추가되어 검증에서 비중이 결정된다. 둘째, 선수 단원 가드레일(prereq_block)은 선수 단원을 통과하지 않은 단원을 후보에서 제외한다. 가드레일은 수업의 교육 처방이 아니라 이 프로젝트의 정책이므로 화면에서 켜고 끌 수 있고, 오프라인 평가에는 ‘운영 라우터 + 선수 가드레일’ 행으로 효과를 따로 기록했다."),
   h2("5.3 진단 퀴즈"),
-  p(`${D.questions.length}문항(수준 1 ${QL(1)}개·수준 2 ${QL(2)}개·수준 3 ${QL(3)}개, ${QUNITS}개 단원; 2차본에서 ISA·과표기준가·IRP 70% 한도·기본예탁금 문항 추가)으로 구성했고 각 문항은 카탈로그 단원 하나에 대응한다(부록 B). 해외 ETF 3과 연금계좌 ETF 2에는 문항이 둘씩 있어, 두 문항을 모두 답하고 맞혀야 그 단원을 ‘진단 통과’로 기록하고(하나만 답하면 판정 보류) 이벤트는 단원마다 한 번만 만든다. 레버리지 거래 요건 문항(q20)은 규제 상식이라 변동성 위험 단원 전체를 검사하지 못하므로 수준 판정에만 쓰고 단원을 통과 처리하지 않는다. 정답 위치는 보기 네 자리에 다섯 개씩 나눴다(1차본은 16문항 중 13문항이 두 번째 보기였다). 정답률은 답한 문항으로 계산하되, 수준마다 최소 응답 수를 둔다(몇 문항만 골라 답해 높은 수준이 나오지 않게). 수준1 문항 5개·수준2 문항 3개 이상을 답하고 수준 1 정답률 60% 이상, 수준 2 정답률 50% 이상이면 수준 2, 여기에 수준3 문항 3개 이상을 답하고 수준 2 정답률 75% 이상, 서로 다른 주제의 수준 3 문항 2개 이상 정답, 수준 3 정답률 60% 이상이면 수준 3이다. 최소 응답 수를 못 채운 수준은 판정을 보류하고 그 아래 수준에서 시작한다. 틀린 문항은 기록하지 않고(진단은 배치이지 실패 기록이 아니다) 정답과 해설을 보여 준다.`),
+  p(`${D.questions.length}문항(수준 1 ${QL(1)}개·수준 2 ${QL(2)}개·수준 3 ${QL(3)}개, ${QUNITS}개 단원; 2차본에서 ISA·과표기준가·IRP 70% 한도·기본예탁금 문항 추가)으로 구성했고 각 문항은 카탈로그 단원 하나에 대응한다(부록 B). 해외 ETF 3과 연금계좌 ETF 2에는 문항이 둘씩 있어, 두 문항을 모두 답하고 맞혀야 그 단원을 ‘진단 통과’로 기록하고(하나만 답하면 판정 보류) 이벤트는 단원마다 한 번만 만든다. 레버리지 거래 요건 문항(q20)은 규제 상식이라 변동성 위험 단원 전체를 검사하지 못하므로 수준 판정에만 쓰고 단원을 통과 처리하지 않는다. 정답 위치는 보기 네 자리에 다섯 개씩 나눴다(1차본은 16문항 중 13문항이 두 번째 보기였다). 정답률은 답한 문항으로 계산하되, 수준마다 최소 응답 수를 둔다(몇 문항만 골라 답해 높은 수준이 나오지 않게). 수준1 문항 5개·수준2 문항 3개 이상을 답하고 수준 1 정답률 60% 이상, 수준 2 정답률 50% 이상이면 수준 2, 여기에 수준3 문항 3개 이상을 답하고 수준 2 정답률 75% 이상, 서로 다른 주제의 수준 3 문항 2개 이상 정답, 수준 3 정답률 60% 이상이면 수준 3이다. 최소 응답 수를 못 채운 수준은 판정을 보류하고 그 아래 수준에서 시작한다. ‘진단 통과’ 이벤트는 통과 단원 표시에만 쓰고 수준 갱신 규칙(자기 수준보다 높은 단원의 퀴즈 통과 → +1)에는 넣지 않는다. 수준은 이미 퀴즈 판정에 반영되어 있어, 넣으면 보류한 수준이 다시 올라가기 때문이다. 틀린 문항은 기록하지 않고(진단은 배치이지 실패 기록이 아니다) 정답과 해설을 보여 준다.`),
   h2("5.4 ETF 유형 분류"),
   ...table(["유형", "위험", "필요 개념(통과해야 카드가 열림)", "적합 목적", "세금·연금계좌·규제 요약"], D.types.map(t => [
     [{ t: t.name, bold: true }], "●".repeat(t.risk) + "○".repeat(5 - t.risk), t.concepts.map(c => `${c[0]} ${c[1]}`).join(", "), t.goals.map(g => GOAL_KO[g]).join(", "),
@@ -405,7 +415,7 @@ add(pageBreak(), h1("5. 시스템 설계와 구현 현황"),
     [`신호 ${M.signal_count}개`, "인기 1, 세그먼트 인기 93(변수 조합 31 × λ 3), 개인화 인기 1, 콘텐츠 코사인 6, 사용자 CF 27(k 3 × 인구통계 혼합 9), 아이템 CF 8, 표본 MF 6, BPR MF 6(2차본), 관측 MF 1, MLP 1, MLP 쌍별 2종·목표 정렬 MLP 1(2차본), 규칙 가산점 8(관심 주제·수준 일치·연령 생애주기·소득 구간·위험성향·모바일·투자 목적·로드맵 단계), 맥락 신호 2"],
     [`설정 풀 ${num(M.configurations)}개`, Object.entries(M.family_counts).map(([k, v]) => `${k} ${v}`).join(" · ") + " (혼합 비중·세그먼트 변수·λ 격자의 조합, CF 신뢰도 게이트 n/(n+10))"],
     ["검증·선택", "검증 주차(2주) NDCG@5로 전역 1위와 기법군별 1위를 고르고, 세그먼트 라우터는 계층(학습활동→선호군집→연령대→소득분위[→성별])에서 λ ∈ {0, 20, 100, 500, 3000, ∞} 교차 선택(반복 2회, 표본 20명 미만 노드는 상위 노드 추정을 그대로 씀 — 잎 크기를 보장하지는 않음). 선택 후 잠금."],
-    ["테스트·QA", `테스트 주차(3주)에서 사용자 평균 NDCG@5·Hit@5·Diversity@5·선수 미이수 비율·짧은 목록 비율, 사용자 단위 쌍 부트스트랩 500회로 전역 1위 대비 차이의 95% 구간. 학습 QA ${M.qa}건 모두 통과: 가드레일·중복 ${QC["가드레일·중복"] || 0}, 지표 함수 일치 ${QC["지표 함수 일치"] || 0}, 신경망 학습 확인 ${QC["신경망 학습 확인"] || 0}(쌍별 모델은 쌍 사용자만 학습했는지 포함), 활성 지표 항등식·순위 ${QC["활성 지표 항등식·순위"] || 0}, 이벤트 논리 ${QC["이벤트 논리"] || 0}, Top-K 형식 ${QC["Top-K 형식"] || 0}, 누수 검사 ${QC["누수 검사"] || 0}(기준 주 이후 행을 섞어도 스냅샷 특징이 같음), 개인정보 ${QC["개인정보"] || 0}, 기타 데이터·선택 검사 ${QC["기타 데이터·선택 검사"] || 0}. 오프라인/온라인 Top-5 일치는 자동화 테스트(test_offline_online_parity)로, 재현성은 같은 seed로 다시 학습해 결과 파일을 비교하는 방식(v1 회귀 스크립트)으로 확인한다.`],
+    ["테스트·QA", `테스트 주차(3주)에서 사용자 평균 NDCG@5·Hit@5·Diversity@5·선수 미이수 비율·짧은 목록 비율, 사용자 단위 쌍 부트스트랩 500회로 전역 1위 대비 차이의 95% 구간. 학습 QA ${M.qa}건 모두 통과: 가드레일·중복 ${QC["가드레일·중복"] || 0}, 지표 함수 일치 ${QC["지표 함수 일치"] || 0}, 신경망 학습 확인 ${QC["신경망 학습 확인"] || 0}(쌍별 모델은 쌍 사용자만 학습했는지 포함), 활성 지표 항등식·순위 ${QC["활성 지표 항등식·순위"] || 0}, 이벤트 논리 ${QC["이벤트 논리"] || 0}, Top-K 형식 ${QC["Top-K 형식"] || 0}, 누수 검사 ${QC["누수 검사"] || 0}(기준 주 이후 행의 모든 열을 섞고 행을 더한 로그와 이후 행을 지운 로그로 만든 특징 저장소가 모든 필드에서 같음), 개인정보 ${QC["개인정보"] || 0}, 기타 데이터·선택 검사 ${QC["기타 데이터·선택 검사"] || 0}. 오프라인/온라인 Top-5 일치는 자동화 테스트(test_offline_online_parity)로, 재현성은 같은 seed로 다시 학습해 결과 파일을 비교하는 방식(v1 회귀 스크립트)으로 확인한다.`],
     ["번들", "bundle.pkl(설정·신호 메타·모델 가중치·특징 저장소·일반화 프로필·축약 로그 — 원시 연령·연소득, 일·분 없음), manifest.json(선택 기록·학습 감사·QA·개인정보 감사), 결과 CSV(테스트·검증·집단별·노출, 5명 미만 집단 제외)"],
   ], [2.2, 10.3], { caption: "학습 파이프라인 요약", zebra: true }),
   h2("5.6 서빙: REST API와 학습 설계 스튜디오"),
@@ -607,8 +617,8 @@ add(pageBreak(), h1("부록 A. REST API 요약"),
     ["GET /api/catalog", "—", "단원 목록(주제·수준·선수·출처·개념), 주제·그룹"],
     ["POST /api/parse", "text", "자연어에서 읽은 필드와 근거 표현, 경고"],
     ["GET /api/learners, /api/learners/{id}", "q, limit, offset", "모의 학습자 검색, 프로필·세그먼트·통과 단원·이력"],
-    ["POST /api/recommend", "learner_id 또는 learner{age, goal, horizon, risk, interests, placement, diagnosis, events…}, k, algorithm, guardrail{block_gap, plus_one_max, exclude_passed, prereq_block}, topic_cap, overrides, assume_passed", "추천 단원(점수·기여도·근거·선수 미이수·현재 단계·출처), 로드맵 요약, 검사 결과, 세그먼트 경로, 계산식, 주제×수준 배치도"],
-    ["POST /api/roadmap", "learner_id 또는 learner, assume_passed, overrides", "단계별 단원(상태·분·선수 미이수·출처), 진행률, 다음 단원, 연결 유형"],
+    ["POST /api/recommend", "learner_id(학습자 조회가 켜진 서버에서만) 또는 learner{age, goal, horizon, risk, interests, placement, diagnosis, events…}, k, algorithm, guardrail{block_gap, plus_one_max, exclude_passed, prereq_block}(생략하면 화면 기본: 선수 단원 차단 켬), topic_cap, overrides, assume_passed(카탈로그 범위 안 단원 번호)", "추천 단원(점수·기여도·근거·선수 미이수·현재 단계·출처), 로드맵 요약, 검사 결과, 세그먼트 경로, 계산식, 주제×수준 배치도"],
+    ["POST /api/roadmap", "learner_id(학습자 조회가 켜진 서버에서만) 또는 learner, assume_passed, overrides", "단계별 단원(상태·분·선수 미이수·출처), 진행률, 다음 단원, 연결 유형"],
     ["POST /api/types", "learner 또는 goal, risk, assume_passed", "유형 카드(권장·열림, 개념 통과, 세금·연금·규제·주의, 통계, 출처), 유니버스 출처"],
     ["GET /api/quiz, POST /api/quiz/score", "answers{문항id: 보기}", "문항 목록(정답 제외) / 수준·정답 수·문항별 결과·진단 이벤트"],
     ["GET /api/sources", "—", "출처 등록부, 유니버스 출처(샘플/스냅샷), 유형 통계"],
@@ -656,7 +666,8 @@ add(h1("부록 D. 재현 방법과 테스트"),
       "python scripts/prereq_sensitivity.py docs/results/prereq_sensitivity.json   # 선수 페널티 민감도",
       `pytest -q                                                     # 자동화 테스트 ${TESTS}건 중 기본 실행 ${TESTS - 1}건 (약 30초)`,
       "ETFREC_FULL=1 pytest -q -k full                              # 나머지 1건: 노트북 기록과 5자리 일치를 전체 학습으로 확인(약 2~3분)",
-      "node scripts/ui_walkthrough.mjs http://127.0.0.1:8000 docs/screens          # Playwright 화면 점검·캡처"]
+      "node scripts/ui_walkthrough.mjs http://127.0.0.1:8000 docs/screens          # Playwright 화면 점검·캡처(서버를 먼저 띄움)",
+      "docs/report/build/build.sh                                   # 그림 → report_data.json → 두 보고서(Word), node와 npm i docx 필요"]
     .map(c => new Paragraph({ spacing: { after: 40 }, indent: { left: 240 }, shading: { type: ShadingType.CLEAR, fill: "F1F3F0", color: "auto" },
       children: [new TextRun({ text: c, font: "Consolas", size: 17 })] })),
   spacer(80),

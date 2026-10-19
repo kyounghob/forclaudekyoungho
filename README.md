@@ -16,7 +16,7 @@
 - 중간보고서(Word): `docs/report/중간보고서_ETF_교육_콘텐츠_추천시스템.docx` — 문제·시나리오, 추천 기법 요약과 한계, 데이터·확보 계획, 시스템 설계·구현 현황, 실험 결과(v1 재현, v2, 선수 가드레일 민감도), 평가 계획, 일정, 부록(API·퀴즈·용어집·재현).
 - 비판 검토·보완 보고서(Word): `docs/report/비판검토_보완보고서.docx` — 중간보고서 1차본에 대한 비판을 문장 단위로 검토해 수용·부분 수용·불수용 판정과 근거, 간과한 이유, 고친 코드와 바뀐 수치를 정리.
 - 중간보고서 1차본(비판 대상, 2026-10-13): `docs/report/중간보고서_1차본_2026-10-13.docx` — 비판 검토 보고서가 인용한 원문 대조용.
-- 보고서 그림: `docs/report/fig*.png`, 화면 캡처: `docs/screens/*.png`, 민감도 결과: `docs/results/prereq_sensitivity.json`, 보고서 생성 스크립트: `docs/report/build/`(번들 → `export_data.py` → `report_data.json` → `build_report.js`·`build_critique_response.js`).
+- 보고서 그림: `docs/report/fig*.png`, 화면 캡처: `docs/screens/*.png`, 민감도 결과: `docs/results/prereq_sensitivity.json`, 보고서 생성: `docs/report/build/build.sh` 한 번으로 그림(`make_figures.py`) → 데이터(`export_data.py` → `report_data.json`) → Word(`build_report.js`·`build_critique_response.js`, node와 `npm i docx` 필요) → `docs/report/`로 복사합니다. 먼저 `artifacts/bundle_v2`·`bundle_v1`의 `bundle.pkl`이 있어야 합니다(저장소에 없으므로 아래 학습 명령으로 만듦). 그림 크기는 이미지 파일 헤더에서 읽어 비율을 맞춥니다.
 
 ## 빠른 시작
 
@@ -36,13 +36,13 @@ python -m etfrec serve --bundle artifacts/bundle_v2     # http://127.0.0.1:8000
 | 단계 | 내용 | 구현 |
 | --- | --- | --- |
 | 진단 | 20문항(18개 단원) 진단 퀴즈로 수준 1~3과 이미 아는 단원을 추정. 정답률은 답한 문항으로 계산하되 수준마다 최소 응답 수(수준1 5개·수준2 3개·수준3 3개)를 못 채우면 그 수준 판정을 보류하고, 한 단원에 문항이 둘이면 둘 다 답하고 맞혀야 '진단 통과'로 기록(후보에서 빠짐). 레버리지 거래 요건 같은 규제 상식 문항은 수준 판정에만 쓰며, 정답 위치는 보기 네 자리에 고르게 나눔 | `etfrec/quiz.py`, `/api/quiz`, `/api/quiz/score` |
-| 필수 기초 | 모든 목적에 공통: ETF 구조·총보수·NAV와 괴리율·유동성·환헤지(H)·레버리지 일일 복리 효과 (선수 관계 닫힘까지 포함) | `taxonomy.COMMON_CORE`, `roadmap.build_roadmap` |
-| 목적별 핵심 | 목적 템플릿(연금: 연금계좌 ETF·ISA·자산배분 / 인컴: 분배금·커버드콜·리츠·채권·ISA / 단기 매매: 유동성·레버리지·괴리율 …). 세제·규제 6단원(ISA 3단원, 과표기준가, IRP 70% 한도, 레버리지 거래 요건)에는 기준일을 단 학습 요점 본문이 붙음 | `taxonomy.ROADMAP_TEMPLATES`, `etfrec/lessons.py` |
+| 필수 기초 | 모든 목적에 공통: ETF 구조·총보수·NAV와 괴리율·유동성·환율과 환헤지·레버리지·인버스 기초와 일일 복리 효과, 그리고 그 선수 단원(지수·해외 ETF 기초)까지 9개 | `taxonomy.COMMON_CORE`, `roadmap.build_roadmap` |
+| 목적별 핵심 | 목적 템플릿(연금: 연금계좌 ETF·ISA·자산배분 / 인컴: 분배금·커버드콜·리츠·채권·ISA / 단기 매매: 섹터·테마·호가 스프레드 — 레버리지 복리·괴리율은 필수 기초에서 …). 세제·규제 6단원(ISA 3단원, 과표기준가, IRP 70% 한도, 레버리지 거래 요건)에는 기준일을 단 학습 요점 본문이 붙음 | `taxonomy.ROADMAP_TEMPLATES`, `etfrec/lessons.py` |
 | 심화·리스크 | 목적별 심화 단원 + 기간(단기 → 유동성 2, 장기 → 리밸런싱 2) + 성향(안정이면 레버리지 심화 제외) | `roadmap.build_roadmap` |
 | ETF 유형 연결 | 10개 유형(국내 시장대표·해외 주식형·채권형·배당·커버드콜·자산배분·레버리지·인버스 …)에 필요한 개념 단원의 통과 여부로 카드가 열림. 세금·연금계좌 편입·사전교육 규제·주의 사항과 KRX 유형 통계 표시 | `taxonomy.ETF_TYPES`, `service.types`, `/api/types` |
 
-로드맵은 추천 엔진에 두 가지로 들어갑니다. (1) **로드맵 신호** `r:roadmap`(현재 단계의 학습 가능 단원 1.0, 다음 단계
-0.7, 선수 미이수 0.4)과 **목적 일치 신호** `r:goal`이 규칙·혼합 설정 풀에 추가되어 검증에서 다른 신호와 함께 비중이
+로드맵은 추천 엔진에 두 가지로 들어갑니다. (1) **로드맵 신호** `r:roadmap`(현재 단계의 학습 가능 단원 1.0, 이후 단계(심화 포함)의
+학습 가능 단원 0.7, 선수 미이수 0.4)과 **목적 일치 신호** `r:goal`이 규칙·혼합 설정 풀에 추가되어 검증에서 다른 신호와 함께 비중이
 선택됩니다. (2) **선수 단원 가드레일** `prereq_block`이 선수 단원을 통과하지 않은 단원을 후보에서 뺍니다(화면 기본 켬,
 오프라인 평가에는 `RouterNoGender+prereq` 행으로 효과를 따로 기록).
 
@@ -90,8 +90,8 @@ python -m etfrec serve --bundle artifacts/bundle_v2     # http://127.0.0.1:8000
 | --- | --- | --- |
 | 원시 연령·연소득 비저장 | 원값은 학습 중 메모리에서 소득 5분위 경계를 만드는 데만 씁니다. 번들 프로필·특징 저장소·`learner_profiles.csv`에는 연령대·소득분위 구간(과 분위 경계·중앙값 같은 집계)만 남습니다. 모델은 원래 구간 코드만 쓰므로 학습 결과는 바뀌지 않습니다 | `generalize_profiles`, QA `bundle_profiles_no_raw_age_income`·`feature_store_no_raw_age_income` |
 | 학습 이력 최소화 | 번들의 학습 로그는 허용 열(가명 번호·단원·주차·4개 시간대·주 안 순서 `seq`·시도 플래그·점수)만 남기고 일·분과 학습 스키마 밖 열(외부 회원 ID·분 단위 시각·IP 등)을 버립니다. `train --data`로 읽을 때도 스키마 밖 열은 버리고 이름을 데이터 요약(`dropped_columns`)에 남깁니다 | `minimize_log`, `Dataset.validate`, QA `bundle_log_no_day_minute`(로그 열 ⊆ 허용 목록) |
-| API·화면 | `/api/learners`·학습자 상세는 연령대·소득분위 코드·이름(상세는 구간 대표값까지)만 반환합니다. 다만 학습자 단위 표라 학습 환경 안에서만 엽니다: `serve`는 127.0.0.1에서만 기본으로 켜고, 다른 주소로 열면 `--expose-learners`를 줄 때만 켭니다(꺼지면 403). API로 고를 수 있는 기법은 화면의 기법 목록(기법군 1위·라우터)뿐이고, 임의 설정 번호(예: 5변수 세그먼트 인기처럼 한 명뿐인 칸으로 계산될 수 있는 설정)는 `ETFREC_DEV_CONFIGS=1`이나 CLI `recommend`에서만 받습니다. 기존 학습자를 새 학습자로 복사하면 입력란에 구간 대표값(연령 25·35·45·55·65세, 소득은 분위별 대표값)을 채우고 원값이 아니라고 화면에 표시합니다. 소득을 비운 학습자의 대체값은 학습 때 저장한 중앙값(집계)입니다 | `service.learners`·`learner`·`resolve_algorithm`, `create_app(expose_learners)`, `FeatureStore.income_median` |
-| 저장 설계 | `/api/designs`는 쓰기 전에 연령·연소득 원값을 구간 코드로 바꾸고('45살'·'5000만원'처럼 읽을 수 있는 문자열도, 읽을 수 없으면 버림), 설계 이름과 모든 문자열(목록 안 문장 포함)의 연령·소득 표현(예: 45세, 45세 이상, 연봉 5,000만원, 연소득은 7천만원, 1억 2천만원, 5천만원)을 구간 이름으로 가립니다. 이벤트의 일·분은 버리고 시각은 4개 시간대로 바꿉니다. 이름·주소 같은 그 밖의 표현은 가리지 못하므로 입력하지 않습니다. 불러올 때는 학습자 입력란에 구간 대표값을 채웁니다 | `scrub_design`, `scrub_text`, `hydrate_design` |
+| API·화면 | `/api/learners`·학습자 상세는 연령대·소득분위 코드·이름(상세는 구간 대표값까지)만 반환합니다. 다만 학습자 단위 표라 학습 환경 안에서만 엽니다: `serve`는 127.0.0.1에서만 기본으로 켜고, 다른 주소로 열면 `--expose-learners`를 줄 때만 켭니다. 꺼져 있으면 학습자 조회와 함께 추천·비교·로드맵·유형 API의 `learner_id`(기준 학습자 번호) 입력도 403으로 거절합니다(응답의 프로필·통과 단원으로 학습자 표를 열거하지 못하게). API로 고를 수 있는 기법은 화면의 기법 목록(기법군 1위·라우터)뿐이고, 임의 설정 번호(예: 5변수 세그먼트 인기처럼 한 명뿐인 칸으로 계산될 수 있는 설정)는 `ETFREC_DEV_CONFIGS=1`이나 CLI `recommend`에서만 받습니다. 기존 학습자를 새 학습자로 복사하면 입력란에 구간 대표값(연령 25·35·45·55·65세, 소득은 분위별 대표값)을 채우고 원값이 아니라고 화면에 표시합니다. 소득을 비운 학습자의 대체값은 학습 때 저장한 중앙값(집계)입니다 | `service.learners`·`learner`·`resolve_algorithm`, `create_app(expose_learners)`, `FeatureStore.income_median` |
+| 저장 설계 | `/api/designs`는 쓰기 전에 연령·연소득 원값을 구간 코드로 바꾸고('45살'·'5000만원'처럼 읽을 수 있는 문자열도, 읽을 수 없으면 버림), 설계 이름과 모든 문자열(목록 안 문장 포함)의 연령·소득 표현(예: 45세, 45세 이상, 연봉 5,000만원, 연소득은 7천만원)과 키워드 없이 쓴 금액(1억 2천만원, 5천만원, 7000만원 — 소득으로 보고 금액 전체를)을 구간 이름으로 가립니다. 이벤트의 일·분은 버리고 시각은 4개 시간대로 바꿉니다. 이름·주소 같은 그 밖의 표현은 가리지 못하므로 입력하지 않습니다. 불러올 때는 학습자 입력란에 구간 대표값을 채웁니다 | `scrub_design`, `scrub_text`, `hydrate_design` |
 | 작은 셀 비공개 | 추천 경로 출력은 노드 크기를 구간('20명 미만'·'20~49명'·…·'500명 이상')으로만 보이고 원시 평균은 내보내지 않습니다(정확한 n과 평균을 내면 부모 − 형제 차분으로 숨긴 노드가 복원됩니다). 집단별 표(`group_results`·`advanced_exposure`)는 5명 미만 집단을 빼고, 활성 5명 미만이면 활성 기준 값을 비우며, 한 변수에서 하나만 빠지면 가장 작은 집단을 하나 더 빼거나 비웁니다(보완 억제: 함께 공개되는 합계와의 차분으로 복원되지 않게) | `ShrinkRouter.path`, `suppress_small_groups`, QA `published_group_cells_ge_5` |
 | 감사 | 저장 준식별자 8개(연령대·소득분위·성별·경험·성향·목적·기간·기기) 조합의 k=5 결과, 열 제거 일반화 계획(열을 다 빼도 안 되면 `impossible`), export-deid가 할 일반화·억제 요약, 라우터별 실제 잎 크기, 번들 로그 열과 버린 열, 서빙 학습자 표의 열 역할과 확장 조합(준식별자 8개 + 학습 시간대 + 관심 주제)의 k 결과를 기록하고 평가 화면에는 측정값만 표시합니다. 감사는 기록이며 그 자체로 k를 보장하지 않습니다 | `privacy_audit`, `users_table_audit`, QA `privacy_audit_columns_complete` |
 | 가명처리(운영 원본용) | `read -rs ETFREC_PSEUDO_KEY && export ETFREC_PSEUDO_KEY` 로 키를 화면에 보이지 않게 넣은 뒤(명령줄에 `KEY=값`으로 쓰면 셸 기록에 남습니다) `python -m etfrec pseudonymize --profiles A.csv --log B.csv --id-col member_id --out DIR --mapping-out PATH`: 외부 회원 ID → HMAC-SHA256 가명(16자) → 가명 순서 연속 번호. 키가 없거나 16자 미만이면 실행하지 않고, 매핑표는 `--mapping-out`에만 쓰며 학습 입력 폴더와 겹치면(심볼릭 링크·대소문자만 다른 경로 포함) 거부합니다. 로그의 일·분은 0으로 지우고 시간대는 4개로 다시 계산하며, 학습 스키마 밖 열은 버립니다. 원시 연령·연소득은 학습 입력에 남습니다(분위 경계 계산). 결과 폴더는 `train --data DIR`로 읽힙니다. 모의 데이터 학습에는 쓰지 않습니다 | `build_pseudonymized_inputs`, `cli pseudonymize` |
@@ -214,13 +214,16 @@ curl -s localhost:8000/api/quiz | head -c 400; curl -s localhost:8000/api/source
 
 추천 응답에는 추천 단원, 점수, 신호별 기여도, 추천 근거 문장, 선수 미이수 여부, 현재 로드맵 단계 포함 여부, 출처
 링크, 가드레일 검사 결과, 세그먼트 경로, 계산식, 주제×수준 배치도, 로드맵 요약이 들어 있습니다. OpenAPI 문서는 `/docs`.
+`guardrail`을 생략하면 화면 기본값(두 단계 위 차단·한 단계 위 1개·통과 단원 제외·선수 단원 차단 켬)으로 계산하고, 통과 가정(`assume_passed`)은
+카탈로그 범위 안의 단원 번호만 받습니다(아니면 422).
 
 ## 테스트
 
 ```bash
 pytest -q                       # 지표 일치·가드레일·로드맵·퀴즈·도메인 규칙·KRX 분류·수집 정책·개인정보·파서·파이프라인·오프라인/온라인 Top-5 일치·API (약 30초)
 ETFREC_FULL=1 pytest -q -k full # 노트북 기록(seed 42, v1 세계)과 소수점 5자리 일치 확인 (약 2~3분)
-node scripts/ui_walkthrough.mjs # Playwright로 11단계 UI를 조작하며 docs/screens/*.png 생성
+# UI 점검(Playwright 필요: npm i playwright): 서버를 먼저 띄운 뒤 그 주소를 넘긴다(기본값은 http://127.0.0.1:8765)
+node scripts/ui_walkthrough.mjs http://127.0.0.1:8000 docs/screens   # 11단계 UI를 조작하며 화면 캡처 생성
 ```
 
 ## 범위와 한계

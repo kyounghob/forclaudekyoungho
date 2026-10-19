@@ -16,7 +16,7 @@ from etfrec.catalog import LABELS, Catalog
 from etfrec.data import Dataset
 from etfrec.features import AGE_BAND_REP, income_quintile
 from etfrec.privacy import (QUASI_IDENTIFIERS, build_pseudonymized_inputs, enforce_k_anonymity, generalization_plan, k_anonymity,
-                            pseudonymize_ids, router_leaf_audit)
+                            pseudonymize_ids, router_leaf_audit, scrub_text)
 from etfrec.service import LearnerInput, RecommendationService
 
 KEY = "test-pseudo-key-0123456789"
@@ -317,7 +317,20 @@ def test_learner_lookup_can_be_switched_off(small_bundle, tmp_path):
     c = TestClient(create_app(small_bundle, designs_dir=str(tmp_path), expose_learners=False))
     assert c.get("/api/learners").status_code == 403 and c.get("/api/learners/1").status_code == 403
     assert c.post("/api/recommend", json={"learner": {"age": 30, "interests": [1]}, "k": 3}).status_code == 200
+    for path in ("/api/recommend", "/api/compare", "/api/roadmap", "/api/types"):     # 기준 학습자 번호로 프로필·통과 단원을 열거하지 못한다
+        assert c.post(path, json={"learner_id": 7}).status_code == 403, path
+    on = TestClient(create_app(small_bundle, designs_dir=str(tmp_path)))
+    assert all(on.post(p, json={"learner_id": 7}).status_code == 200 for p in ("/api/recommend", "/api/roadmap", "/api/types"))
     assert cli.LOOPBACK == ("127.0.0.1", "localhost", "::1")
+
+
+def test_scrub_text_masks_whole_keywordless_amounts():
+    E = [3020, 4110, 5350, 7282]
+    cases = {"1억 2천만원": "[소득 5분위(상위 20%)]", "1억2천만원": "[소득 5분위(상위 20%)]", "5,000만원": "[소득 3분위]", "7000만원": "[소득 4분위]",
+             "1억원": "[소득 5분위(상위 20%)]", "연봉 1억 2천만원": "[소득 5분위(상위 20%)]",
+             "연소득은 7천만원, 1억 2천만원, 5천만원, 45세 이상": "[소득 4분위], [소득 5분위(상위 20%)], [소득 3분위], [40대] 이상"}
+    for text, want in cases.items():
+        assert scrub_text(text, E) == want, (text, scrub_text(text, E))
 
 
 def test_design_scrub_covers_names_lists_events_and_more_forms(small_bundle, tmp_path):

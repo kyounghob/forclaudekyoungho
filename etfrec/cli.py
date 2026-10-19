@@ -1,9 +1,10 @@
 """명령줄 인터페이스.
 
     python -m etfrec generate --out data/synthetic [--n 15000] [--seed 42] [--effect 1.0]
-    python -m etfrec train --out artifacts/bundle_v1 [--data data/synthetic] [--n 15000] [--no-neural]
-    python -m etfrec recommend --bundle artifacts/bundle_v1 --user 1 [--k 5] [--algorithm RULE]
-    python -m etfrec serve --bundle artifacts/bundle_v1 [--host 127.0.0.1] [--port 8000] [--sources-dir data/sources] [--expose-learners]
+    python -m etfrec train --out artifacts/bundle_v2 [--data data/synthetic] [--n 15000] [--no-neural]
+    python -m etfrec train --out artifacts/bundle_v1 --catalog-version 1 --generator-version 1   # 노트북 v1 세계 재현
+    python -m etfrec recommend --bundle artifacts/bundle_v2 --user 1 [--k 5] [--algorithm RULE]
+    python -m etfrec serve --bundle artifacts/bundle_v2 [--host 127.0.0.1] [--port 8000] [--sources-dir data/sources] [--expose-learners]
     python -m etfrec demo [--n 3000]      # 작은 규모로 학습한 뒤 바로 서버를 띄운다
     read -rs ETFREC_PSEUDO_KEY && export ETFREC_PSEUDO_KEY     # 키는 화면에 보이지 않게 입력(명령줄에 쓰면 셸 기록에 남는다)
     python -m etfrec pseudonymize --profiles A.csv --log B.csv --id-col member_id --out DIR --mapping-out PATH
@@ -69,6 +70,8 @@ def cmd_train(a):
     from .pipeline import train
     cfg = TrainConfig(n_learners=a.n, seed=a.seed, effect_scale=a.effect, catalog_version=a.catalog_version, generator_version=a.generator_version)
     ds = Dataset.from_csv(a.data) if a.data else Dataset.synthetic(cfg)
+    if a.data:
+        print("학습 데이터:", os.path.abspath(a.data), "(경로는 터미널에만 표시하고 번들에는 'csv'로 기록)")
     bundle = train(ds, cfg, out_dir=a.out, enable_neural=not a.no_neural)
     print("운영 설정:", bundle.algos[bundle.selection["operational_algorithm"]].name)
 
@@ -182,7 +185,7 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog="etfrec", description="ETF 교육 콘텐츠 개인화·세그먼트 추천 시스템")
     sub = p.add_subparsers(dest="cmd", required=True)
     def versions(parser):
-        parser.add_argument("--catalog-version", type=int, default=TrainConfig().catalog_version, help="1 = 노트북 원본 60단원, 2 = 63단원+선수 관계")
+        parser.add_argument("--catalog-version", type=int, default=TrainConfig().catalog_version, help="1 = 노트북 원본 주제 20 × 수준 3 = 60단원, 2 = 주제 22 × 수준 3 = 66단원 + 선수 관계")
         parser.add_argument("--generator-version", type=int, default=TrainConfig().generator_version, help="1 = 노트북 난수 순서, 2 = 목적·선수 관계 반영")
     g = sub.add_parser("generate", help="모의 데이터 생성 → CSV"); g.add_argument("--out", required=True)
     g.add_argument("--n", type=int, default=TrainConfig().n_learners); g.add_argument("--seed", type=int, default=TrainConfig().seed)

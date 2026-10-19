@@ -106,6 +106,22 @@ def _longest(text, table, lo=0, hi=None, exclude=()):
     return best
 
 
+PASS_VERBS = ("통과", "합격", "맞췄", "끝냈")
+DONE_VERBS = ("완료", "다 봤", "끝까지", "수강")
+FAIL_WORDS = ("떨어", "불합격", "미통과", "낙제")
+_NEG_AFTER = re.compile(r"\s*(?:하지|를|을|은|는|도|에|에는)?\s*(?:못|않|안\s|안했|실패|전|중)")
+
+
+def _affirmed(gap: str, words) -> bool:
+    """gap에 동사가 있고 부정·실패가 붙지 않았는지. '통과하지 못했어'·'통과 못 했어'·'통과 실패'·'통과 전'·'미완료'·'수강 중'은 아니다."""
+    for w in words:
+        for m in re.finditer(re.escape(w), gap):
+            if gap[max(0, m.start() - 1):m.start()] == "미" or _NEG_AFTER.match(gap, m.end()):
+                continue
+            return True
+    return False
+
+
 def _clauses(text):
     """문장부호(. , ! ? 줄바꿈)로 나눈 구간 [(시작, 끝)]."""
     out, start = [], 0
@@ -150,14 +166,19 @@ def parse_onboarding(text: str, catalog: Catalog) -> dict:
         if v is not None:
             fields[key] = v; evidence.append(dict(field=key, value=v, matched=w))
     exp_hit, used = None, []
-    for m in re.finditer("경험", t):                                   # 경험: '경험' 주변에서만
-        h = _longest(t, EXP_WORDS, max(0, m.start() - 8), m.end() + 14)
-        if h and (exp_hit is None or len(h[1]) > len(exp_hit[1])):
+    for m in re.finditer("경험", t):                                   # 경험: '경험'이 든 절 안의 주변에서만(다음 문장의 기간 표현을 읽지 않게)
+        cs, ce = next((a, b) for a, b in _clauses(t) if a <= m.start() <= b)
+        lo, hi = max(cs, m.start() - 8), min(ce, m.end() + 14)
+        h = _longest(t, EXP_WORDS[:1], lo, hi) or _longest(t, EXP_WORDS, lo, hi)     # '경험 없…'은 길이와 상관없이 우선
+        if h and (exp_hit is None or ((h[0] == 0) != (exp_hit[0] == 0) and h[0] == 0)
+                  or ((h[0] == 0) == (exp_hit[0] == 0) and len(h[1]) > len(exp_hit[1]))):
             exp_hit = h
     exp_hit = exp_hit or _longest(t, EXP_ANYWHERE)
     if exp_hit:
         fields["exp"] = exp_hit[0]; used.append(exp_hit[2:]); evidence.append(dict(field="exp", value=exp_hit[0], matched=exp_hit[1]))
     hz = _longest(t, HORIZON_WORDS, exclude=used)                      # 기간: 경험으로 읽은 구간은 빼고
+    if hz and hz[0] == "mid" and re.match(r"[1-4]\s*년\s*이상", t[hz[2]:hz[2] + 8]):    # '3년 이상'은 중기·장기 어느 쪽도 된다: '장기'가 있으면 장기
+        hz = _longest(t, [("long", ["장기간", "장기"])], exclude=used) or hz
     if hz:
         fields["horizon"] = hz[0]; evidence.append(dict(field="horizon", value=hz[0], matched=hz[1]))
     # 연령
@@ -186,8 +207,10 @@ def parse_onboarding(text: str, catalog: Catalog) -> dict:
     verbs = []                                                       # 따옴표마다 그 뒤 동사 구간의 (통과, 완료)
     for k, mq in enumerate(quotes):
         nxt = quotes[k + 1].start() if k + 1 < len(quotes) else min(len(raw), mq.end() + 40)
-        gap = raw[mq.end():nxt]
-        verbs.append((any(w in gap for w in ("통과", "합격", "맞췄", "끝냈")), any(w in gap for w in ("완료", "다 봤", "끝까지", "수강")),
+        end = re.search(r"[.!?\n]", raw[mq.end():nxt])                  # 동사는 같은 문장 안에서만 찾는다
+        gap = raw[mq.end():mq.end() + end.start() if end else nxt]
+        failed = any(w in gap for w in FAIL_WORDS)
+        verbs.append((not failed and _affirmed(gap, PASS_VERBS), _affirmed(gap, DONE_VERBS),
                       k + 1 < len(quotes) and re.fullmatch(r"\s*(와|과|,|및|하고|랑|이랑)\s*", gap) is not None))
     for k in range(len(verbs) - 2, -1, -1):                         # 'A와 B는 통과' → A는 B의 동사를 따른다
         if verbs[k][2]:

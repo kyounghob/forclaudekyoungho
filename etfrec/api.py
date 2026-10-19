@@ -1,6 +1,6 @@
 """FastAPI 애플리케이션: REST API + 정적 UI.
 
-실행: ``python -m etfrec serve --bundle artifacts/bundle_v1 --port 8000`` 후 http://localhost:8000
+실행: ``python -m etfrec serve --bundle artifacts/bundle_v2 --port 8000`` 후 http://localhost:8000
 모든 추천은 미리 학습된 번들로 계산하며 요청 중 재학습은 없다.
 """
 from __future__ import annotations
@@ -47,6 +47,7 @@ class Event(BaseModel):
     save: bool = False
     drop: bool = False
     replay: bool = False
+    source: Optional[str] = None     # "diagnosis": 진단 퀴즈에서 온 통과(수준 갱신에는 쓰지 않음)
 
 
 class Learner(BaseModel):
@@ -147,7 +148,8 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
     app.state.service = svc
 
     def guard(g: Optional[Guardrail]) -> GuardrailConfig:
-        return GuardrailConfig(**g.model_dump()) if g else bundle.config.guardrail
+        """요청의 가드레일. 생략하면 스키마 기본값(화면 기본: 선수 단원 차단 켬)과 같게 처리한다."""
+        return GuardrailConfig(**(g or Guardrail()).model_dump())
 
     def wrap(fn):
         try:
@@ -162,7 +164,7 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
 
     @app.get("/api/meta")
     def meta():
-        return svc.meta()
+        return {**svc.meta(), "learners_enabled": bool(expose_learners)}
 
     @app.get("/api/catalog")
     def catalog():
@@ -192,14 +194,20 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
             raise HTTPException(status_code=403, detail=LEARNERS_OFF)
         return wrap(lambda: svc.learner(uid))
 
+    def learner_of(req, allow_none: bool = False):
+        """learner_id(기준 학습자)는 학습자 조회와 같은 스위치로 막는다: 꺼져 있으면 응답의 프로필·통과 단원으로 학습자 표를 열거할 수 있다."""
+        if req.learner_id is not None and not expose_learners:
+            raise HTTPException(status_code=403, detail=LEARNERS_OFF)
+        return _learner_input(req, allow_none=allow_none)
+
     @app.post("/api/recommend")
     def recommend(req: RecommendRequest):
-        return wrap(lambda: svc.recommend(_learner_input(req), k=req.k, algorithm=req.algorithm, guard=guard(req.guardrail),
+        return wrap(lambda: svc.recommend(learner_of(req), k=req.k, algorithm=req.algorithm, guard=guard(req.guardrail),
                                           topic_cap=req.topic_cap, overrides=req.overrides, assume_passed=req.assume_passed))
 
     @app.post("/api/compare")
     def compare(req: CompareRequest):
-        return wrap(lambda: svc.compare(_learner_input(req), k=req.k, methods=req.methods, guard=guard(req.guardrail),
+        return wrap(lambda: svc.compare(learner_of(req), k=req.k, methods=req.methods, guard=guard(req.guardrail),
                                         topic_cap=req.topic_cap, overrides=req.overrides, assume_passed=req.assume_passed))
 
     @app.post("/api/recommend-new")
@@ -208,11 +216,11 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
 
     @app.post("/api/roadmap")
     def roadmap(req: RoadmapRequest):
-        return wrap(lambda: svc.roadmap(_learner_input(req), assume_passed=req.assume_passed, overrides=req.overrides))
+        return wrap(lambda: svc.roadmap(learner_of(req), assume_passed=req.assume_passed, overrides=req.overrides))
 
     @app.post("/api/types")
     def types(req: TypesRequest):
-        return wrap(lambda: svc.types(_learner_input(req, allow_none=True), goal=req.goal, risk=req.risk, assume_passed=req.assume_passed))
+        return wrap(lambda: svc.types(learner_of(req, allow_none=True), goal=req.goal, risk=req.risk, assume_passed=req.assume_passed))
 
     @app.get("/api/quiz")
     def quiz():

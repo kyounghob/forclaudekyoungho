@@ -5,7 +5,13 @@ artifacts/**/bundle.pkl
 artifacts/**/learner_profiles.csv
 artifacts/designs/
 artifacts/demo_bundle/
-data/
+/data/
 venv/
 .venv/
 *.egg-info/
+
+# 보고서 빌드 중간 산출물(docs/report/build/build.sh가 다시 만든다)
+docs/report/build/fig/
+docs/report/build/report_data.json
+docs/report/build/*.docx
+docs/report/build/node_modules/

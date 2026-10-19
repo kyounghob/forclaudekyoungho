@@ -105,8 +105,9 @@ def demo_sets(bl: dict) -> dict:
 
 
 def build_features(profiles: pd.DataFrame, log_before: pd.DataFrame, catalog: Catalog, week: int,
-                   income_edges: np.ndarray = None, click_cuts=CLICK_CUTS) -> FeatureStore:
-    """profiles의 학습자들에 대해 log_before(기준 주 이전 시도)로 특징을 만든다."""
+                   income_edges: np.ndarray = None, click_cuts=CLICK_CUTS, level_log: pd.DataFrame = None) -> FeatureStore:
+    """profiles의 학습자들에 대해 log_before(기준 주 이전 시도)로 특징을 만든다. level_log를 주면 수준 갱신에는 그 로그만 쓴다
+    (진단 퀴즈의 '진단 통과' 행은 통과 단원에는 들어가지만, 수준은 이미 퀴즈 판정에 반영되어 있어 다시 올리지 않는다)."""
     n = len(profiles)
     N_ITEMS, N_TOP = catalog.n_items, catalog.n_topics
     I_TOPIC, I_LEVEL = catalog.item_topic, catalog.item_level
@@ -131,7 +132,7 @@ def build_features(profiles: pd.DataFrame, log_before: pd.DataFrame, catalog: Ca
     g4 = np.stack([pref[:, catalog.topic_group == g].sum(1) for g in range(len(catalog.group_names))], 1)
     hc = np.zeros((n, 4)); np.add.at(hc, (lg.user.values, lg.hour.values), 1)
     hour = np.where(hc.sum(1) > 0, hc.argmax(1), 4)
-    level = estimate_level(lg, n, profiles.placement.values.astype(int), I_LEVEL)
+    level = estimate_level(lg if level_log is None else level_log, n, profiles.placement.values.astype(int), I_LEVEL)
     und = np.zeros((n, N_ITEMS), bool)
     und[lg.user.values[lg.understood.values], lg.item.values[lg.understood.values]] = True
     top2 = np.argsort(-pref, 1)[:, :2]

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 K = 5                                   # [교안 7-2] Top-K 평가의 K
 SEED = int(os.environ.get("REC_SEED", "42"))
-CATALOG_VERSION = int(os.environ.get("REC_CATALOG", "2"))     # 1 = 노트북 원본 60단원, 2 = 커버드콜 추가 63단원 + 선수 관계
+CATALOG_VERSION = int(os.environ.get("REC_CATALOG", "2"))     # 1 = 노트북 원본 60단원(주제 20), 2 = 66단원(주제 22: 커버드콜·절세 계좌 추가) + 선수 관계
 GENERATOR_VERSION = int(os.environ.get("REC_GENERATOR", "2")) # 1 = 노트북과 같은 난수 순서, 2 = 투자 목적·선수 관계 반영
 SEG_VARS = ["click_tier", "pref_cluster", "age_band", "income_q", "gender"]   # 세그먼트 계층(위 → 아래)
 SEG_KO = {"click_tier": "학습활동", "pref_cluster": "선호군집", "age_band": "연령대",

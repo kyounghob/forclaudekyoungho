@@ -73,6 +73,19 @@ def resolve_topics(values, catalog: Catalog) -> np.ndarray:
     return out
 
 
+def _as_bool(col: pd.Series, name: str) -> pd.Series:
+    """불리언 열 정규화: bool, 0/1 숫자, 'true'/'false'/'0'/'1' 문자열만 받는다(그 밖의 값은 오류)."""
+    if col.dtype == bool:
+        return col
+    if pd.api.types.is_numeric_dtype(col) and col.isin([0, 1]).all():
+        return col.astype(bool)
+    m = {"1": True, "0": False, "true": True, "false": False, "1.0": True, "0.0": False}
+    out = col.map(lambda v: m.get(str(v).strip().lower()))
+    if out.isna().any():
+        raise ValueError(f"{name} 열은 0/1 또는 True/False여야 합니다: {sorted(map(str, col[out.isna()].unique()))[:5]}")
+    return out.astype(bool)
+
+
 @dataclass
 class Dataset:
     profiles: pd.DataFrame
@@ -105,6 +118,9 @@ class Dataset:
         if self.dropped_columns["log"]:
             self.log = self.log[[c for c in self.log.columns if c in keep_l]].copy()
         self.log, self.event_repairs, changed = normalize_event_flags(self.log, return_mask=True)
+        if "score" in self.log.columns and "understood" in self.log.columns:   # 입력 점수: CSV의 0/1·'True'/'False'도 받아 형을 맞춘다
+            self.log["understood"] = _as_bool(self.log["understood"], "understood")
+            self.log["score"] = pd.to_numeric(self.log["score"]).astype(float)
         if "score" not in self.log.columns or "understood" not in self.log.columns:
             self.log = score_attempts(self.log)                       # 점수 열이 없으면 모든 행을 규칙으로 채점
         elif changed.any():                                           # 플래그를 고친 행만 다시 채점(입력 점수는 나머지 행에서 유지)
@@ -148,7 +164,7 @@ class Dataset:
         catalog = catalog or (Catalog.from_csv(cat_path) if os.path.exists(cat_path) else Catalog.default())
         profiles = pd.read_csv(os.path.join(directory, "profiles.csv"))
         log = pd.read_csv(os.path.join(directory, "study_log.csv"))
-        return cls(profiles, log, catalog, source=directory)
+        return cls(profiles, log, catalog, source="csv")              # 폴더 경로(OS 사용자 이름 등)는 번들·API에 남기지 않는다
 
     def save_csv(self, directory: str):
         os.makedirs(directory, exist_ok=True)

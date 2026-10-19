@@ -1,6 +1,8 @@
 """보고서 표에 쓸 데이터를 JSON으로 내보낸다(v2 번들·v1 번들·민감도·카탈로그·분류·퀴즈·출처·검증 사실)."""
-import json, subprocess, sys
-sys.path.insert(0, "/home/user/forclaudekyoungho")
+import json, os, subprocess, sys
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))        # 저장소 루트(docs/report/build 기준)
+sys.path.insert(0, ROOT)
 import numpy as np
 import pandas as pd
 from etfrec.catalog import Catalog
@@ -12,8 +14,7 @@ from etfrec.taxonomy import ETF_TYPES, ROADMAP_TEMPLATES, COMMON_CORE, LEVERAGE_
 from etfrec.privacy import POLICY
 from etfrec.nlparse import EXAMPLES
 from etfrec.lessons import LESSONS, ASOF as LESSON_ASOF
-ROOT = "/home/user/forclaudekyoungho"
-OUT = "/tmp/claude-0/-home-user-forclaudekyoungho/db6cf096-e4ef-53d5-afbe-466baac4ec50/scratchpad/report/report_data.json"
+OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "report_data.json")
 cat = Catalog.default()
 m = json.load(open(f"{ROOT}/artifacts/bundle_v2/manifest.json", encoding="utf-8"))
 res = pd.read_csv(f"{ROOT}/artifacts/bundle_v2/test_results.csv", encoding="utf-8-sig")

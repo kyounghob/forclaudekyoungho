@@ -2,6 +2,8 @@
 import io
 import json
 import os
+import shutil
+import subprocess
 import time
 import urllib.parse
 import urllib.request
@@ -452,6 +454,17 @@ def test_sample_snapshot_is_package_data():
         pkg = tomllib.load(f)["tool"]["setuptools"]["package-data"]["etfrec"]
     rel = os.path.relpath(SAMPLE_ETF, os.path.join(root, "etfrec")).replace(os.sep, "/")
     assert any(fnmatch.fnmatch(rel, pat) for pat in pkg), (rel, pkg)
+    assert os.path.isfile(SAMPLE_ETF)
+    if os.path.isdir(os.path.join(root, ".git")) and shutil.which("git"):        # 저장소에 실제로 커밋되는지(.gitignore에 걸리지 않는지)
+        r = subprocess.run(["git", "ls-files", "--error-unmatch", SAMPLE_ETF], cwd=root, capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+
+
+def test_missing_sample_file_still_serves(tmp_path, monkeypatch):
+    from etfrec.sources import sync
+    monkeypatch.setattr(sync, "SAMPLE_ETF", str(tmp_path / "없음.csv"))
+    df, info = sync.load_etf_universe(str(tmp_path / "snap"))
+    assert len(df) == 0 and info["kind"] == "sample" and "설치되지 않았습니다" in info["label"]
 
 
 def test_public_info_hides_local_paths_and_raw_errors(tmp_path):

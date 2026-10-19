@@ -29,9 +29,12 @@
     const opt = { method: method || (body ? "POST" : "GET"), headers: { "Content-Type": "application/json" } };
     if (body) opt.body = JSON.stringify(body);
     const r = await fetch(path, opt);
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || data));
-    return data;
+    const data = await r.json().catch(() => null);
+    if (!r.ok) {   // JSON이 아닌 오류 응답(처리되지 않은 서버 예외 등)은 상태 코드로 알린다
+      const d = data && data.detail;
+      throw new Error(typeof d === "string" ? d : d ? JSON.stringify(d) : data && Object.keys(data).length ? JSON.stringify(data) : `서버 오류(HTTP ${r.status}${r.statusText ? " " + r.statusText : ""})`);
+    }
+    return data ?? {};
   }
   function toast(msg, ms = 2600) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(t._t); t._t = setTimeout(() => (t.hidden = true), ms); }
   function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
@@ -110,7 +113,7 @@
     if (state.step === 7 && !state.result) runRecommend().catch(() => { });
     if (state.step === 8) renderSimControls();
     if (state.step === 9) loadTypes().catch(() => { });
-    if (state.step === 10) { renderCompare(); if (!EVAL) loadEvaluation(); }
+    if (state.step === 10) { renderCompare().catch(e => toast(e.message)); if (!EVAL) loadEvaluation().catch(e => toast(e.message)); }
     if (state.step === 11) { listDesigns(); $("#design-memo").value = state.memo; }
   }
 
@@ -141,7 +144,9 @@
   let searchSeq = 0;
   async function searchLearners() {
     const q = $("#learner-query").value.trim(); const seq = ++searchSeq;
-    const r = await api(`/api/learners?q=${encodeURIComponent(q)}&limit=12`);
+    let r;
+    try { r = await api(`/api/learners?q=${encodeURIComponent(q)}&limit=12`); }
+    catch (e) { if (seq === searchSeq) $("#learner-results").innerHTML = `<div class="warn small">${esc(e.message)}</div>`; return; }
     if (seq !== searchSeq) return;   // 더 늦게 보낸 검색 결과가 이미 그려졌으면 이전 응답은 버린다
     $("#learner-results").innerHTML = (r.items.length ? "" : `<div class="muted small">검색 결과가 없습니다</div>`) + r.items.map(u =>
       `<div class="learner-card ${u["학습자"] === state.learnerId ? "selected" : ""}" data-uid="${u["학습자"]}"><span>#${u["학습자"]} · ${esc(u["성별"])} ${esc(u["연령대"] ?? "")} · ${esc(u["소득분위"] ?? "")} · ${esc(u["투자 목적"] || "")} · ${esc(u["투자 경험"])}/${esc(u["위험성향"])}/${esc(u["기기"])} · 관심 ${esc(u["관심 주제"])} · 조회 ${u["조회 수"]} · 수준 ${u["추정 수준"]}</span><button class="btn small">선택</button></div>`).join("");
@@ -329,7 +334,7 @@
       META.methods.map(m => `<option value="${esc(m.key)}">${esc(m.label)}${META.test_ndcg[m.key] != null ? ` · 테스트 NDCG ${fmt(META.test_ndcg[m.key], 3)}` : ""}</option>`).join("");
     sel.value = S.algorithm; $("#s-k").value = S.k; $("#s-block").value = S.block_gap; $("#s-plus").value = S.plus_one_max; $("#s-exclude").value = S.exclude_passed ? "1" : "0"; $("#s-cap").value = S.topic_cap; $("#s-prereq").value = S.prereq_block ? "1" : "0";
     const op = META.operational_algorithm;
-    $("#algo-note").innerHTML = `<b>운영 설정</b> #${op.aid} ${esc(op.name)}<br><span class="muted small">${esc(op.formula)}</span><br><span class="small">검증 ${(META.configurations || 0).toLocaleString()}개 설정 중 1위(세그먼트 라우터 λ 교차 선택). 선수 단원 차단·두 단계 위 차단·한 단계 위 1개 상한은 수업의 교육 처방이 아니라 이 프로젝트의 시연용 정책이며, 오프라인 평가에는 '운영 라우터+prereq' 행으로 효과를 따로 기록했습니다.</span>`;
+    $("#algo-note").innerHTML = `<b>운영 설정</b> #${op.aid} ${esc(op.name)}<br><span class="muted small">${esc(op.formula)}</span><br><span class="small">검증 ${(META.configurations || 0).toLocaleString()}개 설정 중 1위(세그먼트 라우터 λ 교차 선택). 선수 단원 차단·두 단계 위 차단·한 단계 위 1개 상한은 수업의 교육 처방이 아니라 이 프로젝트의 시연용 정책입니다. 두 단계 위 차단과 한 단계 위 1개 상한은 모든 오프라인 평가 행에 적용되어 있고, 선수 단원 차단의 효과만 '운영 라우터+prereq' 행으로 따로 기록했습니다.</span>`;
   }
   function bindSettings() {
     const S = state.settings;
@@ -412,15 +417,17 @@
     if (sim.gender) overrides.gender = 1 - state.result.segment.gender.code;
     if (sim.income_q !== "") overrides.income_q = +sim.income_q; if (sim.age_band !== "") overrides.age_band = +sim.age_band; if (sim.level !== "") overrides.level = +sim.level;
     $("#sim-status").textContent = "계산 중…";
-    state.simResult = await api("/api/recommend", buildRequest({ assume_passed: sim.assume, overrides }));
-    const base = state.result.items.map(i => i.item_id), now = state.simResult.items.map(i => i.item_id);
-    const same = base.join() === now.join();
-    let genderBadge = "";
-    if (sim.gender) {   // 성별만 뒤집은 별도 요청으로 입력 불변성을 따로 확인한다(통과 가정·다른 what-if와 섞지 않음)
-      const only = await api("/api/recommend", buildRequest({ overrides: { gender: 1 - state.result.segment.gender.code } }));
-      const inv = only.items.map(i => i.item_id).join() === base.join();
-      genderBadge = `<span class="badge ${inv ? "ok" : "warn"}">성별만 뒤집기: ${inv ? "추천 불변 (코드 수준 점검)" : "추천 변화 — 이 설정은 성별을 씀"}</span>`;
-    }
+    const base = state.result.items.map(i => i.item_id);
+    let now, same, genderBadge = "";
+    try {
+      state.simResult = await api("/api/recommend", buildRequest({ assume_passed: sim.assume, overrides }));
+      now = state.simResult.items.map(i => i.item_id); same = base.join() === now.join();
+      if (sim.gender) {   // 성별만 뒤집은 별도 요청으로 입력 불변성을 따로 확인한다(통과 가정·다른 what-if와 섞지 않음)
+        const only = await api("/api/recommend", buildRequest({ overrides: { gender: 1 - state.result.segment.gender.code } }));
+        const inv = only.items.map(i => i.item_id).join() === base.join();
+        genderBadge = `<span class="badge ${inv ? "ok" : "warn"}">성별만 뒤집기: ${inv ? "추천 불변 (코드 수준 점검)" : "추천 변화 — 이 설정은 성별을 씀"}</span>`;
+      }
+    } catch (e) { $("#sim-status").textContent = "오류: " + e.message; throw e; }
     const rm0 = state.result.roadmap || {}, rm1 = state.simResult.roadmap || {};
     $("#sim-status").textContent = `${state.simResult.latency_ms} ms`; $("#sim-view").hidden = false;
     $("#sim-badges").innerHTML = `<span class="badge ${same ? "ok" : ""}">${same ? "추천 목록 동일" : "추천 목록 변화"}</span>` + genderBadge +
@@ -477,7 +484,8 @@
     if (!state.result) { $("#compare-view").innerHTML = `<p class="muted small">7단계에서 추천을 먼저 계산하세요.</p>`; return; }
     if (!state.compare || force) {
       $("#compare-view").innerHTML = `<p class="muted small">계산 중…</p>`;
-      state.compare = await api("/api/compare", buildRequest({ methods: ["RouterNoGender", "Global", "RULE", "UCF", "ICF", "POP", "CONTENT", "MF", "MF_BPR", "MF_OBS", "MLP", "MLP_BPR", "MLP_BPRU", "MLP_NEXT", "NoDemographics"].filter(m => META.methods.some(x => x.key === m)) }));
+      try { state.compare = await api("/api/compare", buildRequest({ methods: ["RouterNoGender", "Global", "RULE", "UCF", "ICF", "POP", "CONTENT", "MF", "MF_BPR", "MF_OBS", "MLP", "MLP_BPR", "MLP_BPRU", "MLP_NEXT", "NoDemographics"].filter(m => META.methods.some(x => x.key === m)) })); }
+      catch (e) { $("#compare-view").innerHTML = `<p class="warn small">오류: ${esc(e.message)}</p>`; throw e; }
     }
     const c = state.compare; const opIds = (c.methods[0] ? c.methods[0].items : []).map(i => i.item_id);
     $("#compare-view").innerHTML = `<table class="table"><tr><th>설정</th><th>테스트 NDCG@5</th><th>Top-${state.settings.k}</th><th>운영과 겹침</th></tr>` + c.methods.map(m => {
@@ -590,6 +598,13 @@
     META.type_names = META.type_names || {};
     $("#bundle-info").textContent = `번들 ${META.created_at} · 학습자 ${META.n_users.toLocaleString()}명 · 단원 ${META.n_items}개(카탈로그 v${META.catalog_version}) · 운영 설정 #${META.operational_algorithm.aid}`;
     $("#notice").textContent = META.notice + " 모의 데이터로 실행한 수업용 추천이며 실서비스 효과 검증이 아닙니다.";
+    const exRadio = document.querySelector("input[name=source][value=existing]"), synth = (META.dataset || {}).source === "synthetic";
+    $("#existing-label").textContent = META.learners_enabled === false ? "기존 학습자 불러오기 (이 서버에서는 꺼짐)"
+      : `기존 학습자 불러오기 (${synth ? "모의 데이터" : "학습 데이터"} ${META.n_users.toLocaleString()}명)`;
+    if (META.learners_enabled === false) {   // 학습자 단위 정보라 로컬 실행(또는 --expose-learners)에서만 연다
+      exRadio.disabled = true; exRadio.parentElement.title = "기준 학습자 조회는 로컬 실행에서만 켜집니다(다른 주소는 serve --expose-learners)";
+      if (state.source === "existing") { state.source = "new"; state.learnerId = null; }
+    }
     renderExamples(); bind(); $("#nl-text").value = state.nl.text || "";
     $("#types-assume").checked = state.types.includeAssume;
     $$("input[name=source]").forEach(r => r.checked = r.value === state.source); $("#existing-picker").hidden = state.source !== "existing";

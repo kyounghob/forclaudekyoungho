@@ -217,3 +217,19 @@ def test_catalog_csv_rejects_bad_prereqs_and_cycles(tmp_path):
     p = tmp_path / "cycle.csv"; d.to_csv(p, index=False)
     with pytest.raises(ValueError, match="순환"):
         Catalog.from_csv(str(p))
+
+
+def test_catalog_csv_chain_with_single_prereqs(tmp_path):
+    p = tmp_path / "chain.csv"                                    # 선수가 0~1개뿐이면 pandas가 열을 float로 읽어 '0.0'이 된다
+    p.write_text("item,title,topic,level,prereqs\n0,A,t,1,\n1,B,t,2,0\n2,C,t,3,1\n", encoding="utf-8")
+    assert Catalog.from_csv(str(p)).prereqs == {0: [], 1: [0], 2: [1]}
+
+
+def test_csv_dataset_source_has_no_local_path(tmp_path):
+    import json
+    from etfrec.config import TrainConfig
+    from etfrec.data import Dataset
+    d = tmp_path / "Users" / "hong.gildong" / "pseudo_input"
+    Dataset.synthetic(TrainConfig(n_learners=120)).save_csv(str(d))
+    s = Dataset.from_csv(str(d)).summary()
+    assert s["source"] == "csv" and "hong.gildong" not in json.dumps(s, default=str)

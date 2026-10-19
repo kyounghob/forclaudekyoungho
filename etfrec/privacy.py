@@ -87,12 +87,14 @@ POLICY_IMPLEMENTED = [
               "(외부 회원 ID·분 단위 시각·IP 등)은 버린다. 학습 입력을 읽을 때도 스키마 밖 열은 버리고 이름을 데이터 요약에 남긴다",
          enforced_by=["privacy.minimize_log", "data.Dataset.validate", "QA bundle_log_no_day_minute(로그 열 ⊆ 허용 목록)"]),
     dict(item="API 최소화: /api/learners·학습자 상세는 연령대·소득분위 코드와 이름만 반환하고, 소득 미입력 대체값은 학습 때 저장한 중앙값(집계)을 쓴다. "
-              "학습자 조회 API는 로컬 주소(127.0.0.1)로 띄울 때만 기본으로 켜지고, 다른 주소로 열면 --expose-learners를 줄 때만 켜진다. "
+              "학습자 조회 API와 추천·비교·로드맵·유형 API의 learner_id(기준 학습자 번호) 입력은 로컬 주소(127.0.0.1)로 띄울 때만 기본으로 켜지고, "
+              "다른 주소로 열면 --expose-learners를 줄 때만 켜진다. "
               "API로 고를 수 있는 기법은 화면의 기법 목록(기법군 1위·라우터)뿐이고 임의 설정 번호는 개발 모드에서만 받는다",
          enforced_by=["service.RecommendationService.learners/learner", "FeatureStore.income_median", "api.create_app(expose_learners)",
                       "cli serve --expose-learners", "service.resolve_algorithm(allow_any_config)", "tests/test_privacy.py"]),
     dict(item="저장 설계 최소화: /api/designs는 쓰기 전에 연령·연소득 원값을 구간 코드로 바꾸고(숫자로 읽을 수 없으면 버림), 설계 이름과 모든 문자열의 "
-              "연령·소득 표현(예: 45세, 45세 이상, 연봉 5,000만원, 연소득은 7천만원, 1억 2천만원)을 구간 이름으로 가리며, 이벤트의 일·분은 버리고 시각은 4개 시간대로 바꾼다. "
+              "연령·소득 표현(예: 45세, 45세 이상, 연봉 5,000만원, 연소득은 7천만원)과 키워드 없이 쓴 금액(1억 2천만원, 5천만원, 7000만원; 소득으로 보고 통째로)을 구간 이름으로 가리며, "
+              "이벤트의 일·분은 버리고 시각은 4개 시간대로 바꾼다. "
               "그 밖의 표현(이름 등)은 가리지 못한다",
          enforced_by=["privacy.scrub_design", "privacy.scrub_text", "api.save_design"]),
     dict(item="작은 셀 비공개: 추천 경로 출력은 노드 크기를 구간('20명 미만'·'20~49명'…)으로만 내보내고 원시 평균을 내보내지 않는다(부모−형제 차분으로 "
@@ -296,7 +298,7 @@ _TEXT_KEYS = ("text", "memo", "summary", "label", "matched")       # 이전 호�
 _AGE_RE = re.compile(r"(?<!\d)(\d{2})\s*(세|살)")                    # '45세 이상'·'만 45세'도 숫자 부분을 구간으로 바꾼다
 _MONEY = r"(?:(\d+)\s*억(?:\s*(\d)\s*천)?(?:\s*(\d)\s*백)?\s*(?:만\s*)?원?|(\d)\s*천\s*(?:(\d)\s*백\s*)?만\s*원?|(\d{1,3}(?:,\d{3})+|\d{3,5})\s*만\s*원?)"
 _INC_RE = re.compile(r"(연소득|연봉|소득|수입|연수입|월급)(?:\s*(?:은|는|이|가|을|를|:|=))?\s*(?:약\s*)?" + _MONEY)
-_INC_THOUSAND_RE = re.compile(r"(?<![\d,])(\d)\s*천\s*만\s*원")          # 키워드 없이 쓴 '5천만원'
+_MONEY_RE = re.compile(r"(?<![\d,.])" + _MONEY)                     # 키워드 없이 쓴 금액 전체(1억 2천만원·5천만원·5,000만원·7000만원·1억원)
 _HOUR_BANDS = (10, 15, 22)                                           # 0~23시 → 4개 시간대(출근·점심·저녁·심야)
 
 
@@ -353,11 +355,12 @@ def _label(var, code):
 
 
 def scrub_text(s: str, income_edges) -> str:
-    """자유 입력 문장의 연령(45세, 45세 이상, 만 45세)·소득(연봉 5,000만원, 연소득은 7천만원, 연봉 1억 2천만원, 5천만원) 표현을
-    [구간 이름]으로 바꾼다. 이름·주소 같은 그 밖의 표현은 가리지 못한다."""
+    """자유 입력 문장의 연령(45세, 45세 이상, 만 45세)·소득(연봉 5,000만원, 연소득은 7천만원, 연봉 1억 2천만원) 표현과 키워드 없이 쓴
+    금액(1억 2천만원, 5천만원, 5,000만원, 7000만원, 1억원; 소득으로 보고 분위 이름으로)을 [구간 이름]으로 바꾼다. 금액은 통째로 바꾸므로
+    '1억' 같은 앞부분이 남지 않는다. 이름·주소 같은 그 밖의 표현은 가리지 못한다."""
     s = _AGE_RE.sub(lambda m: f"[{_label('age_band', _age_code(m.group(1)))}]", s)
     s = _INC_RE.sub(lambda m: f"[{_label('income_q', _income_code(_money_manwon(m, 2), income_edges))}]", s)
-    return _INC_THOUSAND_RE.sub(lambda m: f"[{_label('income_q', _income_code(float(m.group(1)) * 1000, income_edges))}]", s)
+    return _MONEY_RE.sub(lambda m: f"[{_label('income_q', _income_code(_money_manwon(m, 1), income_edges))}]", s)
 
 
 def _scrub_event(o: dict) -> dict:

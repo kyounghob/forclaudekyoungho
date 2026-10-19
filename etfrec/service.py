@@ -157,7 +157,9 @@ class RecommendationService:
                                       interest1=int(interests[0]), interest2=int(interests[1]), placement=int(li.placement),
                                       goal=li.goal, horizon=li.horizon)])
         log = self._adhoc_log(li)
-        F1 = build_features(profiles, log, self.catalog, self.serve_week, income_edges=self.store.income_edges)
+        diag = np.array([e.get("source") == "diagnosis" for e in li.events], bool)     # 진단 통과 행: 통과 단원 O, 수준 갱신 X
+        F1 = build_features(profiles, log, self.catalog, self.serve_week, income_edges=self.store.income_edges,
+                            level_log=log[~diag] if diag.any() else None)
         if li.hour < 4 and len(log) == 0:
             F1.blocks["hour"][0] = 0; F1.blocks["hour"][0, li.hour] = 1
         lb = LearnerBatch.from_store(F1, [0], as_reference_users=False)
@@ -185,6 +187,9 @@ class RecommendationService:
 
     def _batch_for(self, learner, assume_passed=(), overrides=None) -> tuple:
         """기존 학습자 번호 또는 LearnerInput → (LearnerBatch, 설명용 맥락)."""
+        bad = [i for i in assume_passed if isinstance(i, bool) or not isinstance(i, (int, np.integer)) or not 0 <= int(i) < self.catalog.n_items]
+        if bad:                                       # 음수 번호가 뒤에서부터 단원을 가리키거나 범위 밖 번호가 500이 되지 않게
+            raise ValueError(f"카탈로그에 없는 단원 번호 {bad[:5]}(통과 가정은 0~{self.catalog.n_items - 1})")
         if isinstance(learner, LearnerInput):
             lb, F1 = self._adhoc_batch(learner)
             ctx = dict(user=None, label=learner.label, profile=F1.users.iloc[0].to_dict(), diagnosis=learner.diagnosis)

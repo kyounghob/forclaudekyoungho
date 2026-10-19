@@ -386,7 +386,11 @@ def _attach_prices(df: pd.DataFrame, data_dir: str, items: dict, today: date = N
 
 
 def _sample(reason: str = None) -> tuple:
-    df = krx.normalize(pd.read_csv(SAMPLE_ETF, encoding="utf-8-sig", dtype=krx.CODE_DTYPES))
+    if os.path.exists(SAMPLE_ETF):
+        df = krx.normalize(pd.read_csv(SAMPLE_ETF, encoding="utf-8-sig", dtype=krx.CODE_DTYPES))
+    else:                                   # 설치에서 샘플이 빠져도 서버는 뜬다: 빈 표와 이유만 보인다
+        df = krx.normalize(pd.DataFrame(columns=["code", "name"]))
+        reason = "; ".join(x for x in (reason, "샘플 파일이 설치되지 않았습니다(etfrec/sources/data/etf_list_sample.csv)") if x)
     label = SAMPLE_LABEL if not reason else f"{SAMPLE_LABEL} (저장된 스냅샷을 쓸 수 없어 샘플을 씁니다: {reason})"
     return df, dict(kind="sample", path=SAMPLE_ETF, synced_at=None, as_of=None, stale=False, detail={}, prices=None, label=label,
                     fallback_reason=reason)

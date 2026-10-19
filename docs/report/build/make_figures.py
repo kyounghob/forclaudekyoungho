@@ -1,6 +1,7 @@
 """중간보고서 그림 생성 (matplotlib, 한글 폰트 WenQuanYi Zen Hei)."""
 import json, os, sys
-sys.path.insert(0, "/home/user/forclaudekyoungho")
+ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))   # 저장소 루트
+sys.path.insert(0, ROOT)
 import numpy as np, pandas as pd
 import matplotlib
 matplotlib.use("Agg")
@@ -9,11 +10,12 @@ from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
 from matplotlib import font_manager
 from PIL import Image
 
-ROOT = "/home/user/forclaudekyoungho"
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fig")
 os.makedirs(OUT, exist_ok=True)
-font_manager.fontManager.addfont("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc")
-plt.rcParams["font.family"] = "WenQuanYi Zen Hei"
+for _fp in ("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc", "/usr/share/fonts/truetype/nanum/NanumGothic.ttf"):   # 한글 글꼴(있는 것만 등록)
+    if os.path.exists(_fp):
+        font_manager.fontManager.addfont(_fp)
+plt.rcParams["font.family"] = ["WenQuanYi Zen Hei", "NanumGothic", "Noto Sans CJK KR", "Malgun Gothic", "AppleGothic", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
 plt.rcParams["font.size"] = 10
 GREEN, GOLD, GREY, BLUE, RED = "#1f6f55", "#d99a1e", "#8a97b8", "#3b6fb6", "#b2362d"
@@ -268,5 +270,5 @@ def crops():
 
 if __name__ == "__main__":
     fig_architecture(); fig_roadmap_flow(); fig_prereq_graph(); fig_results(); crops()
-    fig_sensitivity(sys.argv[1] if len(sys.argv) > 1 else "")
+    fig_sensitivity(sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "docs", "results", "prereq_sensitivity.json"))
     print("figures:", sorted(os.listdir(OUT)))

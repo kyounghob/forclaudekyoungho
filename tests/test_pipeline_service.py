@@ -125,6 +125,16 @@ def test_api_endpoints(small_bundle, tmp_path):
     assert c.post("/api/quiz/score", json={"answers": {qs[0]["id"]: 1}}).status_code == 200
     assert c.get("/api/sources").json()["universe_rows"] > 0 and "pension" in c.get("/api/goals").json()["goals"]
     assert c.post("/api/recommend", json={"learner": {"goal": "nope"}, "k": 3}).status_code == 422
+    n = small_bundle.catalog.n_items                                   # 통과 가정 번호는 카탈로그 범위 안만(음수·범위 밖 → 422)
+    for bad in ([n], [999], [-1]):
+        for path in ("/api/recommend", "/api/roadmap", "/api/types"):
+            assert c.post(path, json={"learner": {"goal": "income"}, "assume_passed": bad}).status_code == 422, (path, bad)
+    meta = c.get("/api/meta").json()
+    assert meta["learners_enabled"] is True and meta["dataset"]["source"] == "synthetic"
+    g = small_bundle.catalog                                           # 가드레일을 생략하면 스키마 기본값(선수 단원 차단 켬)과 같다
+    body = {"learner": {"goal": "income", "interests": [4, 18], "placement": 2}, "k": 5}
+    a, b = c.post("/api/recommend", json=body).json(), c.post("/api/recommend", json={**body, "guardrail": {}}).json()
+    assert a["guardrail"]["prereq_block"] is True and [i["item_id"] for i in a["items"]] == [i["item_id"] for i in b["items"]]
 
 
 @pytest.mark.skipif(not os.environ.get("ETFREC_FULL"), reason="전체 규모 재현은 ETFREC_FULL=1 일 때만 (약 2~3분)")
@@ -185,6 +195,15 @@ def test_dataset_normalizes_event_flags():
     lg.loc[lg.index[0], ["complete", "drop"]] = [True, True]
     ds2 = Dataset(ds.profiles, lg, ds.catalog)
     assert ds2.event_repairs["rows_changed"] == 1 and (ds2.log.score.values[1:] == 7).all() and ds2.log.score.values[0] in (2, 3)
+    lg3 = ds.log.copy(); lg3["understood"] = lg3.understood.astype(int); lg3["score"] = lg3.score.astype(int)   # CSV에 흔한 0/1 정수
+    lg3.loc[lg3.index[lg3.quiz_pass.values][0], "complete"] = False                                               # 고칠 행도 하나 넣는다
+    ds3 = Dataset(ds.profiles, lg3, ds.catalog)
+    assert ds3.log.understood.dtype == bool and ds3.event_repairs["rows_changed"] == 1
+    from etfrec.features import feature_store
+    feature_store(ds3.profiles, ds3.log, ds3.catalog, 2)                                                          # 특징 저장소까지 그대로 동작
+    lg4 = ds.log.copy(); lg4["understood"] = "maybe"
+    with pytest.raises(ValueError, match="understood"):
+        Dataset(ds.profiles, lg4, ds.catalog)
 
 
 def test_pairwise_models_cover_only_pair_users(small_bundle):
@@ -207,6 +226,20 @@ def test_leakage_probe_detects_future_reads(monkeypatch):
     monkeypatch.setattr(pipeline, "feature_store", lambda p, lg, c, w: build_features(p, lg[lg.week <= w], c, w))   # 정답 주를 읽는 잘못된 구현
     ok2, detail = pipeline.leakage_probe(ds, ds.catalog, (2, 3))
     assert not ok2 and "달라진 주 [2, 3]" in detail
+
+    def leaky_counts(p, lg, c, w):                                   # 미래 행의 개수(조회 수)만 새는 구현
+        F = build_features(p, lg[lg.week < w], c, w)
+        F.nu = np.bincount(lg.user, minlength=F.n).astype(float)
+        return F
+
+    def leaky_hour(p, lg, c, w):                                     # 미래 행의 시간대·퀴즈 블록만 새는 구현
+        F, Fa = build_features(p, lg[lg.week < w], c, w), build_features(p, lg, c, w)
+        F.blocks["hour"] = Fa.blocks["hour"]
+        return F
+    for leaky, field_name in ((leaky_counts, "nu"), (leaky_hour, "blocks")):
+        monkeypatch.setattr(pipeline, "feature_store", leaky)
+        ok3, detail3 = pipeline.leakage_probe(ds, ds.catalog, (2, 3))
+        assert not ok3 and field_name in detail3, leaky.__name__
 
 
 def test_pair_pools_use_full_rows_when_training_rows_are_subsampled():
@@ -247,3 +280,19 @@ def test_api_universe_has_no_local_paths(small_bundle, tmp_path, monkeypatch):
         u = r.json()["universe"]
         text = json.dumps(u, ensure_ascii=False)
         assert u["kind"] == "snapshot" and "path" not in u and "detail" not in u and "hong.gildong" not in text and str(tmp_path) not in text
+
+
+def test_diagnosis_events_do_not_raise_level(small_bundle, tmp_path):
+    """최소 응답 미달로 판정을 보류한 수준이 진단 통과 이벤트를 거쳐 다시 올라가지 않는다(입력한 학습 기록은 원래 규칙대로)."""
+    from etfrec.quiz import score_quiz
+    svc = RecommendationService(small_bundle)
+    R = score_quiz({"q05": 2}, small_bundle.catalog)
+    assert R["level"] == 1 and 2 in R["withheld_levels"] and R["events"]
+    li = LearnerInput(placement=R["level"], events=[dict(e) for e in R["events"]], diagnosis=dict(level=R["level"]))
+    assert svc.recommend(li, k=3)["level"] == 1
+    plain = [{k: v for k, v in e.items() if k != "source"} for e in R["events"]]
+    assert svc.recommend(LearnerInput(placement=1, events=plain), k=3)["level"] == 2
+    c = TestClient(create_app(small_bundle, designs_dir=str(tmp_path)))
+    body = lambda ev: {"learner": {"placement": 1, "events": ev}, "k": 3}
+    assert c.post("/api/recommend", json=body([dict(e) for e in R["events"]])).json()["level"] == 1
+    assert c.post("/api/recommend", json=body(plain)).json()["level"] == 2
