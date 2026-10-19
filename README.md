@@ -15,7 +15,8 @@
 
 - 중간보고서(Word): `docs/report/중간보고서_ETF_교육_콘텐츠_추천시스템.docx` — 문제·시나리오, 추천 기법 요약과 한계, 데이터·확보 계획, 시스템 설계·구현 현황, 실험 결과(v1 재현, v2, 선수 가드레일 민감도), 평가 계획, 일정, 부록(API·퀴즈·용어집·재현).
 - 비판 검토·보완 보고서(Word): `docs/report/비판검토_보완보고서.docx` — 중간보고서 1차본에 대한 비판을 문장 단위로 검토해 수용·부분 수용·불수용 판정과 근거, 간과한 이유, 고친 코드와 바뀐 수치를 정리.
-- 보고서 그림: `docs/report/fig*.png`, 화면 캡처: `docs/screens/*.png`, 민감도 결과: `docs/results/prereq_sensitivity.json`.
+- 중간보고서 1차본(비판 대상, 2026-10-13): `docs/report/중간보고서_1차본_2026-10-13.docx` — 비판 검토 보고서가 인용한 원문 대조용.
+- 보고서 그림: `docs/report/fig*.png`, 화면 캡처: `docs/screens/*.png`, 민감도 결과: `docs/results/prereq_sensitivity.json`, 보고서 생성 스크립트: `docs/report/build/`(번들 → `export_data.py` → `report_data.json` → `build_report.js`·`build_critique_response.js`).
 
 ## 빠른 시작
 
