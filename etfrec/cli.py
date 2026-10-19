@@ -3,13 +3,15 @@
     python -m etfrec generate --out data/synthetic [--n 15000] [--seed 42] [--effect 1.0]
     python -m etfrec train --out artifacts/bundle_v1 [--data data/synthetic] [--n 15000] [--no-neural]
     python -m etfrec recommend --bundle artifacts/bundle_v1 --user 1 [--k 5] [--algorithm RULE]
-    python -m etfrec serve --bundle artifacts/bundle_v1 [--host 127.0.0.1] [--port 8000] [--sources-dir data/sources]
+    python -m etfrec serve --bundle artifacts/bundle_v1 [--host 127.0.0.1] [--port 8000] [--sources-dir data/sources] [--expose-learners]
     python -m etfrec demo [--n 3000]      # 작은 규모로 학습한 뒤 바로 서버를 띄운다
-    ETFREC_PSEUDO_KEY=... python -m etfrec pseudonymize --profiles A.csv --log B.csv --id-col member_id --out DIR --mapping-out PATH
+    read -rs ETFREC_PSEUDO_KEY && export ETFREC_PSEUDO_KEY     # 키는 화면에 보이지 않게 입력(명령줄에 쓰면 셸 기록에 남는다)
+    python -m etfrec pseudonymize --profiles A.csv --log B.csv --id-col member_id --out DIR --mapping-out PATH
     python -m etfrec export-deid --bundle artifacts/bundle_v2 --k 5 --out FILE.csv [--report FILE.json]
-    [KRX_OPEN_API_KEY=… DATA_GO_KR_KEY=…] python -m etfrec sources list|check|sync|stats [--out data/sources] [--krx-csv 내려받은.csv|.xlsx]
+    read -rs KRX_OPEN_API_KEY && export KRX_OPEN_API_KEY      # (선택) 공공데이터포털은 DATA_GO_KR_KEY를 같은 방식으로
+    python -m etfrec sources list|check|sync|stats [--out data/sources] [--krx-csv 내려받은.csv|.xlsx]
         [--krx-csv-date YYYYMMDD] [--date YYYYMMDD] [--no-cross-check]
-    (인증키는 환경변수로만 받는다. 명령줄 인자는 ps·셸 기록에 남는다. 스냅샷 폴더 기본값은 ETFREC_SOURCES_DIR, 없으면 data/sources)
+    (인증키는 환경변수로만 받는다. 명령줄 인자나 'KEY=값 명령' 형식은 ps·셸 기록에 남는다. 스냅샷 폴더 기본값은 ETFREC_SOURCES_DIR, 없으면 data/sources)
 """
 from __future__ import annotations
 
@@ -74,16 +76,24 @@ def cmd_train(a):
 def cmd_recommend(a):
     from .pipeline import Bundle
     from .service import RecommendationService
-    svc = RecommendationService(Bundle.load(a.bundle))
+    svc = RecommendationService(Bundle.load(a.bundle), allow_any_config=True)     # 로컬 개발 도구라 임의 설정 번호도 받는다
     algorithm = int(a.algorithm) if a.algorithm and a.algorithm.isdigit() else a.algorithm
     out = svc.recommend(a.user, k=a.k, algorithm=algorithm)
     print(json.dumps(json_safe({k: v for k, v in out.items() if k != "topic_map"}), ensure_ascii=False, indent=2))
 
 
+LOOPBACK = ("127.0.0.1", "localhost", "::1")
+
+
 def cmd_serve(a):
     import uvicorn
     from .api import create_app
-    app = create_app(a.bundle, designs_dir=a.designs, sources_dir=getattr(a, "sources_dir", None))
+    local = a.host in LOOPBACK
+    expose = local or getattr(a, "expose_learners", False)        # 학습자 단위 조회는 학습 환경 안(로컬)에서만 기본으로 켠다
+    app = create_app(a.bundle, designs_dir=a.designs, sources_dir=getattr(a, "sources_dir", None), expose_learners=expose)
+    if not local:
+        print(f"주의: {a.host}로 열면 같은 망의 누구나 접근할 수 있습니다. 서빙 API에는 인증이 없습니다. "
+              f"기준 학습자 조회는 {'켜짐(--expose-learners)' if expose else '꺼짐(--expose-learners로만 켬)'}.", file=sys.stderr)
     print(f"http://{a.host}:{a.port}  (번들 {a.bundle})")
     uvicorn.run(app, host=a.host, port=a.port, log_level="info")
 
@@ -94,8 +104,30 @@ def cmd_demo(a):
     if not os.path.exists(os.path.join(out, "bundle.pkl")):
         cfg = TrainConfig(n_learners=a.n)
         train(Dataset.synthetic(cfg), cfg, out_dir=out, enable_neural=not a.no_neural)
-    a.bundle = out; a.designs = None; a.sources_dir = None
+    a.bundle = out; a.designs = None; a.sources_dir = None; a.expose_learners = False
     cmd_serve(a)
+
+
+def _paths_overlap(a: str, b: str) -> bool:
+    """두 폴더가 같거나 한쪽이 다른 쪽 안에 있는지. 실제 경로(심볼릭 링크 해석)·대소문자 정규화로 비교하고, 이미 있는 폴더는
+    os.path.samefile로도 확인한다(대소문자 무시 파일시스템에서 철자만 다른 경로)."""
+    ra, rb = (os.path.normcase(os.path.realpath(x)) for x in (a, b))
+    if os.path.commonpath([ra, rb]) in (ra, rb):
+        return True
+    def ancestors(p):
+        p = os.path.realpath(p)
+        while True:
+            yield p
+            q = os.path.dirname(p)
+            if q == p:
+                return
+            p = q
+    for x, y in ((a, b), (b, a)):
+        if os.path.exists(y):
+            for anc in ancestors(x):
+                if os.path.exists(anc) and os.path.samefile(anc, y):
+                    return True
+    return False
 
 
 def cmd_pseudonymize(a):
@@ -106,8 +138,9 @@ def cmd_pseudonymize(a):
     if len(key) < MIN_KEY_LENGTH:
         sys.exit(f"{KEY_ENV} 환경변수에 {MIN_KEY_LENGTH}자 이상의 가명처리 키가 없어 실행하지 않습니다(키는 명령줄 인자로 받지 않음)")
     out, mp = os.path.abspath(a.out), os.path.abspath(a.mapping_out)
-    if os.path.commonpath([out, mp]) == out:
-        sys.exit("매핑표(--mapping-out)는 학습 입력 폴더(--out) 밖, 학습 환경과 분리된 곳에 두어야 합니다")
+    if _paths_overlap(out, os.path.dirname(mp)):
+        sys.exit("매핑표(--mapping-out)는 학습 입력 폴더(--out) 밖, 학습 환경과 분리된 곳에 두어야 합니다"
+                 "(심볼릭 링크·대소문자만 다른 경로도 같은 폴더로 봅니다)")
     raw_p = pd.read_csv(a.profiles, dtype={a.id_col: str})
     raw_l = pd.read_csv(a.log, dtype={a.id_col: str})
     try:
@@ -172,7 +205,9 @@ def main(argv=None):
     r.set_defaults(fn=cmd_recommend)
     s = sub.add_parser("serve", help="API + UI 서버"); s.add_argument("--bundle", required=True)
     s.add_argument("--host", default="127.0.0.1"); s.add_argument("--port", type=int, default=8000); s.add_argument("--designs", default=None)
-    s.add_argument("--sources-dir", default=None, help="공개 데이터 스냅샷 폴더(기본: ETFREC_SOURCES_DIR, 없으면 data/sources)"); s.set_defaults(fn=cmd_serve)
+    s.add_argument("--sources-dir", default=None, help="공개 데이터 스냅샷 폴더(기본: ETFREC_SOURCES_DIR, 없으면 data/sources)")
+    s.add_argument("--expose-learners", action="store_true",
+                   help="로컬 주소가 아닌 --host로 열 때도 기준 학습자 조회(/api/learners)를 켠다(학습 환경 안에서만 쓸 것)"); s.set_defaults(fn=cmd_serve)
     d = sub.add_parser("demo", help="작은 규모 학습 후 바로 서버 실행"); d.add_argument("--n", type=int, default=3000)
     d.add_argument("--out", default="artifacts/demo_bundle"); d.add_argument("--host", default="127.0.0.1"); d.add_argument("--port", type=int, default=8000)
     d.add_argument("--no-neural", action="store_true"); d.set_defaults(fn=cmd_demo)

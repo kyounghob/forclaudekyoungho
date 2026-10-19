@@ -2,12 +2,14 @@
 
 1. 저장 최소화 — 모델은 연령대·소득분위 구간 코드만 쓴다. 원시 연령·연소득은 학습 중 메모리에서 소득 5분위 경계를
    계산하는 데만 쓰고 번들에 남기지 않는다. 특징 저장소(features.FeatureStore)에는 원값 필드가 없고, 번들 프로필은
-   generalize_profiles, 번들 로그는 minimize_log(일·분 삭제)를 거친다. 저장 설계는 scrub_design이 원값을 구간 코드로 바꾼다.
+   generalize_profiles, 번들 로그는 minimize_log(허용 열만: 일·분과 학습 스키마 밖 열 삭제)를 거친다. 저장 설계는 scrub_design이
+   원값을 구간 코드로 바꾸고 모든 문자열의 연령·소득 표현을 가린다.
 2. 가명처리 — pseudonymize_ids·build_pseudonymized_inputs(CLI ``pseudonymize``): 외부 회원 ID → HMAC-SHA256 가명 → 연속 번호.
    운영 원본을 학습 입력으로 바꾸는 도구이며 모의 데이터 학습에는 쓰지 않는다(모의 데이터에는 외부 ID가 없다).
 3. 반출 k-익명화 — enforce_k_anonymity(CLI ``export-deid``): 일반화 계층을 한 단계씩 적용하고 남은 작은 셀은 국소 억제한다.
-   모델 학습 입력은 일반화하지 않는다(학습 결과가 바뀐다). 학습은 접근 통제된 환경에서 가명 데이터로 하고,
-   밖으로 나가는 학습자 표는 export-deid를 거친다.
+   반출 표의 행은 반출 값으로 정렬해 원래 학습자 순서(가명 번호)를 지운다. 모델 학습 입력은 일반화하지 않는다(학습 결과가 바뀐다).
+   학습은 접근 통제된 환경에서 가명 데이터로 하고, 밖으로 나가는 학습자 표는 export-deid를 거친다. 서빙 API의 학습자 조회는
+   로컬 실행에서만 기본으로 켜진다(cli serve).
 4. 감사·검사 — privacy_audit 결과는 Bundle.privacy에 담겨 manifest.json의 ``privacy``와 /api/evaluation의 ``privacy``로 나간다.
    privacy_checks의 5개 검사는 pipeline.run_qa가 번들 조립 직후·저장 전에 실행해 manifest ``qa``에 남기며,
    하나라도 실패하면 학습이 멈추고 번들은 저장되지 않는다.
@@ -38,6 +40,18 @@ COLUMN_ROLES = {"user": "가명 번호(0부터 연속)", **{c: "준식별자(감
                 "placement": "학습 속성(진단 수준, 반출 안 함)"}
 RAW_PROFILE_COLUMNS = ("age", "income", "연령", "연소득(만원)")
 RAW_TIME_COLUMNS = ("day", "minute")
+# 번들 로그에 남기는 열(허용 목록). 이 밖의 열(외부 회원 ID·분 단위 시각·IP 등)은 minimize_log가 버리고 감사에 기록한다
+LOG_STORED_COLUMNS = ("user", "item", "week", "seq", "hour", "complete", "quiz", "quiz_pass", "save", "drop", "replay", "score", "understood")
+LOG_COLUMN_ROLES = {"user": "가명 번호", "item": "학습 단원", "week": "주차", "seq": "주 안 순서(시각 아님)", "hour": "4개 시간대",
+                    **{c: "시도 플래그" for c in ("complete", "quiz", "quiz_pass", "save", "drop", "replay")},
+                    "score": "행동 점수", "understood": "이해(퀴즈 통과) 라벨"}
+# 서빙 학습자 표(store.users, /api/learners)의 열 역할. 준식별자 8개에 더해 학습 시간대·관심 주제도 결합하면 개인을 좁힐 수 있다
+USERS_TABLE_QUASI = {"성별": "gender", "연령대": "age_band", "소득분위": "income_q", "투자 목적": "goal", "투자 기간": "horizon",
+                     "투자 경험": "exp", "위험성향": "risk", "기기": "mobile"}
+USERS_TABLE_EXTRA_QUASI = ("학습 시간대", "관심 주제")
+USERS_TABLE_ROLES = {"학습자": "가명 번호", **{c: "준식별자" for c in USERS_TABLE_QUASI},
+                     **{c: "준식별자로 쓰일 수 있는 학습 속성" for c in USERS_TABLE_EXTRA_QUASI},
+                     **{c: "행동 요약" for c in ("조회 수", "퀴즈 통과율", "완료율", "저장 수", "이탈률", "추정 수준", "선호 1위 주제", "통과 단원 수")}}
 ACTIVE_COLUMNS = ("active_users", "active_share", "ndcg_active", "ci_low_active", "ci_high_active")
 KEY_ENV = "ETFREC_PSEUDO_KEY"
 MIN_KEY_LENGTH = 16
@@ -69,25 +83,31 @@ POLICY_IMPLEMENTED = [
               "연령대·소득분위 구간만 남긴다(모델은 원래 구간 코드만 쓰므로 학습 결과는 같다)",
          enforced_by=["privacy.generalize_profiles", "features.FeatureStore(age·income 필드 없음)",
                       "QA bundle_profiles_no_raw_age_income", "QA feature_store_no_raw_age_income"]),
-    dict(item="학습 이력 시각 축약: 번들 로그는 주차·4개 시간대·주 안 순서(seq)만 남기고 일(day)·분(minute)은 버린다",
-         enforced_by=["privacy.minimize_log", "QA bundle_log_no_day_minute"]),
-    dict(item="API 최소화: /api/learners·학습자 상세는 연령대·소득분위 코드와 이름만 반환하고, 소득 미입력 대체값은 학습 때 저장한 중앙값(집계)을 쓴다",
-         enforced_by=["service.RecommendationService.learners/learner", "FeatureStore.income_median",
-                      "tests/test_privacy.py"]),
-    dict(item="저장 설계 최소화: /api/designs는 쓰기 전에 연령·연소득 원값을 구간 코드로 바꾸고 자유 입력 문장의 연령·소득 표현을 구간 이름으로 가린다",
-         enforced_by=["privacy.scrub_design", "api.save_design"]),
-    dict(item="작은 셀 비공개: 추천 경로 출력에서 20명 미만 라우터 노드는 n=null·'20명 미만'으로만 표시하고 그 노드의 원시 평균을 숨긴다. "
-              "집단별 표(group_results·advanced_exposure)는 5명 미만 집단을 빼고 활성 5명 미만이면 활성 기준 값을 비운다",
+    dict(item="학습 이력 최소화: 번들 로그는 허용 열(가명 번호·단원·주차·4개 시간대·주 안 순서·시도 플래그·점수)만 남기고 일·분과 학습 스키마 밖 열"
+              "(외부 회원 ID·분 단위 시각·IP 등)은 버린다. 학습 입력을 읽을 때도 스키마 밖 열은 버리고 이름을 데이터 요약에 남긴다",
+         enforced_by=["privacy.minimize_log", "data.Dataset.validate", "QA bundle_log_no_day_minute(로그 열 ⊆ 허용 목록)"]),
+    dict(item="API 최소화: /api/learners·학습자 상세는 연령대·소득분위 코드와 이름만 반환하고, 소득 미입력 대체값은 학습 때 저장한 중앙값(집계)을 쓴다. "
+              "학습자 조회 API는 로컬 주소(127.0.0.1)로 띄울 때만 기본으로 켜지고, 다른 주소로 열면 --expose-learners를 줄 때만 켜진다. "
+              "API로 고를 수 있는 기법은 화면의 기법 목록(기법군 1위·라우터)뿐이고 임의 설정 번호는 개발 모드에서만 받는다",
+         enforced_by=["service.RecommendationService.learners/learner", "FeatureStore.income_median", "api.create_app(expose_learners)",
+                      "cli serve --expose-learners", "service.resolve_algorithm(allow_any_config)", "tests/test_privacy.py"]),
+    dict(item="저장 설계 최소화: /api/designs는 쓰기 전에 연령·연소득 원값을 구간 코드로 바꾸고(숫자로 읽을 수 없으면 버림), 설계 이름과 모든 문자열의 "
+              "연령·소득 표현(예: 45세, 45세 이상, 연봉 5,000만원, 연소득은 7천만원, 1억 2천만원)을 구간 이름으로 가리며, 이벤트의 일·분은 버리고 시각은 4개 시간대로 바꾼다. "
+              "그 밖의 표현(이름 등)은 가리지 못한다",
+         enforced_by=["privacy.scrub_design", "privacy.scrub_text", "api.save_design"]),
+    dict(item="작은 셀 비공개: 추천 경로 출력은 노드 크기를 구간('20명 미만'·'20~49명'…)으로만 내보내고 원시 평균을 내보내지 않는다(부모−형제 차분으로 "
+              "숨긴 노드를 복원하지 못하게). 집단별 표(group_results·advanced_exposure)는 5명 미만 집단을 빼고 활성 5명 미만이면 활성 기준 값을 비우며, "
+              "한 변수에서 하나만 빠지면 가장 작은 집단을 하나 더 빼거나 비워(보완 억제) 합계 차분으로 복원되지 않게 한다",
          enforced_by=["router.ShrinkRouter.path", "privacy.suppress_small_groups", "QA published_group_cells_ge_5"]),
-    dict(item="감사 기록: 저장 준식별자 8개 조합의 k=5 결과·열 제거 일반화 계획·export-deid 일반화 요약·실제 라우터 잎 크기를 기록하고, "
-              "감사가 저장 열을 빠짐없이 다루는지 확인한다",
+    dict(item="감사 기록: 저장 준식별자 8개 조합의 k=5 결과·열 제거 일반화 계획·export-deid 일반화 요약·실제 라우터 잎 크기, 서빙 학습자 표의 "
+              "확장 조합(준식별자 8개 + 학습 시간대 + 관심 주제) k 결과를 기록하고, 감사가 프로필·로그·학습자 표의 저장 열을 빠짐없이 분류하는지 확인한다",
          enforced_by=["privacy.privacy_audit", "QA privacy_audit_columns_complete"]),
     dict(item=f"가명처리 도구(운영 원본용, 모의 데이터 학습에는 쓰지 않음): 외부 회원 ID → HMAC-SHA256 가명(16자) → 가명 순서 연속 번호. "
               f"키는 환경변수 {KEY_ENV}에서만 읽고 없거나 {MIN_KEY_LENGTH}자 미만이면 거부, 매핑표는 --mapping-out에만 쓰며 출력 폴더 안이면 거부, "
-              "학습 스키마 밖 열은 버린다",
+              "학습 스키마 밖 열은 버린다. 매핑표 경로는 실제 경로(심볼릭 링크 해석)로 비교해 학습 입력 폴더와 겹치면 거부한다",
          enforced_by=["privacy.build_pseudonymized_inputs", "cli pseudonymize"]),
     dict(item="반출 k-익명화: export-deid는 저장 프로필의 준식별자 8개 열만 일반화 계층 → 국소 억제로 k 이상(기본 5)으로 만든 뒤에만 파일을 쓴다"
-              "(가명 번호·관심 주제·진단 수준은 내보내지 않는다). 모델 학습 입력은 일반화하지 않는다",
+              "(가명 번호·관심 주제·진단 수준은 내보내지 않는다). 행은 반출 값으로 정렬해 원래 학습자 순서를 지운다. 모델 학습 입력은 일반화하지 않는다",
          enforced_by=["privacy.enforce_k_anonymity", "privacy.export_deid", "cli export-deid"]),
     dict(item="성별의 운영 비사용: 운영 라우터(RouterNoGender)는 성별을 쓰지 않는 설정만 후보로 두고 성별을 세그먼트에서 뺀다(성별은 저장·진단에는 남는다)",
          enforced_by=["pipeline.train router_settings(allowed_ng)", "tests/test_pipeline_service.py::test_gender_flip_invariance_operational"]),
@@ -100,6 +120,8 @@ POLICY_ORGANIZATIONAL = [
     "외부 결합·공유: 다른 기관 자료와 결합하거나 공유할 때는 개인정보 이노베이션 존(또는 결합전문기관)에 준하는 통제 환경에서만 한다",
     "보관·삭제: 학습 입력·번들·저장 설계의 보관 기간을 정해 문서화하고, 기간이 지나거나 탈퇴하면 삭제한다",
     "재식별 금지: 가명정보를 특정 개인을 알아보는 목적으로 처리하지 않고, 재식별 가능성을 발견하면 처리를 멈추고 보고한다",
+    "서빙 API 접근 통제: 학습자 단위 정보를 주는 서빙 API(학습자 조회·추천·설계 저장)는 학습 환경 안에서만 띄우고, 밖에 열 때는 인증·접근 기록을 둔다",
+    "비밀 값 관리: 가명처리 키와 API 인증키는 명령줄에 쓰지 않고(셸 기록에 남음) 입력 프롬프트(read -rs)나 권한을 제한한 파일로 환경변수에 넣는다",
 ]
 POLICY = ([f"[구현] {p['item']} (강제·확인: {', '.join(p['enforced_by'])})" for p in POLICY_IMPLEMENTED]
           + [f"[조직 정책 — 코드가 강제하지 않음] {s}" for s in POLICY_ORGANIZATIONAL])   # 이전 형식(문자열 목록) 호환
@@ -214,38 +236,78 @@ def generalize_users_table(users: pd.DataFrame, codes) -> pd.DataFrame:
     return u
 
 
-def minimize_log(log: pd.DataFrame) -> pd.DataFrame:
-    """번들 저장용 로그: 일·분을 버리고 주차·4개 시간대만 남긴다. 같은 주 안의 시도 순서는 seq(0, 1, 2…)로만 보존한다."""
+def minimize_log(log: pd.DataFrame, return_dropped: bool = False):
+    """번들 저장용 로그: 허용 열(LOG_STORED_COLUMNS)만 남긴다. 일·분과 학습 스키마 밖 열(외부 회원 ID·분 단위 시각·IP 등)은 버리고,
+    같은 주 안의 시도 순서는 seq(0, 1, 2…)로만 보존한다. return_dropped=True면 (로그, 버린 열 이름)."""
     keys = ["user", "week"] + (["minute"] if "minute" in log.columns else [])
-    lg = log.sort_values(keys, kind="stable").drop(columns=[c for c in RAW_TIME_COLUMNS if c in log.columns]).reset_index(drop=True)
+    lg = log.sort_values(keys, kind="stable").reset_index(drop=True)
     lg.insert(lg.columns.get_loc("week") + 1, "seq", lg.groupby(["user", "week"]).cumcount().astype(int).values)
-    return lg
+    dropped = [c for c in lg.columns if c not in LOG_STORED_COLUMNS]
+    lg = lg[[c for c in LOG_STORED_COLUMNS if c in lg.columns]]
+    return (lg, dropped) if return_dropped else lg
 
 
 def suppress_small_groups(df: pd.DataFrame, k: int = K_RELEASE) -> tuple:
-    """공개 집단표(group_results·advanced_exposure)의 작은 셀 처리: users < k 행은 빼고, active_users < k이면 활성 기준 값을 비운다."""
+    """공개 집단표(group_results·advanced_exposure)의 작은 셀 처리: users < k 행은 빼고, active_users < k이면 활성 기준 값을 비운다.
+    한 분할(방법 × 변수)에서 하나만 빠지거나 비워지면, 함께 공개되는 합계(test_results의 방법별 users·active_users)와의 차분으로
+    그 값을 복원할 수 있으므로 그 분할에서 가장 작은 다른 집단을 하나 더 빼거나 비운다(보완 억제)."""
     if df is None or len(df) == 0 or "users" not in df.columns:
-        return df, dict(k=int(k), rows=0 if df is None else int(len(df)), rows_removed=0, active_masked=0, min_users=None)
-    keep = (df["users"] >= k).values
-    out = df[keep].reset_index(drop=True).copy()
-    masked = 0
+        return df, dict(k=int(k), rows=0 if df is None else int(len(df)), rows_removed=0, active_masked=0, min_users=None,
+                        complementary_removed=0, complementary_masked=0, single_suppressed_partitions=0)
+    part = [c for c in ("method", "variable") if c in df.columns]
+    keys = df[part].astype(str).agg("|".join, axis=1).values if part else np.zeros(len(df), dtype=object)
+    drop = (df["users"] < k).values.copy()
+    comp_removed = 0
+    for key in np.unique(keys):
+        m = keys == key
+        if drop[m].sum() == 1 and (~drop[m]).sum() >= 1:                    # 하나만 빠지면 남은 것 중 가장 작은 집단도 뺀다
+            idx = np.flatnonzero(m & ~drop)
+            drop[idx[np.argmin(df["users"].values[idx])]] = True
+            comp_removed += 1
+    out = df[~drop].reset_index(drop=True).copy()
+    okeys = keys[~drop]
+    masked = comp_masked = 0
+    small = np.zeros(len(out), bool)
     if "active_users" in out.columns:
-        small = (out["active_users"] < k).values
+        small = (out["active_users"] < k).values.copy()
+        for key in np.unique(okeys):
+            m = okeys == key
+            if small[m].sum() == 1 and (~small[m]).sum() >= 1:
+                idx = np.flatnonzero(m & ~small)
+                small[idx[np.argmin(out["active_users"].values[idx])]] = True
+                comp_masked += 1
         masked = int(small.sum())
         if masked:
             cols = [c for c in ACTIVE_COLUMNS if c in out.columns]
             out[cols] = out[cols].astype(float)
             out.loc[small, cols] = np.nan
-    return out, dict(k=int(k), rows=int(len(df)), rows_removed=int((~keep).sum()), active_masked=masked,
+    single = 0                                                              # 보완 억제 뒤 '하나만 숨긴 분할' 수(QA가 0인지 본다)
+    for key in np.unique(keys):
+        m, om = keys == key, okeys == key
+        single += int(drop[m].sum() == 1 and m.sum() > 1) + int(small[om].sum() == 1 and om.sum() > 1)
+    return out, dict(k=int(k), rows=int(len(df)), rows_removed=int(drop.sum()), active_masked=masked,
+                     complementary_removed=int(comp_removed), complementary_masked=int(comp_masked), single_suppressed_partitions=int(single),
                      min_users=int(out["users"].min()) if len(out) else None,
                      min_active_users=(int(out["active_users"].min()) if "active_users" in out.columns and out["active_users"].notna().any() else None))
 
 
 # ============================ 저장 설계 ============================
-_TEXT_KEYS = ("text", "memo", "summary", "label", "matched")
-_AGE_RE = re.compile(r"(?<!\d)(\d{2})\s*(세|살)(?!\s*(이하|이상))")
-_INC_RE = re.compile(r"(연소득|연봉|소득|수입)\s*(약\s*)?(\d{1,3}(?:,\d{3})+|\d{3,5})\s*만\s*원?")
-_INC_THOUSAND_RE = re.compile(r"(\d)\s*천\s*만\s*원")
+_TEXT_KEYS = ("text", "memo", "summary", "label", "matched")       # 이전 호환용 이름(이제는 모든 문자열을 가린다)
+_AGE_RE = re.compile(r"(?<!\d)(\d{2})\s*(세|살)")                    # '45세 이상'·'만 45세'도 숫자 부분을 구간으로 바꾼다
+_MONEY = r"(?:(\d+)\s*억(?:\s*(\d)\s*천)?(?:\s*(\d)\s*백)?\s*(?:만\s*)?원?|(\d)\s*천\s*(?:(\d)\s*백\s*)?만\s*원?|(\d{1,3}(?:,\d{3})+|\d{3,5})\s*만\s*원?)"
+_INC_RE = re.compile(r"(연소득|연봉|소득|수입|연수입|월급)(?:\s*(?:은|는|이|가|을|를|:|=))?\s*(?:약\s*)?" + _MONEY)
+_INC_THOUSAND_RE = re.compile(r"(?<![\d,])(\d)\s*천\s*만\s*원")          # 키워드 없이 쓴 '5천만원'
+_HOUR_BANDS = (10, 15, 22)                                           # 0~23시 → 4개 시간대(출근·점심·저녁·심야)
+
+
+def _money_manwon(m, base: int) -> float:
+    """_MONEY 그룹(base부터 6개) → 만원 단위 금액. 1억 2천만원 = 12,000, 7천만원 = 7,000, 5,000만원 = 5,000."""
+    eok, eok_th, eok_bk, th, th_bk, plain = (m.group(base + i) for i in range(6))
+    if eok:
+        return int(eok) * 10000 + int(eok_th or 0) * 1000 + int(eok_bk or 0) * 100
+    if th:
+        return int(th) * 1000 + int(th_bk or 0) * 100
+    return float(plain.replace(",", ""))
 
 
 def _num(v):
@@ -258,13 +320,31 @@ def _num(v):
     return f if np.isfinite(f) else None
 
 
+def _parse_age(v):
+    """연령 값: 숫자, 또는 '45세'·'45살' 같은 문자열 → 숫자. 읽을 수 없으면 None."""
+    x = _num(v)
+    if x is not None or not isinstance(v, str):
+        return x
+    m = re.search(r"(\d{1,3})\s*(세|살)?", v)
+    return float(m.group(1)) if m else None
+
+
+def _parse_income(v):
+    """연소득 값(만원): 숫자, 또는 '5,000만원'·'7천만원'·'1억 2천만원' 같은 문자열 → 만원 단위 숫자. 읽을 수 없으면 None."""
+    x = _num(v)
+    if x is not None or not isinstance(v, str):
+        return x
+    m = re.search(_MONEY, v)
+    return _money_manwon(m, 1) if m else None
+
+
 def _age_code(age):
-    a = _num(age)
+    a = _parse_age(age)
     return None if a is None else int(np.digitize(a, AGE_CUTS))
 
 
 def _income_code(income, edges):
-    x = _num(income)
+    x = _parse_income(income)
     return None if x is None else int(income_quintile(np.array([x]), np.asarray(edges, float))[0][0])
 
 
@@ -273,40 +353,58 @@ def _label(var, code):
 
 
 def scrub_text(s: str, income_edges) -> str:
-    """자유 입력 문장의 연령(예: 45세)·소득(예: 연봉 5,000만원, 5천만원) 표현을 [구간 이름]으로 바꾼다. 그 밖의 표현은 가리지 못한다."""
+    """자유 입력 문장의 연령(45세, 45세 이상, 만 45세)·소득(연봉 5,000만원, 연소득은 7천만원, 연봉 1억 2천만원, 5천만원) 표현을
+    [구간 이름]으로 바꾼다. 이름·주소 같은 그 밖의 표현은 가리지 못한다."""
     s = _AGE_RE.sub(lambda m: f"[{_label('age_band', _age_code(m.group(1)))}]", s)
-    s = _INC_RE.sub(lambda m: f"[{_label('income_q', _income_code(m.group(3), income_edges))}]", s)
+    s = _INC_RE.sub(lambda m: f"[{_label('income_q', _income_code(_money_manwon(m, 2), income_edges))}]", s)
     return _INC_THOUSAND_RE.sub(lambda m: f"[{_label('income_q', _income_code(float(m.group(1)) * 1000, income_edges))}]", s)
 
 
+def _scrub_event(o: dict) -> dict:
+    """저장 설계 안의 학습 이벤트(item과 시각 열이 있는 dict): 일·분은 버리고 0~23시 값은 4개 시간대로 바꾼다."""
+    o = {k: v for k, v in o.items() if k not in RAW_TIME_COLUMNS}
+    h = _num(o.get("hour"))
+    if h is not None and h > 3:
+        o["hour"] = int(np.digitize(h, _HOUR_BANDS))
+    return o
+
+
 def scrub_design(payload, income_edges):
-    """저장 설계에서 원시 연령·연소득을 지운다(재귀). 숫자인 age·income 키 → age_band·income_q 코드, 학습자 표의 연령·연소득(만원) →
-    연령대·소득분위 이름, 자연어 근거 {field: age|income} → 코드·구간 이름, 자유 입력(text·memo·summary·label·matched) → scrub_text."""
+    """저장 설계에서 원시 연령·연소득을 지운다(재귀).
+    - age·income 키 → age_band·income_q 코드(숫자나 '45살'·'5000만원'처럼 읽을 수 있는 값만, 읽을 수 없으면 버림)
+    - 학습자 표의 연령·연소득(만원) → 연령대·소득분위 이름(읽을 수 없으면 '미상')
+    - 자연어 근거 {field: age|income} → 코드·구간 이름
+    - 학습 이벤트(item + day·hour·minute) → 일·분 삭제, 시각은 4개 시간대
+    - 모든 문자열(목록 원소 포함) → scrub_text"""
     def walk(o):
+        if isinstance(o, str):
+            return scrub_text(o, income_edges)
         if isinstance(o, list):
             return [walk(x) for x in o]
         if not isinstance(o, dict):
             return o
         o = dict(o)
+        if "item" in o and any(c in o for c in ("day", "minute", "hour")):
+            o = _scrub_event(o)
         if o.get("field") in ("age", "income") and "value" in o:          # 자연어 근거 한 줄
             var = "age_band" if o["field"] == "age" else "income_q"
             code = _age_code(o["value"]) if var == "age_band" else _income_code(o["value"], income_edges)
             o.update(field=var, value=code, matched=_label(var, code))
         out, late = {}, {}
         for key, v in o.items():
-            if key == "age" and (v is None or _num(v) is not None):
-                late["age_band"] = _age_code(v)
-            elif key == "income" and (v is None or _num(v) is not None):
-                late["income_q"] = _income_code(v, income_edges)
-            elif key == "연령" and _num(v) is not None:
-                late["연령대"] = _label("age_band", _age_code(v))
-            elif key == "연소득(만원)" and _num(v) is not None:
-                late["소득분위"] = _label("income_q", _income_code(v, income_edges))
-            elif key in _TEXT_KEYS and isinstance(v, str):
-                out[key] = scrub_text(v, income_edges)
+            if key == "age":
+                late["age_band"] = _age_code(v) if not isinstance(v, (list, dict)) else None
+            elif key == "income":
+                late["income_q"] = _income_code(v, income_edges) if not isinstance(v, (list, dict)) else None
+            elif key == "연령":
+                late["연령대"] = _label("age_band", _age_code(v) if not isinstance(v, (list, dict)) else None)
+            elif key == "연소득(만원)":
+                late["소득분위"] = _label("income_q", _income_code(v, income_edges) if not isinstance(v, (list, dict)) else None)
             else:
                 out[key] = walk(v)
-        out.update(late)                                                    # 원값에서 나온 구간이 우선
+        for key, v in late.items():                                         # 원값에서 나온 구간이 우선(없던 구간 키는 None이면 넣지 않음)
+            if v is not None or key not in out:
+                out[key] = v
         return out
     return walk(payload)
 
@@ -420,6 +518,9 @@ def export_deid(bundle, k: int = K_RELEASE, hierarchy=None) -> tuple:
     if int(k) < 2:
         raise ValueError("k는 2 이상이어야 합니다")
     table, report = enforce_k_anonymity(release_frame(stored_profiles(bundle)), QUASI_IDENTIFIERS, int(k), hierarchy)
+    # 행 위치가 가명 번호가 되지 않게 반출 값으로 정렬한다(같은 값의 행끼리는 구별되지 않으므로 순서에 정보가 남지 않는다)
+    table = table.astype(str).sort_values(list(QUASI_IDENTIFIERS), kind="stable").reset_index(drop=True)
+    report["row_order"] = "반출 값 기준 정렬(원래 학습자 순서 제거)"
     report["verified"] = bool(k_anonymity(table, QUASI_IDENTIFIERS, int(k))["satisfied"])
     report["columns_released"] = [RELEASE_HEADERS[c] for c in QUASI_IDENTIFIERS]
     report["not_released"] = [c for c in STORED_PROFILE_COLUMNS if c not in QUASI_IDENTIFIERS]
@@ -455,12 +556,29 @@ def _store_quasi(store) -> list:
     return [c for c in QUASI_IDENTIFIERS if c in have]
 
 
+def users_table_audit(store, k: int = K_RELEASE):
+    """서빙 학습자 표(store.users = /api/learners의 행)의 열 역할과 k-익명성: 준식별자 8개 조합과, 학습 시간대·관심 주제까지 더한 확장 조합."""
+    u = getattr(store, "users", None) if store is not None else None
+    if u is None:
+        return None
+    cols = list(u.columns)
+    base = [c for c in USERS_TABLE_QUASI if c in cols]
+    ext = base + [c for c in USERS_TABLE_EXTRA_QUASI if c in cols]
+    return dict(columns=cols, column_roles={c: USERS_TABLE_ROLES.get(c, "미분류") for c in cols},
+                unclassified=[c for c in cols if c not in USERS_TABLE_ROLES], quasi=k_anonymity(u, base, k), quasi_extended=k_anonymity(u, ext, k),
+                note="서빙 학습자 표는 가명 번호와 함께 학습자 단위로 나간다. 확장 조합은 대부분 한 명으로 좁혀지므로 학습자 조회 API는 "
+                     "학습 환경 안(로컬 실행)에서만 연다(cli serve는 다른 주소로 열면 --expose-learners 없이는 끈다)")
+
+
 def privacy_audit(profiles: pd.DataFrame, routers: dict = None, store=None, k: int = K_RELEASE,
-                  leaf_threshold: int = MIN_LEAF_DISPLAY, published: dict = None) -> dict:
+                  leaf_threshold: int = MIN_LEAF_DISPLAY, published: dict = None, log: pd.DataFrame = None, log_dropped=None) -> dict:
     """번들에 실제로 저장된 것을 감사한다(기록만 한다; 강제는 privacy_checks·export-deid·suppress_small_groups).
     (a) 저장 준식별자 8개 조합의 k-익명성(k=5)·열 제거 일반화 계획·export-deid가 할 일반화/억제 요약
-    (b) 학습된 라우터별 실제 잎 크기 (c) 공개 집단표의 작은 셀 처리 결과. 기록 위치는 RECORDED_IN."""
+    (b) 학습된 라우터별 실제 잎 크기 (c) 공개 집단표의 작은 셀 처리 결과 (d) 번들 로그 열과 버린 열, 서빙 학습자 표의 열 역할과 확장 조합 k.
+    기록 위치는 RECORDED_IN."""
     cols = list(profiles.columns)
+    log_cols = list(log.columns) if log is not None else []
+    users = users_table_audit(store, k)
     plan = generalization_plan(profiles, QUASI_IDENTIFIERS, k)
     try:
         _, rel = enforce_k_anonymity(release_frame(profiles), QUASI_IDENTIFIERS, k)
@@ -471,8 +589,13 @@ def privacy_audit(profiles: pd.DataFrame, routers: dict = None, store=None, k: i
     return dict(
         recorded_in=RECORDED_IN, k=int(k),
         stored=dict(profile_columns=cols, column_roles={c: COLUMN_ROLES.get(c, "미분류") for c in cols},
-                    unclassified=[c for c in cols if c not in COLUMN_ROLES], raw_columns=[c for c in cols if c in RAW_PROFILE_COLUMNS],
+                    log_columns=log_cols, log_column_roles={c: LOG_COLUMN_ROLES.get(c, "미분류") for c in log_cols},
+                    log_dropped_columns=list(log_dropped or []), users_table_columns=users["columns"] if users else [],
+                    unclassified=([c for c in cols if c not in COLUMN_ROLES] + [f"log:{c}" for c in log_cols if c not in LOG_COLUMN_ROLES]
+                                  + [f"users:{c}" for c in (users["unclassified"] if users else [])]),
+                    raw_columns=[c for c in cols if c in RAW_PROFILE_COLUMNS],
                     quasi_in_profiles=[c for c in QUASI_IDENTIFIERS if c in cols], quasi_in_store=_store_quasi(store)),
+        users_table=users,
         quasi=k_anonymity(profiles, QUASI_IDENTIFIERS, k),
         generalization=plan["steps"],                                   # 열 제거 순서(이전 형식과 같은 목록)
         generalization_status={x: plan[x] for x in ("satisfied", "impossible", "kept", "missing", "initial_satisfied", "note")},
@@ -492,7 +615,8 @@ def privacy_checks(bundle) -> list:
     lg = getattr(bundle, "log", None)
     lc = set(lg.columns) if lg is not None else set()
     out.append((CHECK_NAMES[1], lg is not None and not (lc & set(RAW_TIME_COLUMNS)) and {"week", "hour"} <= lc
-                and bool(lg["hour"].between(0, 3).all()), f"번들 로그 열 {sorted(lc)}"))
+                and lc <= set(LOG_STORED_COLUMNS) and bool(lg["hour"].between(0, 3).all()),
+                f"번들 로그 열 {sorted(lc)} ⊆ 허용 목록"))
     st = getattr(bundle, "store", None)
     uc = set(st.users.columns) if st is not None else set()
     med = getattr(st, "income_median", None)
@@ -506,12 +630,17 @@ def privacy_checks(bundle) -> list:
             mins[name] = int(df["users"].min())
             if "active_users" in df.columns and df["active_users"].notna().any():
                 mins[name + ".active_users"] = int(df["active_users"].min())
-    out.append((CHECK_NAMES[3], all(v >= K_RELEASE for v in mins.values()), f"최소 셀 {mins} (k={K_RELEASE})"))
+    pub = (getattr(bundle, "privacy", None) or {}).get("published", {}) or {}
+    single = {n: int((r or {}).get("single_suppressed_partitions", 0)) for n, r in pub.items()}
+    out.append((CHECK_NAMES[3], all(v >= K_RELEASE for v in mins.values()) and not any(single.values()),
+                f"최소 셀 {mins} (k={K_RELEASE}), 하나만 숨긴 분할 {single}(보완 억제 후 0이어야 함)"))
     a = getattr(bundle, "privacy", None) or {}
     q, s, pol = a.get("quasi", {}), a.get("stored", {}), a.get("policy", {})
     routers = set((getattr(bundle, "routers", None) or {}).keys())
     ok = (p is not None and q.get("requested") == list(QUASI_IDENTIFIERS) and not q.get("missing")       # 준식별자 8개 모두 감사
           and s.get("profile_columns") == list(p.columns) and not s.get("unclassified")                  # 저장 열이 모두 분류됨
+          and (lg is None or s.get("log_columns") == list(lg.columns))                                   # 로그 열도 감사 대상
+          and (st is None or bool(a.get("users_table")))                                                 # 서빙 학습자 표도 감사
           and set(a.get("router_leaves", {})) == routers and bool(pol.get("implemented")) and bool(pol.get("organizational")))
     out.append((CHECK_NAMES[4], bool(ok), f"감사 열 {q.get('columns')}, 누락 {q.get('missing')}, 미분류 {s.get('unclassified')}, "
                                          f"라우터 {sorted(a.get('router_leaves', {}))}"))

@@ -8,6 +8,8 @@ CSV 스키마(운영 로그를 연결할 때 그대로 맞추면 된다)
                    정규화하고 고친 행 수와 플래그별 수정 건수를 summary.event_repairs 에 남긴다. score·understood 열이 없으면
                    행동 점수 규칙으로 만들고, 열이 있으면 그대로 쓰되 플래그를 고친 행만 규칙으로 다시 채점한다)
     catalog.csv   item, title, topic, level, short
+    두 CSV에서 위 스키마(와 profiles의 goal·horizon, study_log의 score·understood) 밖의 열은 읽을 때 버리고 이름을 summary.dropped_columns에
+    남긴다(외부 회원 ID·분 단위 시각·IP 같은 열이 학습·번들로 들어가지 않게. 외부 ID는 `pseudonymize`로 먼저 바꾼다).
 """
 from __future__ import annotations
 
@@ -91,7 +93,17 @@ class Dataset:
         if missing:
             raise ValueError(f"study_log에 {missing} 열이 없습니다")
         if not np.array_equal(self.profiles.user.values, np.arange(self.n_users)):
-            raise ValueError("profiles.user는 0부터 연속된 번호여야 합니다(외부 ID는 user_id 열로 따로 두세요)")
+            raise ValueError("profiles.user는 0부터 연속된 번호여야 합니다(외부 회원 ID가 있으면 `python -m etfrec pseudonymize`로 "
+                             "가명 번호로 바꾼 뒤 학습하세요)")
+        # 학습 스키마 밖 열(외부 회원 ID·분 단위 시각·IP 등)은 학습에도 저장에도 쓰지 않으므로 여기서 버리고 이름만 남긴다
+        keep_p = set(PROFILE_COLUMNS) | set(OPTIONAL_PROFILE_COLUMNS)
+        keep_l = set(LOG_COLUMNS) | {"score", "understood"}
+        self.dropped_columns = dict(profiles=[c for c in self.profiles.columns if c not in keep_p],
+                                    log=[c for c in self.log.columns if c not in keep_l])
+        if self.dropped_columns["profiles"]:
+            self.profiles = self.profiles[[c for c in self.profiles.columns if c in keep_p]].copy()
+        if self.dropped_columns["log"]:
+            self.log = self.log[[c for c in self.log.columns if c in keep_l]].copy()
         self.log, self.event_repairs, changed = normalize_event_flags(self.log, return_mask=True)
         if "score" not in self.log.columns or "understood" not in self.log.columns:
             self.log = score_attempts(self.log)                       # 점수 열이 없으면 모든 행을 규칙으로 채점
@@ -158,7 +170,7 @@ class Dataset:
                     drop_and_complete=int((lg["drop"].astype(bool) & lg.complete.astype(bool)).sum()),
                     pass_without_quiz=int((lg.quiz_pass.astype(bool) & ~lg.quiz.astype(bool)).sum()),
                     quiz_without_complete=int((lg.quiz.astype(bool) & ~lg.complete.astype(bool)).sum()),
-                    event_repairs=getattr(self, "event_repairs", None),
+                    event_repairs=getattr(self, "event_repairs", None), dropped_columns=getattr(self, "dropped_columns", None),
                     attempts_by_week={int(k): int(v) for k, v in lg.groupby("week").size().items()},
                     mastery_label_equals_quiz=bool(np.array_equal(lg.understood, lg.quiz_pass)),
                     distinct_pairs=int(lg.groupby(["user", "item"]).ngroups),

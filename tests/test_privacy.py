@@ -73,17 +73,19 @@ def test_learner_listing_and_detail_return_bands_not_raw(small_bundle, tmp_path)
     assert not RAW_KEYS & (keys | keys2) and "age_band" in keys
 
 
-def test_route_path_hides_small_node_sizes(small_bundle):
+def test_route_path_shows_size_bands_only(small_bundle):
+    """경로 출력은 노드 크기를 구간으로만 내고 원시 평균을 내지 않는다(부모 − 형제 차분으로 숨긴 노드를 복원하지 못하게)."""
+    from etfrec.router import size_band
     svc = RecommendationService(small_bundle)
-    seen_small = False
-    for uid in small_bundle.test_users[:20]:
-        for p in svc.recommend(int(uid), k=5)["route_path"]:
-            if p["n"] is None:
-                seen_small = True
-                assert p["n_label"] == "20명 미만" and p["raw"] is None and p["raw_best"] is None and p["raw_champ"] is None
-            else:
-                assert p["n"] >= 20 and p["n_label"] == f"{p['n']}명"
-    assert seen_small
+    labels = set()
+    for name in small_bundle.routers:
+        for uid in small_bundle.test_users[:20]:
+            for p in svc.recommend(int(uid), k=5, algorithm=name)["route_path"]:
+                assert p["n"] is None and p["raw"] is None and p["raw_best"] is None and p["raw_champ"] is None
+                labels.add(p["n_label"])
+    assert "20명 미만" in labels and all(l.endswith("명") or l.endswith("명 이상") or l.endswith("명 미만") for l in labels)
+    assert [size_band(n) for n in (3, 19, 20, 49, 50, 199, 200, 499, 500, 9999)] == \
+        ["20명 미만", "20명 미만", "20~49명", "20~49명", "50~99명", "100~199명", "200~499명", "200~499명", "500명 이상", "500명 이상"]
 
 
 # ---------------- 가명처리 ----------------
@@ -260,3 +262,105 @@ def test_export_deid_cli_writes_k_anonymous_table(small_bundle, tmp_path):
     rep = json.loads((tmp_path / "share" / "learners_k5_report.json").read_text(encoding="utf-8"))
     assert rep["satisfied"] and rep["verified"] and rep["rows_in"] == small_bundle.store.n and rep["rows_out"] == len(t)
     assert rep["not_released"] == ["user", "interest1", "interest2", "placement"]
+
+
+
+# ---------------- 최종 검토(개인정보) 반영 ----------------
+def test_extra_log_columns_never_reach_the_bundle(small_bundle):
+    """외부 회원 ID·분 단위 시각·IP 같은 학습 스키마 밖 열은 읽을 때 버리고(요약에 이름 기록), 번들 로그는 허용 열만 남긴다."""
+    from etfrec.config import TrainConfig
+    ds = Dataset.synthetic(TrainConfig(n_learners=120))
+    log = ds.log.assign(user_id=[f"M{u:05d}" for u in ds.log.user], event_ts="2026-09-07 08:38:00", ip="203.0.113.0")
+    prof = ds.profiles.assign(member_id=[f"M{u:05d}" for u in ds.profiles.user])
+    d2 = Dataset(profiles=prof, log=log, catalog=ds.catalog)
+    assert set(d2.summary()["dropped_columns"]["log"]) == {"user_id", "event_ts", "ip"}
+    assert d2.summary()["dropped_columns"]["profiles"] == ["member_id"] and not {"user_id", "ip", "event_ts"} & set(d2.log.columns)
+    lg, dropped = privacy.minimize_log(log, return_dropped=True)
+    assert set(lg.columns) <= set(privacy.LOG_STORED_COLUMNS) and {"user_id", "event_ts", "ip", "day", "minute"} <= set(dropped)
+    b = copy.copy(small_bundle)
+    b.log = small_bundle.log.assign(ip="203.0.113.0")                         # 허용 목록 밖 열이 남으면 QA가 실패한다
+    assert not dict((n, ok) for n, ok, _ in privacy.privacy_checks(b))["bundle_log_no_day_minute"]
+    st = small_bundle.privacy["stored"]
+    assert st["log_columns"] == list(small_bundle.log.columns) and not st["unclassified"]
+    ut = small_bundle.privacy["users_table"]
+    assert ut["quasi_extended"]["requested"][-2:] == ["학습 시간대", "관심 주제"] and not ut["unclassified"]
+    assert ut["quasi_extended"]["users_below_k"] >= ut["quasi"]["users_below_k"]
+
+
+def test_export_rows_do_not_follow_user_order(small_bundle):
+    table, rep = privacy.export_deid(small_bundle, k=5)
+    gen, _ = enforce_k_anonymity(privacy.release_frame(privacy.stored_profiles(small_bundle)), QUASI_IDENTIFIERS, 5)
+    gen = gen.astype(str).rename(columns=privacy.RELEASE_HEADERS)
+    same = (table.values == gen.values).all(1).mean()                           # i행 = user i인 비율(정렬 전에는 1.0)
+    assert same < 0.5 and rep["row_order"].startswith("반출 값 기준 정렬")
+    assert table.equals(table.sort_values(list(table.columns), kind="stable").reset_index(drop=True))
+
+
+def test_api_accepts_only_listed_methods_unless_dev_mode(small_bundle, tmp_path):
+    fam = {int(v) for v in small_bundle.selection["families"].values()}
+    other = next(i for i, a in enumerate(small_bundle.algos) if i not in fam and a.family == "SEGPOP")
+    svc = RecommendationService(small_bundle)
+    with pytest.raises(ValueError):
+        svc.recommend(1, k=5, algorithm=other)
+    with pytest.raises(ValueError):
+        svc.recommend(1, k=5, algorithm=str(other))
+    assert svc.recommend(1, k=5, algorithm=min(fam))["algorithm_id"] == min(fam)
+    assert RecommendationService(small_bundle, allow_any_config=True).recommend(1, k=5, algorithm=other)["algorithm_id"] == other
+    c = TestClient(create_app(small_bundle, designs_dir=str(tmp_path)))
+    assert c.post("/api/recommend", json={"learner_id": 1, "k": 5, "algorithm": other}).status_code == 422
+    assert c.post("/api/compare", json={"learner_id": 1, "k": 5, "methods": [str(other)]}).status_code == 422
+    dev = TestClient(create_app(small_bundle, designs_dir=str(tmp_path), allow_any_config=True))
+    assert dev.post("/api/recommend", json={"learner_id": 1, "k": 5, "algorithm": other}).status_code == 200
+
+
+def test_learner_lookup_can_be_switched_off(small_bundle, tmp_path):
+    c = TestClient(create_app(small_bundle, designs_dir=str(tmp_path), expose_learners=False))
+    assert c.get("/api/learners").status_code == 403 and c.get("/api/learners/1").status_code == 403
+    assert c.post("/api/recommend", json={"learner": {"age": 30, "interests": [1]}, "k": 3}).status_code == 200
+    assert cli.LOOPBACK == ("127.0.0.1", "localhost", "::1")
+
+
+def test_design_scrub_covers_names_lists_events_and_more_forms(small_bundle, tmp_path):
+    c = TestClient(create_app(small_bundle, designs_dir=str(tmp_path)))
+    payload = {"summary": "45세 이상 직장인, 연금 관심, 연봉 1억 2천만원",
+               "state": {"learner": {"age": "45살", "income": "5000만원"}, "nl": {"parsed": {"warnings": ["'45세 직장인'와 일치하는 단원 제목을 찾지 못했습니다.",
+                                                                                                         "'연봉 5000만원'와 일치하는 단원 제목을 찾지 못했습니다."]}},
+                         "events": [{"item": 3, "week": 0, "day": 2, "hour": 20, "minute": 4085, "complete": True}],
+                         "memo": "나이는 52세이고 연소득은 7000만원", "odd": {"age": [45], "income": {"value": 5000}}},
+               "result": {"learner": {"profile": {"연령": "45세", "연소득(만원)": "5,000만원"}}}}
+    r = c.post("/api/designs", json={"name": "45세 연봉 5000만원 홍길동", "payload": payload})
+    assert r.status_code == 200
+    files = os.listdir(tmp_path)
+    assert len(files) == 1 and "45세" not in files[0] and "5000" not in files[0]
+    saved = json.loads((tmp_path / files[0]).read_text(encoding="utf-8"))
+    keys, strings = _keys_and_strings(saved)
+    text = " ".join(strings)
+    assert not RAW_KEYS & keys and "day" not in keys and "minute" not in keys
+    assert not any(x in text for x in ("45세", "45살", "52세", "5000만원", "5,000만원", "7000만원", "1억", "2천만원"))
+    ev = saved["payload"]["state"]["events"][0]
+    assert ev["hour"] in (0, 1, 2, 3) and ev["item"] == 3
+    assert saved["payload"]["state"]["learner"]["age_band"] == 2 and saved["payload"]["state"]["odd"] == {"age_band": None, "income_q": None}
+    assert c.get("/api/designs").json()[0]["name"] == saved["name"]
+
+
+def test_group_suppression_is_complementary():
+    df = pd.DataFrame(dict(method="M", variable=["age_band"] * 4 + ["gender"] * 2, group=[0, 1, 2, 3, 0, 1],
+                           users=[3, 40, 50, 60, 70, 83], active_users=[1, 20, 4, 30, 40, 9], ndcg_active=[0.5, 0.3, 0.2, 0.1, 0.2, 0.3]))
+    out, rep = privacy.suppress_small_groups(df, 5)
+    assert rep["rows_removed"] == 2 and rep["complementary_removed"] == 1 and rep["single_suppressed_partitions"] == 0
+    age = out[out.variable == "age_band"]
+    assert list(age.group) == [2, 3] and age.ndcg_active.isna().sum() == 2         # 활성 4명 집단과 가장 작은 다른 집단을 함께 비움
+    assert out[out.variable == "gender"].ndcg_active.notna().all()
+
+
+def test_pseudonymize_rejects_mapping_inside_input_via_symlink(tmp_path, monkeypatch):
+    raw_p, raw_l = _raw_inputs()
+    (tmp_path / "train_in").mkdir()
+    os.symlink(tmp_path / "train_in", tmp_path / "vault")
+    raw_p.to_csv(tmp_path / "p.csv", index=False); raw_l.to_csv(tmp_path / "l.csv", index=False)
+    monkeypatch.setenv(privacy.KEY_ENV, KEY)
+    with pytest.raises(SystemExit) as e:
+        cli.main(["pseudonymize", "--profiles", str(tmp_path / "p.csv"), "--log", str(tmp_path / "l.csv"), "--id-col", "member_id",
+                  "--out", str(tmp_path / "train_in"), "--mapping-out", str(tmp_path / "vault" / "mapping.csv")])
+    assert "매핑표" in str(e.value) and not (tmp_path / "train_in" / "mapping.csv").exists()
+    assert cli._paths_overlap(str(tmp_path / "a"), str(tmp_path / "a" / "b")) and not cli._paths_overlap(str(tmp_path / "a"), str(tmp_path / "b"))

@@ -4,7 +4,8 @@
 세그먼트마다 수축 점수 1위를 챔피언으로 두고, 학습자는 자기 잎 세그먼트(없으면 가장 깊은 상위)의
 챔피언으로 간다. 표본이 MIN_ROUTER_USERS 미만인 세그먼트는 상위 추정값을 그대로 쓴다. 이 규칙은 잎 크기를 보장하지
 않는다(20명 미만 잎이 생긴다. 실제 크기는 etfrec.privacy.router_leaf_audit가 번들 privacy에 기록). 경로 출력(path)은
-20명 미만 노드의 정확한 n과 그 노드만의 원시 평균을 내보내지 않는다.
+노드 크기를 구간('20명 미만'·'20~49명'·'50~99명'·'100~199명'·'200~499명'·'500명 이상')으로만 내보내고 노드의 원시 평균은 내보내지
+않는다. 정확한 n과 원시 평균을 함께 내면 부모 − 표시된 형제의 차분으로 숨긴 노드의 n·평균이 복원되기 때문이다.
 """
 from __future__ import annotations
 
@@ -15,6 +16,20 @@ import scipy.sparse as sp
 from .config import MIN_ROUTER_USERS, SEED, SEG_VARS
 from .privacy import MIN_LEAF_DISPLAY
 from .signals import shrink_to_parent
+
+
+SIZE_BANDS = (20, 50, 100, 200, 500)
+
+
+def size_band(n: int, min_display: int = MIN_LEAF_DISPLAY) -> str:
+    """노드 크기 → 구간 이름('20명 미만', '20~49명', …, '500명 이상'). 정확한 값을 내보내지 않는다."""
+    if n < min_display:
+        return f"{min_display}명 미만"
+    edges = [b for b in SIZE_BANDS if b >= min_display]
+    for lo, hi in zip(edges, edges[1:]):
+        if lo <= n < hi:
+            return f"{lo}~{hi - 1}명"
+    return f"{edges[-1]}명 이상"
 
 
 class ShrinkRouter:
@@ -69,8 +84,9 @@ class ShrinkRouter:
         return champ, depth, node
 
     def path(self, code_row, min_display: int = MIN_LEAF_DISPLAY):
-        """학습자 한 명이 거친 세그먼트 경로(수준별 표본 수·챔피언·추정 NDCG). 표본이 min_display(20)명 미만인 노드는
-        n=None·n_label='20명 미만'으로 내보내고 그 노드만의 원시 평균(raw·raw_champ·raw_best)도 비운다."""
+        """학습자 한 명이 거친 세그먼트 경로(수준별 표본 수 구간·챔피언·수축 추정 NDCG). 정확한 표본 수(n)와 노드만의 원시 평균
+        (raw·raw_champ·raw_best)은 모든 노드에서 비우고, 크기는 n_label 구간으로만 내보낸다(차분으로 작은 노드를 복원하지 못하게).
+        수축 추정(est·top_est)은 표본이 min_users 미만이면 상위 노드 값과 같다."""
         out = []
         code_row = np.asarray(code_row)
         for lv in range(len(self.levels)):
@@ -79,12 +95,10 @@ class ShrinkRouter:
             pos = np.searchsorted(L["keys"], key)
             if np.any(code_row[self.cols[:lv]] < 0) or pos >= len(L["keys"]) or L["keys"][pos] != key:
                 break
-            n = int(L["N"][pos]); small = n < min_display
-            out.append(dict(level=lv, var=None if lv == 0 else self.order[lv - 1], n=None if small else n,
-                            n_label=f"{min_display}명 미만" if small else f"{n}명", champ=int(L["champ"][pos]), est=float(L["est"][pos]),
-                            raw=None if small else float(L["raw"][pos]), raw_champ=None if small else int(L["raw_champ"][pos]),
-                            raw_best=None if small else float(L["raw_best"][pos]), top=L["top"][pos].tolist(),
-                            top_est=np.round(L["top_est"][pos], 4).tolist()))
+            n = int(L["N"][pos])
+            out.append(dict(level=lv, var=None if lv == 0 else self.order[lv - 1], n=None, n_label=size_band(n, min_display),
+                            champ=int(L["champ"][pos]), est=float(L["est"][pos]), raw=None, raw_champ=None, raw_best=None,
+                            top=L["top"][pos].tolist(), top_est=np.round(L["top_est"][pos], 4).tolist()))
         return out
 
 

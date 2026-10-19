@@ -51,9 +51,12 @@ class LearnerInput:
 
 
 class RecommendationService:
-    def __init__(self, bundle: Bundle, sources_dir: str = None):
-        """sources_dir: 공개 데이터 스냅샷 폴더(기본: 환경변수 ETFREC_SOURCES_DIR, 없으면 data/sources — CLI sync와 같은 규칙)."""
+    def __init__(self, bundle: Bundle, sources_dir: str = None, allow_any_config: bool = False):
+        """sources_dir: 공개 데이터 스냅샷 폴더(기본: 환경변수 ETFREC_SOURCES_DIR, 없으면 data/sources — CLI sync와 같은 규칙).
+        allow_any_config: 임의 설정 번호(2,640개 중 아무거나)를 받을지. 기본은 화면의 기법 목록(기법군 1위·라우터)만 받는다.
+        작은 세그먼트로 계산하는 설정(예: 5변수 세그먼트 인기)은 칸에 한 명뿐일 때 그 사람의 통과 단원을 드러낼 수 있어서다."""
         self.b = bundle
+        self.allow_any_config = bool(allow_any_config)
         self.catalog: Catalog = bundle.catalog
         self.store = bundle.store
         self.ref = bundle.reference
@@ -214,17 +217,21 @@ class RecommendationService:
 
     # ---------- 설정 선택 ----------
     def resolve_algorithm(self, algorithm, codes) -> tuple:
-        """algorithm: None(운영 라우터) | 라우터 이름 | 기법군 이름 | 설정 번호."""
+        """algorithm: None(운영 라우터) | 라우터 이름 | 기법군 이름 | 설정 번호(기법군 1위 번호, 또는 allow_any_config일 때 아무 번호)."""
         router_name = None; depth = 0; path = []
+        if isinstance(algorithm, str) and algorithm.isdigit():
+            algorithm = int(algorithm)
+        if isinstance(algorithm, (int, np.integer)) and not isinstance(algorithm, bool) and not self.allow_any_config \
+                and int(algorithm) not in {int(v) for v in self.selection["families"].values()}:
+            raise ValueError("임의 설정 번호는 개발 모드(ETFREC_DEV_CONFIGS=1)나 CLI recommend에서만 고를 수 있습니다. "
+                             "화면의 기법 목록(기법군 1위·라우터)을 쓰세요")
         if algorithm is None or algorithm in self.routers:
             router_name = self.operational_router if algorithm is None else algorithm
             rt = self.routers[router_name]
             ch, dep, _ = rt.route(codes); aid = int(ch[0]); depth = int(dep[0]); path = rt.path(codes[0])
         elif isinstance(algorithm, str) and algorithm in self.selection["families"]:
             aid = int(self.selection["families"][algorithm])
-        elif isinstance(algorithm, (int, np.integer)) and 0 <= int(algorithm) < len(self.algos):
-            aid = int(algorithm)
-        elif isinstance(algorithm, str) and algorithm.isdigit() and int(algorithm) < len(self.algos):
+        elif isinstance(algorithm, (int, np.integer)) and not isinstance(algorithm, bool) and 0 <= int(algorithm) < len(self.algos):
             aid = int(algorithm)
         else:
             raise ValueError(f"알 수 없는 설정 {algorithm!r}")

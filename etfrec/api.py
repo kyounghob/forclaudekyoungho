@@ -132,9 +132,14 @@ def _learner_input(req, allow_none: bool = False):
     return LearnerInput(**d)
 
 
-def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir: str = None) -> FastAPI:
+def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir: str = None, expose_learners: bool = True,
+               allow_any_config: bool = None) -> FastAPI:
+    """expose_learners: 기준 학습자 조회(/api/learners, /api/learners/{uid})를 켤지. 학습자 단위 표라 학습 환경 안(로컬 실행)에서만 켠다
+    (cli serve는 로컬 주소가 아니면 --expose-learners를 줄 때만 켠다). allow_any_config: 임의 설정 번호 허용(기본: 환경변수 ETFREC_DEV_CONFIGS=1일 때만)."""
     bundle = Bundle.load(bundle) if isinstance(bundle, str) else bundle
-    svc = RecommendationService(bundle, sources_dir=sources_dir)
+    if allow_any_config is None:
+        allow_any_config = os.environ.get("ETFREC_DEV_CONFIGS") == "1"
+    svc = RecommendationService(bundle, sources_dir=sources_dir, allow_any_config=allow_any_config)
     designs_dir = designs_dir or os.path.join(os.getcwd(), "artifacts", "designs")
     os.makedirs(designs_dir, exist_ok=True)
     app = FastAPI(title="ETF 교육 콘텐츠 추천 시스템", version=__version__,
@@ -172,12 +177,19 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
     def parse(req: ParseRequest):
         return json_safe(parse_onboarding(req.text, bundle.catalog))
 
+    LEARNERS_OFF = ("기준 학습자 조회가 꺼져 있습니다. 학습자 단위 정보라 학습 환경 안(로컬 실행)에서만 켭니다"
+                    "(python -m etfrec serve는 127.0.0.1에서 기본으로 켜고, 다른 주소로 열 때는 --expose-learners가 필요합니다)")
+
     @app.get("/api/learners")
     def learners(q: str = "", limit: int = Query(20, ge=1, le=200), offset: int = Query(0, ge=0)):
+        if not expose_learners:
+            raise HTTPException(status_code=403, detail=LEARNERS_OFF)
         return svc.learners(q, limit, offset)
 
     @app.get("/api/learners/{uid}")
     def learner(uid: int):
+        if not expose_learners:
+            raise HTTPException(status_code=403, detail=LEARNERS_OFF)
         return wrap(lambda: svc.learner(uid))
 
     @app.post("/api/recommend")
@@ -274,11 +286,13 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
 
     @app.post("/api/designs")
     def save_design(d: Design):
-        """쓰기 전에 연령·연소득 원값을 구간 코드로 바꾼다(etfrec.privacy.scrub_design). 파일에는 원값이 남지 않는다."""
-        name = _safe_name(d.name)
+        """쓰기 전에 연령·연소득 원값을 구간 코드로 바꾸고, 설계 이름과 모든 문자열의 연령·소득 표현을 구간 이름으로 가린다
+        (etfrec.privacy.scrub_design·scrub_text). 이름·주소 같은 그 밖의 개인 표현은 가리지 못하므로 입력하지 않는다."""
+        name = _safe_name(svc.scrub_design({"name": d.name})["name"])          # 파일 이름에도 연령·소득이 남지 않게
         clean = svc.scrub_design(d.payload)
         payload = dict(name=name, saved_at=time.strftime("%Y-%m-%d %H:%M:%S"), payload=clean,
-                       summary=str(clean.get("summary", ""))[:120], privacy="연령·연소득은 구간 코드로만 저장")
+                       summary=str(clean.get("summary", ""))[:120],
+                       privacy="연령·연소득은 구간 코드로만 저장, 문자열의 연령·소득 표현은 구간 이름으로 가림(이름 등 그 밖의 표현은 가리지 못함)")
         with open(os.path.join(designs_dir, name + ".json"), "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
         return {"saved": name, "saved_at": payload["saved_at"]}

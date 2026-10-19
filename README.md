@@ -63,7 +63,7 @@ python -m etfrec serve --bundle artifacts/bundle_v2     # http://127.0.0.1:8000
 수집 전에는 `etfrec/sources/data/etf_list_sample.csv`(가상 종목 45개, 패키지 데이터에 포함, 화면에 "샘플" 표시)로 유형 통계를 계산하고,
 `sources sync` 뒤에는 스냅샷 폴더와 수집 경로(provenance, `policy: official-apis-and-manual-download-only`)를 씁니다.
 스냅샷 폴더는 `sources sync·stats`와 서버가 같은 규칙으로 정합니다: `--out`·`serve --sources-dir`, 없으면 환경변수 `ETFREC_SOURCES_DIR`, 없으면 `data/sources`.
-서버는 시작할 때 한 번 읽으므로 동기화한 뒤에는 서버를 다시 시작합니다. 인증키는 환경변수로만 받습니다(명령줄 인자는 `ps`·셸 기록에 남음).
+서버는 시작할 때 한 번 읽으므로 동기화한 뒤에는 서버를 다시 시작합니다. 인증키는 환경변수로만 받습니다(명령줄 인자나 `KEY=값 명령` 형식은 `ps`·셸 기록에 남으므로 `read -rs KRX_OPEN_API_KEY && export KRX_OPEN_API_KEY`처럼 넣습니다).
 
 - API 기준일 기본값은 직전 평일(토·일만 건너뜀)입니다. `--date`·`--krx-csv-date`는 실제 날짜(YYYYMMDD)만 받습니다. 응답이 0행이면 `empty`(휴장일·미공개 가능)로 기록하고 기존 파일을 지우지 않습니다.
 - 파일은 같은 폴더의 임시 파일에 다 쓴 뒤 바꾸므로(쓰다가 실패하면 임시 파일만 지움) 기존 스냅샷이 반쯤 덮이지 않습니다. 파일을 바꾼 직후
@@ -88,23 +88,25 @@ python -m etfrec serve --bundle artifacts/bundle_v2     # http://127.0.0.1:8000
 | 코드로 강제되는 항목 | 하는 일 | 강제·확인 |
 | --- | --- | --- |
 | 원시 연령·연소득 비저장 | 원값은 학습 중 메모리에서 소득 5분위 경계를 만드는 데만 씁니다. 번들 프로필·특징 저장소·`learner_profiles.csv`에는 연령대·소득분위 구간(과 분위 경계·중앙값 같은 집계)만 남습니다. 모델은 원래 구간 코드만 쓰므로 학습 결과는 바뀌지 않습니다 | `generalize_profiles`, QA `bundle_profiles_no_raw_age_income`·`feature_store_no_raw_age_income` |
-| 시각 축약 | 번들의 학습 로그는 주차·4개 시간대·주 안 순서(`seq`)만 남기고 일·분을 버립니다(학습 입력에는 모의 생성기가 만든 일·분이 있습니다) | `minimize_log`, QA `bundle_log_no_day_minute` |
-| API·화면 | `/api/learners`·학습자 상세는 연령대·소득분위 코드·이름(상세는 구간 대표값까지)만 반환합니다. 기존 학습자를 새 학습자로 복사하면 입력란에 구간 대표값(연령 25·35·45·55·65세, 소득은 분위별 대표값)을 채우고 원값이 아니라고 화면에 표시합니다. 소득을 비운 학습자의 대체값은 학습 때 저장한 중앙값(집계)입니다 | `service.learners`·`learner`, `FeatureStore.income_median` |
-| 저장 설계 | `/api/designs`는 쓰기 전에 연령·연소득 원값을 구간 코드로 바꾸고, 자유 입력 문장의 연령·소득 표현(예: 45세, 연봉 5,000만원, 5천만원)을 구간 이름으로 가립니다(그 밖의 표현은 가리지 못합니다). 불러올 때는 학습자 입력란에 구간 대표값을 채웁니다 | `scrub_design`, `hydrate_design` |
-| 작은 셀 비공개 | 추천 경로 출력에서 20명 미만 라우터 노드는 `n=null`·'20명 미만'으로만 보이고 그 노드의 원시 평균도 숨깁니다. 집단별 표(`group_results`·`advanced_exposure`)는 5명 미만 집단을 빼고, 활성 5명 미만이면 활성 기준 값을 비웁니다 | `ShrinkRouter.path`, `suppress_small_groups`, QA `published_group_cells_ge_5` |
-| 감사 | 저장 준식별자 8개(연령대·소득분위·성별·경험·성향·목적·기간·기기) 조합의 k=5 결과, 열 제거 일반화 계획(열을 다 빼도 안 되면 `impossible`), export-deid가 할 일반화·억제 요약, 라우터별 실제 잎 크기를 기록하고 평가 화면에는 측정값만 표시합니다. 감사는 기록이며 그 자체로 k를 보장하지 않습니다 | `privacy_audit`, QA `privacy_audit_columns_complete` |
-| 가명처리(운영 원본용) | `ETFREC_PSEUDO_KEY=… python -m etfrec pseudonymize --profiles A.csv --log B.csv --id-col member_id --out DIR --mapping-out PATH`: 외부 회원 ID → HMAC-SHA256 가명(16자) → 가명 순서 연속 번호. 키가 없거나 16자 미만이면 실행하지 않고, 매핑표는 `--mapping-out`에만 쓰며 `--out` 안이면 거부합니다. 로그의 일·분은 0으로 지우고 시간대는 4개로 다시 계산하며, 학습 스키마 밖 열은 버립니다. 원시 연령·연소득은 학습 입력에 남습니다(분위 경계 계산). 결과 폴더는 `train --data DIR`로 읽힙니다. 모의 데이터 학습에는 쓰지 않습니다 | `build_pseudonymized_inputs`, `cli pseudonymize` |
-| 반출 | `python -m etfrec export-deid --bundle DIR --k 5 --out FILE`: 저장 프로필의 준식별자 8개 열만 일반화 계층(성별·기기 → '*', 경험·성향·기간 3 → 2, 목적·소득분위·연령대 5 → 3)을 한 단계씩 적용하고, 남은 작은 셀은 가장 구체적인 열부터 '*'로 국소 억제하며, 그래도 k 미만인 행은 뺍니다. 모든 셀이 k 이상일 때만 표와 보고서를 씁니다. 가명 번호·관심 주제·진단 수준은 내보내지 않습니다 | `enforce_k_anonymity`, `export_deid` |
+| 학습 이력 최소화 | 번들의 학습 로그는 허용 열(가명 번호·단원·주차·4개 시간대·주 안 순서 `seq`·시도 플래그·점수)만 남기고 일·분과 학습 스키마 밖 열(외부 회원 ID·분 단위 시각·IP 등)을 버립니다. `train --data`로 읽을 때도 스키마 밖 열은 버리고 이름을 데이터 요약(`dropped_columns`)에 남깁니다 | `minimize_log`, `Dataset.validate`, QA `bundle_log_no_day_minute`(로그 열 ⊆ 허용 목록) |
+| API·화면 | `/api/learners`·학습자 상세는 연령대·소득분위 코드·이름(상세는 구간 대표값까지)만 반환합니다. 다만 학습자 단위 표라 학습 환경 안에서만 엽니다: `serve`는 127.0.0.1에서만 기본으로 켜고, 다른 주소로 열면 `--expose-learners`를 줄 때만 켭니다(꺼지면 403). API로 고를 수 있는 기법은 화면의 기법 목록(기법군 1위·라우터)뿐이고, 임의 설정 번호(예: 5변수 세그먼트 인기처럼 한 명뿐인 칸으로 계산될 수 있는 설정)는 `ETFREC_DEV_CONFIGS=1`이나 CLI `recommend`에서만 받습니다. 기존 학습자를 새 학습자로 복사하면 입력란에 구간 대표값(연령 25·35·45·55·65세, 소득은 분위별 대표값)을 채우고 원값이 아니라고 화면에 표시합니다. 소득을 비운 학습자의 대체값은 학습 때 저장한 중앙값(집계)입니다 | `service.learners`·`learner`·`resolve_algorithm`, `create_app(expose_learners)`, `FeatureStore.income_median` |
+| 저장 설계 | `/api/designs`는 쓰기 전에 연령·연소득 원값을 구간 코드로 바꾸고('45살'·'5000만원'처럼 읽을 수 있는 문자열도, 읽을 수 없으면 버림), 설계 이름과 모든 문자열(목록 안 문장 포함)의 연령·소득 표현(예: 45세, 45세 이상, 연봉 5,000만원, 연소득은 7천만원, 1억 2천만원, 5천만원)을 구간 이름으로 가립니다. 이벤트의 일·분은 버리고 시각은 4개 시간대로 바꿉니다. 이름·주소 같은 그 밖의 표현은 가리지 못하므로 입력하지 않습니다. 불러올 때는 학습자 입력란에 구간 대표값을 채웁니다 | `scrub_design`, `scrub_text`, `hydrate_design` |
+| 작은 셀 비공개 | 추천 경로 출력은 노드 크기를 구간('20명 미만'·'20~49명'·…·'500명 이상')으로만 보이고 원시 평균은 내보내지 않습니다(정확한 n과 평균을 내면 부모 − 형제 차분으로 숨긴 노드가 복원됩니다). 집단별 표(`group_results`·`advanced_exposure`)는 5명 미만 집단을 빼고, 활성 5명 미만이면 활성 기준 값을 비우며, 한 변수에서 하나만 빠지면 가장 작은 집단을 하나 더 빼거나 비웁니다(보완 억제: 함께 공개되는 합계와의 차분으로 복원되지 않게) | `ShrinkRouter.path`, `suppress_small_groups`, QA `published_group_cells_ge_5` |
+| 감사 | 저장 준식별자 8개(연령대·소득분위·성별·경험·성향·목적·기간·기기) 조합의 k=5 결과, 열 제거 일반화 계획(열을 다 빼도 안 되면 `impossible`), export-deid가 할 일반화·억제 요약, 라우터별 실제 잎 크기, 번들 로그 열과 버린 열, 서빙 학습자 표의 열 역할과 확장 조합(준식별자 8개 + 학습 시간대 + 관심 주제)의 k 결과를 기록하고 평가 화면에는 측정값만 표시합니다. 감사는 기록이며 그 자체로 k를 보장하지 않습니다 | `privacy_audit`, `users_table_audit`, QA `privacy_audit_columns_complete` |
+| 가명처리(운영 원본용) | `read -rs ETFREC_PSEUDO_KEY && export ETFREC_PSEUDO_KEY` 로 키를 화면에 보이지 않게 넣은 뒤(명령줄에 `KEY=값`으로 쓰면 셸 기록에 남습니다) `python -m etfrec pseudonymize --profiles A.csv --log B.csv --id-col member_id --out DIR --mapping-out PATH`: 외부 회원 ID → HMAC-SHA256 가명(16자) → 가명 순서 연속 번호. 키가 없거나 16자 미만이면 실행하지 않고, 매핑표는 `--mapping-out`에만 쓰며 학습 입력 폴더와 겹치면(심볼릭 링크·대소문자만 다른 경로 포함) 거부합니다. 로그의 일·분은 0으로 지우고 시간대는 4개로 다시 계산하며, 학습 스키마 밖 열은 버립니다. 원시 연령·연소득은 학습 입력에 남습니다(분위 경계 계산). 결과 폴더는 `train --data DIR`로 읽힙니다. 모의 데이터 학습에는 쓰지 않습니다 | `build_pseudonymized_inputs`, `cli pseudonymize` |
+| 반출 | `python -m etfrec export-deid --bundle DIR --k 5 --out FILE`: 저장 프로필의 준식별자 8개 열만 일반화 계층(성별·기기 → '*', 경험·성향·기간 3 → 2, 목적·소득분위·연령대 5 → 3)을 한 단계씩 적용하고, 남은 작은 셀은 가장 구체적인 열부터 '*'로 국소 억제하며, 그래도 k 미만인 행은 뺍니다. 모든 셀이 k 이상일 때만 표와 보고서를 씁니다. 행은 반출 값으로 정렬해 원래 학습자 순서(가명 번호)를 지웁니다. 가명 번호·관심 주제·진단 수준은 내보내지 않습니다 | `enforce_k_anonymity`, `export_deid` |
 | 성별 운영 비사용 | 운영 라우터(성별 제외)는 성별을 쓰지 않는 설정만 후보로 둡니다. 성별은 저장·집단 진단에는 남습니다 | `pipeline.train`, `test_gender_flip_invariance_operational` |
 
 모델 학습 입력은 일반화하지 않습니다(그러면 학습 결과가 바뀝니다). 학습은 접근 통제된 환경에서 가명 데이터로 하고, 학습 환경 밖으로
-나가는 학습자 단위 표는 export-deid를 거칩니다. `learner_profiles.csv`는 내부 서빙용 요약이며 k-익명 표가 아닙니다.
+나가는 학습자 단위 표는 export-deid를 거칩니다. `learner_profiles.csv`와 학습자 조회 API는 내부 서빙용이며 k-익명 표가 아닙니다
+(확장 조합은 대부분 한 명으로 좁혀집니다. `privacy.users_table.quasi_extended`). 서빙 API에는 인증이 없으므로 학습 환경 밖에 열지 않습니다.
 `MIN_ROUTER_USERS = 20`은 잎 크기를 보장하지 않습니다. 20명 미만 노드는 자기 평균 대신 상위 노드의 추정을 그대로 쓰므로 각 잎의 챔피언은
 표본 20명 이상 노드의 평균으로만 정해지지만(가장 작은 결정 노드 = `decision_min_n`), 잎 자체는 모의 데이터에서도 20명 미만이 많습니다
 (`privacy.router_leaves`의 `leaves_below`·`users_in_small_leaves`·`min_leaf`).
 
 조직 정책(코드가 강제하지 않음): 권한·망 분리, 가명처리 담당(키·매핑표 보관)과 모델 학습 담당 분리, 반출 심사, 접근 기록 감사,
-외부 결합·공유 시 개인정보 이노베이션 존(또는 결합전문기관)에 준하는 통제, 보관 기간 문서화와 기간 경과·탈퇴 시 삭제, 재식별 금지.
+외부 결합·공유 시 개인정보 이노베이션 존(또는 결합전문기관)에 준하는 통제, 보관 기간 문서화와 기간 경과·탈퇴 시 삭제, 재식별 금지,
+서빙 API 접근 통제(밖에 열 때는 인증·접근 기록), 비밀 값(가명처리 키·API 인증키)은 명령줄이 아닌 입력 프롬프트나 권한 제한 파일로 관리.
 
 ## 무엇이 들어 있나
 

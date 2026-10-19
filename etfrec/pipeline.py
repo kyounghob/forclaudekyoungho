@@ -262,15 +262,16 @@ def train(dataset: Dataset, cfg: TrainConfig = None, out_dir: str = None, enable
     # 공개 집단표는 5명 미만 셀을 처리한 뒤 넣는다. 감사 → QA(개인정보 검사 포함) 순서로 저장 전에 확인한다.
     group_results, cells_g = suppress_small_groups(group_results, K_RELEASE)
     exposure, cells_e = suppress_small_groups(pd.DataFrame(exposure_rows), K_RELEASE)
+    stored_log, log_dropped = minimize_log(LOG[LOG.week < cfg.test_week], return_dropped=True)
     bundle = Bundle(version=__version__, created_at=time.strftime("%Y-%m-%dT%H:%M:%S"), config=cfg, catalog=catalog, store=F_test,
                     reference=ref_test, models=models, algos=algos, signal_meta=signal_meta, selection=selection, routers=routers,
                     router_tuning=router_tunes, results=results, group_results=group_results, validation_jobs=jobs,
                     predictions=predictions, per_user=per_user, qa=[], dataset_summary=dataset.summary(),
                     validation_audit=cands_val.audit, test_audit=cands_test.audit, dataset_meta=dataset.meta,
-                    profiles=generalize_profiles(profiles, F_test.codes), log=minimize_log(LOG[LOG.week < cfg.test_week]),
+                    profiles=generalize_profiles(profiles, F_test.codes), log=stored_log,
                     zoo_skipped=skipped, test_users=cands_test.user.copy(), exposure=exposure, privacy=None)
     bundle.privacy = privacy_audit(bundle.profiles, bundle.routers, store=bundle.store,
-                                   published=dict(group_results=cells_g, advanced_exposure=cells_e))
+                                   published=dict(group_results=cells_g, advanced_exposure=cells_e), log=bundle.log, log_dropped=log_dropped)
     qa = bundle.qa = run_qa(cands_test, catalog, results, predictions, F_test, models, selection, dataset, allowed_ngi, uses, lb_test,
                             bundle=bundle, weeks=(cfg.val_week, cfg.test_week))
     logger(f"QA {len(qa)}건 통과, 총 {time.time() - t0:.1f}초")
