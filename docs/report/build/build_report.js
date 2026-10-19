@@ -133,7 +133,8 @@ const abPower = (p1, p2, n) => { const pb = (p1 + p2) / 2; return Phi((Math.abs(
 const AB_ROWS = [0.02, 0.03, 0.04].map(d => [`${(d * 100).toFixed(0)}%p (22% → ${((0.22 + d) * 100).toFixed(0)}%)`, num(abSize(0.22, 0.22 + d, true)), num(abSize(0.22, 0.22 + d, false)),
   num(abSize(0.22, 0.22 + d, true, ZQ.a2_dunnett)), num(2 * abSize(0.22, 0.22 + d, true)), num(3 * abSize(0.22, 0.22 + d, true, ZQ.a2_dunnett))]);
 const AB2 = abSize(0.22, 0.24, true), AB3 = abSize(0.22, 0.25, true), POW3 = abPower(0.22, 0.24, AB3);
-const INFLOW2 = Math.ceil(2 * AB2 / 56), INFLOW3 = Math.ceil(2 * AB3 / 56);
+const ENROLL_DAYS = 56 - 7;                     // 8주 상한 안에 마지막 등록자의 7일 결과까지 들어오려면 등록은 49일 안에 끝나야 한다
+const INFLOW2 = Math.ceil(2 * AB2 / ENROLL_DAYS), INFLOW3 = Math.ceil(2 * AB3 / ENROLL_DAYS);
 // 쌍 비교(사용자 단위 쌍 부트스트랩 95% 구간), 집단별 활성 기준, 다양성, 기타 사실
 const PR2 = Object.fromEntries((D.paired || []).map(x => [`${x.a}-${x.b}`, x])), PR1 = Object.fromEntries((D.paired_v1 || []).map(x => [`${x.a}-${x.b}`, x]));
 const sgn = (x, d = 4) => (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(d);
@@ -169,6 +170,9 @@ const lamTxt = l => (l >= 1e8 ? "∞" : String(l));
 const sensRow = pen => sens.find(x => x.prereq_penalty === pen);
 const sensRevSig = sensRev.filter(pen => sensRow(pen)["RouterNoGender+prereq"].ci_low > 0);
 const PS_ = D.personas || {};
+const GF = D.gender_flip || null, PL = D.placebo || null;
+const plPair = (a, b) => PL && (PL.paired || []).find(x => x.a === a && x.b === b);
+const PL_OK = !!PL && ["Global-NoDemographics", "RouterFull-RouterNoGenderIncome", "RouterNoGender-RouterNoGenderIncome"].every(k => { const x = plPair(...k.split("-")); return x && x.ci_low <= 0; });   // 인구통계를 써서 유의하게 나아지지 않음                    // 번들 v2 성별 뒤집기 점검, 위약 세계 점검(scripts/placebo_check.py)
 const shortT = t => t.split(":")[0].replace(/\(.*?\)/g, "").trim();                 // 단원 제목의 짧은 형태(콜론 뒤·괄호 제거)
 const stl = (P, st) => (P && P.stage_titles && P.stage_titles[st] ? P.stage_titles[st].map(shortT).join("·") : "–");
 const coreSame = ["B", "C"].every(k => PS_[k] && PS_.A && JSON.stringify(PS_[k].stage_titles.core) === JSON.stringify(PS_.A.stage_titles.core));
@@ -283,7 +287,7 @@ add(pageBreak(), h1("2. 문제 정의와 시나리오"),
   bullet([{ t: "입력: ", bold: true }, "학습자 프로필(연령·소득·투자 경험·위험성향·기기·시간대, 성별은 수집하되 운영 설정에서 제외), 투자 목적(연금·노후 / 배당·인컴 / 장기 지수 / 단기 매매 / 분산·안정), 투자 기간(1년 미만 / 1~5년 / 5년 이상), 관심 주제 2개, 진단 퀴즈 결과 또는 학습 기록(조회·완료·퀴즈 통과·저장·이탈)."]),
   bullet([{ t: "출력: ", bold: true }, "① 단계별 로드맵(단원 상태: 통과·학습 가능·잠김, 남은 학습 시간, 다음 단원), ② 지금 공부할 단원 Top-5(점수·근거·신호 기여도·출처 링크), ③ ETF 유형 안내 카드(개념 통과 여부, 세금·연금계좌·규제·주의, 유형 통계)."]),
   bullet([{ t: "정답 정의(오프라인): ", bold: true }, "기준 주 다음 주에 학습자가 퀴즈를 통과한 단원. 후보는 ‘아직 통과하지 않은 단원 ∩ 수준 가드레일(추정 수준 + 2 이상 차단) ∩ (선택) 선수 단원 통과’로 제한하고, 목록을 고를 때 한 단계 위 단원은 최대 1개만 넣는다(목록 후처리)."]),
-  bullet([{ t: "제약: ", bold: true }, "특정 ETF 상품의 매수·매도 권유 금지(화면·API 응답에 고지문 포함), 성별을 운영 라우터에서 제외, 요청 중 재학습 없음(미리 학습된 번들만 사용), 교육 자료는 링크·출처만 저장하고 본문을 복제하지 않음."]),
+  bullet([{ t: "제약: ", bold: true }, "특정 ETF 상품의 매수·매도 권유 금지(모든 화면과 추천을 담은 API 응답에 고지문 포함), 성별을 운영 라우터에서 제외, 요청 중 재학습 없음(미리 학습된 번들만 사용), 교육 자료는 링크·출처만 저장하고 본문을 복제하지 않음."]),
   bullet([{ t: "성공 기준: ", bold: true }, "오프라인 NDCG@5가 인기·무작위 기준선을 유의하게 앞서고(95% 부트스트랩 구간), 선수 단원 위반 0, 집단별 정확도 격차가 설명 가능하며, 온라인에서는 다음 주 퀴즈 통과율이 대조군 A(세그먼트 인기순)보다 높을 것(7절). 오프라인 NDCG에서는 가드레일을 켠 서비스 설정이 대조군보다 낮으므로 이 기준은 온라인 실험으로만 판정한다."]),
 );
 
@@ -295,8 +299,8 @@ add(pageBreak(), h1("3. 추천 기법 요약과 한계"),
     ["인기(POP)", "단원별 퀴즈 통과 건수(기준 주 이전 로그). 세그먼트 인기는 세그먼트 안 통과 비중을 전역 비중으로 수축: n/(n+λ)·세그먼트 + λ/(n+λ)·전역(세그먼트 변수 조합 31개 × λ ∈ {5, 20, 80} = 93개 신호)", "학습 로그", "콜드스타트에 강함, 단순·안정", "개인화 없음, 인기 편향, 다양성 1.0에 가깝지만 교육 순서 무시", "기준선, 규칙의 기준점수·하이브리드의 구성 신호"],
     ["규칙(지식 기반)", "기준 5 × 인기(세그먼트 없음 또는 연령대+소득분위) + 가산점: 관심 주제 3, 수준 일치 2, 연령 생애주기 주제 2, 소득 구간 주제 2, 위험성향 주제 2, 모바일·짧은 콘텐츠 1, 투자 목적 일치 2, 로드맵 단계 우선순위 2(가산점 8개의 모든 부분집합 × 기준 2종 = 512개 설정)", "프로필·목적·카탈로그", "설명 가능, 로그 없이 동작, 교육 정책을 직접 넣을 수 있음", "가중치가 사람 판단, 로그가 쌓여도 스스로 개선되지 않음", `검증 1위(${["관심 주제", "수준 일치", "연령 생애주기", "모바일·짧은 콘텐츠", "소득 구간 주제", "위험성향", "투자 목적 일치", "로드맵 단계 우선순위"].filter(k => opHas(k)).join("·")}). 라우터의 기본 설정`],
     ["콘텐츠 기반", "단원 특징(주제·수준 원-핫, 주제 이름+제목의 문자 2~3그램 TF-IDF, 또는 둘 다)과 학습자 선호 프로필의 코사인 유사도(6개 설정)", "카탈로그 텍스트, 학습자 이력", "신규 단원에 강함, 근거 제시 쉬움", "비슷한 것만 추천(과특화), 이력 없으면 관심 주제만 의존", `하이브리드 구성 신호(테스트 보고 설정: ${FB.CONTENT || "–"}), 운용사 가이드북 텍스트로 확장 예정`],
-    ["사용자 CF", "코사인 유사 학습자 k명(k ∈ {20, 50, 100})의 반응 가중 평균, 인구통계 유사도 혼합(w ∈ {0.2, 0.5}) 변형(27개 설정)", "충분한 사용자×단원 반응", "집단 지성, 의외의 발견", `희소성(밀도 ${pct(DS.density, 0)})·콜드스타트, 선수 구조 무시(선수 미이수 ${fmt(resBy.UCF.prereq_violation_rate, 2)}), 계산량`, `비교 기준선(테스트 보고 설정: ${FB.UCF || "–"}), CF 신뢰도 게이트 n/(n+10) 적용`],
-    ["아이템 CF", "단원 간 수축 코사인 유사도(λ ∈ {0, 5, 10, 30}, 신뢰도 가중 여부; 8개 설정)로 ‘함께 통과한 단원’ 점수", "반응 행렬", "안정적, 오프라인 사전 계산", "인기 단원 쏠림, 새 단원 불가", `비교 기준선(테스트 보고 설정: ${FB.ICF || "–"}), 하이브리드 구성 신호`],
+    ["사용자 CF", "코사인 유사 학습자 k명(k ∈ {20, 50, 100})의 반응 가중 평균, 인구통계 유사도 혼합(w ∈ {0.2, 0.5}) 변형(27개 설정)", "충분한 사용자×단원 반응", "집단 지성, 의외의 발견", `희소성(밀도 ${pct(DS.density, 0)})·콜드스타트, 선수 구조 무시(선수 미이수 ${fmt(resBy.UCF.prereq_violation_rate, 2)}), 계산량`, `비교 기준선(테스트 보고 설정: ${FB.UCF || "–"}). CF 항이 비CF 항과 섞인 하이브리드에서는 아이템 반응 근거 n_i/(n_i+10)로 CF 비중을 줄인다(단독 CF 설정에는 적용하지 않음)`],
+    ["아이템 CF", "단원 간 수축 코사인 유사도(λ ∈ {0, 5, 10, 30}, 신뢰도 가중 여부; 8개 설정)로 ‘함께 학습(시도)한 단원’ 점수(조회만 한 시도도 함께 나온 것으로 셈)", "반응 행렬", "안정적, 오프라인 사전 계산", "인기 단원 쏠림, 새 단원 불가", `비교 기준선(테스트 보고 설정: ${FB.ICF || "–"}), 하이브리드 구성 신호`],
     ["행렬분해(MF)", "표본 MF(6·9주차): 관측 칸은 신뢰도 1+α·log(1+점수) 가중, 미관측 칸은 표본추출해 0으로 둔 가중 MSE. 관측 MF: 관측된 행만 MSE. 둘 다 사용자·단원 잠재요인 내적, Adam", "반응 행렬(암묵 피드백)", "희소 행렬 일반화", "점수 회귀(점별 손실)라 순위를 직접 학습하지 않음, 해석 어려움", "비교 기준선(torch 학습, NumPy 추론)"],
     ["MLP(9주차)", "사용자·단원 임베딩 → 은닉층 → 통과 확률(BCEWithLogitsLoss). 관측된 시도 행만 학습(양성 = 통과, 음성 = 시도했지만 미통과). 미관측 단원은 학습에 쓰지 않음. 관측 행이 있는 사용자는 통과가 없어도 학습된다", "관측 시도 + 통과 레이블", "비선형 상호작용", `시도하지 않은 단원과 시도한 단원을 비교하는 법을 배우지 못함(다음 주 선택 예측과 어긋남). 인기 대비 v2 ${fmt(resBy.MLP.ndcg - resBy.POP.ndcg, 3)}, 무작위 대비 v1 ${fmt(v1By.MLP.ndcg - v1By.Random.ndcg, 3)}(6절)`, "비교 기준선"],
     ["쌍별·목표 정렬 확장(2차본)", `BPR MF: −ln σ(p_u·q_i − p_u·q_j), j = 미관측 단원(에폭마다 다시 추출) / MLP 쌍별(관측 음성): (통과, 미통과 시도) 쌍(미통과 시도가 없는 사용자는 미관측 단원으로 대체${obsNeg != null ? `, 테스트 스냅샷 쌍의 ${pct(1 - obsNeg)}` : ""}) / MLP 쌍별(미관측 음성): (통과, 미관측) 쌍 = 비판이 처방한 BPR / MLP 목표 정렬: (주 w에 처음 통과한 단원, 그 주까지 통과하지 않은 단원) 쌍. 쌍별·목표 정렬 MLP는 쌍에 나온 사용자·단원만 학습되며, 쌍이 없는 사용자(학습 주에 통과가 없는 사용자)는 콘텐츠 유사도 대체 점수를 받는다`, "반응 행렬·관측 시도·주차", "미관측을 ‘거절’이 아니라 ‘양성보다 뒤’로 보는 순위 학습, 평가 목표(다음 주 통과)와 맞춘 레이블", `세계와 학습 범위에 따라 효과가 다름: 미관측 음성 쌍별 MLP − MLP는 v1 ${eff(BPRU1)}(공통 학습 사용자 ${eff(BPRU1c)}), v2 전체 ${eff(BPRU2)}·공통 학습 사용자 ${eff(BPRU2c)}. 신경망 최고치(v1 ${fmt(nnBest1, 3)}, v2 ${fmt(nnBest2, 3)})는 규칙(${fmt(v1By.RULE.ndcg, 3)}, ${fmt(resBy.RULE.ndcg, 3)}) 아래(6.3절)`, "같은 후보·정답·후처리로 비교(기법군 MF_BPR·MLP_BPR·MLP_BPRU·MLP_NEXT)"],
@@ -352,7 +356,7 @@ add(pageBreak(), h1("4. 데이터와 확보 계획"),
   bullet("밀도(사용자×단원 고유 쌍의 비율)는 생성 결과로 계산한 값이며 생성기의 목표나 제약이 아니다. 생성기는 주마다 활동 학습자를 뽑고, 각자 1~8개 단원을 효용(주제 선호·관심 주제·수준 차이·인기·이미 본/통과한 단원) 순위로 고른다. 선수 미이수는 단원 선택에 들어가지 않고, 고른 뒤의 완료·통과 로짓만 미이수 선수 단원 1개당 0.8(최대 2개)씩 낮춘다."),
   bullet("행동 점수는 한 시도의 플래그를 max(조회 1, 완료 2, 퀴즈 통과 3, 저장 3) 하나로 줄이므로 같은 시도의 플래그가 중복 집계되지 않는다. 같은 학습자가 같은 단원을 여러 주에 걸쳐 다시 시도하면 반응 행렬에서 점수를 더한다. 반복 학습을 더 강한 신호로 보는 설계 선택이며 etfrec/features.py에 있다."),
   bullet("운영 로그(CSV)를 연결할 때는 normalize_event_flags가 같은 논리(통과 ⇒ 퀴즈 ⇒ 완료, 이탈 ⇒ 미완료)로 행을 맞추고 고친 행 수를 데이터 요약(event_repairs)에 남긴다. 화면에서 임의 학습자의 기록을 받을 때도 완료와 이탈이 함께 들어오면 이탈을 끈다(2차본에서 고친 결함). 모의 데이터는 v1·v2 모두 고친 행이 0건이다."),
-  bullet("연령·소득·성별 효과는 가정값이며 ‘--effect 0’ 위약 세계에서 인구통계를 쓰는 설정의 이점이 사라지는지로 파이프라인이 없는 효과를 만들어 내지 않는지 확인한다."),
+  bullet(PL ? `연령·소득·성별 효과는 가정값이다. 파이프라인이 없는 효과를 만들어 내지 않는지는 연령·연소득·성별 열을 학습자 사이에서 열마다 섞은 위약 세계(학습자 ${num(PL.n_learners)}명, scripts/placebo_check.py)로 확인했다. 검증 1위는 ${PL.global_uses_demographics.length ? `인구통계(${PL.global_uses_demographics.join("·")})를 쓰는` : "인구통계를 쓰지 않는"} ‘${PL.global_algorithm}’였고(인구통계 미사용 1위와의 차이 ${ci(plPair("Global", "NoDemographics"))}), 성별·소득 세그먼트를 쓰는 라우터도 쓰지 않는 라우터보다 낫지 않았다(성별 포함 − 성별·소득 제외 ${ci(plPair("RouterFull", "RouterNoGenderIncome"))}, 성별 제외 − 성별·소득 제외 ${ci(plPair("RouterNoGender", "RouterNoGenderIncome"))}). ${PL_OK ? "즉 위약 세계에서는 인구통계의 거짓 이점이 나타나지 않았다." : "위약 세계에서도 인구통계 설정이 유의하게 나아 원인을 분석해야 한다."} 섞지 않은 원래 세계에서는 인구통계(연령대·소득분위)를 쓰는 설정이 검증 1위였고 인구통계 미사용 1위가 테스트에서 ${ci({ diff: resBy.NoDemographics.difference_vs_global, ci_low: resBy.NoDemographics.ci_low, ci_high: resBy.NoDemographics.ci_high })}였다. 1차본은 ‘--effect 0 위약 세계’로 확인한다고 썼지만 실행하지 않았고, 그 세계는 위약도 아니다(연령·소득이 목적·경험·성향·기기를 거쳐 행동에 남는다).` : "연령·소득·성별 효과는 가정값이다(위약 점검 결과 없음)."),
   ...table(["항목", "값"], [
     ["학습자 · 단원 · 주차", `${num(DS.users)}명 · ${DS.items}개 · ${DS.weeks}주(검증: 0~1주로 학습해 2주차에서 평가·선택, 테스트: 0~2주로 다시 학습해 3주차에서 보고)`],
     ["학습 시도(행 수)", `${num(DS.study_attempts)}건 — 한 행이 한 번의 학습 시도이고, 아래 이벤트 열은 그 시도에 붙는 다중 플래그라 합계가 시도 수를 넘는 것이 정상이다`],
@@ -386,7 +390,7 @@ add(pageBreak(), h1("4. 데이터와 확보 계획"),
   bullet("현재는 모의 데이터라 실제 개인정보를 처리하지 않는다. 실제 서비스에서 추천을 제공하는 처리는 이용자 동의나 서비스 계약 이행을 근거로 하고, 개인정보보호법의 가명정보 특례(통계 작성·과학적 연구·공익적 기록 보존 목적이면 동의 없이 처리 가능)는 모델 개선 연구나 다른 자료와의 결합처럼 수집 목적 밖의 재이용에만 쓴다. 어느 근거로 처리하는지는 실제 로그를 연결하기 전 법률 검토에서 정한다."),
   bullet("모델 학습 입력은 일반화하지 않는다(그러면 학습 결과가 바뀐다). 학습은 접근 통제된 환경에서 가명 데이터로 하고, 학습 환경 밖으로 나가는 학습자 단위 표는 export-deid를 거친다. 가명처리 결과(학습 입력)에는 소득 분위 경계 계산을 위해 원시 연령·연소득이 남는다. learner_profiles.csv와 학습자 조회 API는 내부 서빙용이며 k-익명 표가 아니다. 서빙 API에는 인증이 없으므로 학습 환경 밖에 열지 않는다(조직 정책). 저장 설계는 이름·모든 문자열의 연령·소득 표현을 가리지만 이름·주소 같은 그 밖의 표현은 가리지 못한다."),
   bullet("교육 자료는 링크와 출처만 저장하고 본문을 복제하지 않는다. 운용사 자료는 인용·요약 범위에서만 쓴다. KRX 자료는 비상업 수업 범위에서 공식 API와 이용자가 내려받은 파일만 쓴다(4.3절)."),
-  bullet("모든 화면과 API 응답에 ‘특정 ETF의 매수·매도를 권유하지 않는다’는 고지와 ‘유형 안내는 학습 순서를 돕기 위한 분류이지 개별 상품의 적합성 판단이 아니다’라는 문구를 넣었고, 단원 제목에 금칙어(수익 보장·추천 종목 등)가 없는지 검사한다."),
+  bullet("모든 화면과 추천을 담은 API 응답(추천·첫 방문 추천·비교·로드맵·유형)에 ‘특정 ETF의 매수·매도를 권유하지 않는다’는 고지를 넣고, ETF 유형이 들어가는 로드맵·유형 응답과 유형 화면에는 ‘유형 안내는 학습 순서를 돕기 위한 분류이지 개별 상품의 적합성 판단이 아니다’라는 문구를 더했으며(테스트로 확인), 단원 제목에 금칙어(수익 보장·추천 종목 등)가 없는지 검사한다."),
 );
 
 // 5. 시스템 설계
@@ -533,7 +537,7 @@ add(h1("7. 평가 계획"),
     ["선수 미이수 비율", "Top-5 중 선수 단원을 통과하지 않은 단원의 비율", "교육 순서 준수", fmt(resBy.RouterNoGender.prereq_violation_rate, 3) + " (가드레일 시 0)"],
     ["짧은 목록 비율 · 커버리지", "추천 목록이 k개 미만인 사용자 비율, 추천된 단원의 카탈로그 커버리지", "콜드스타트·쏠림", fmt(resBy.RouterNoGender.short_list_rate, 3) + " · " + fmt(resBy.RouterNoGender.coverage_diagnostic, 3)],
     ["집단별 NDCG · 심화 노출 비율", "목적·연령대·소득분위·성별·학습활동별 지표와 95% 구간(전체·활성 기준, 활성 비율)", "공정성 진단", "6.5절"],
-    ["성별 뒤집기 불변", "성별만 바꾼 요청의 Top-5가 같은 비율(코드 수준 점검)", "민감 속성 비사용 확인", "테스트 사용자 40명 전원 불변"],
+    ["성별 뒤집기 불변", "성별만 바꾼 요청의 Top-5가 같은 비율(코드 수준 점검)", "민감 속성 비사용 확인", GF ? `${GF.invariant === GF.users ? `테스트 사용자 ${num(GF.users)}명 전원 불변` : `${num(GF.invariant)}/${num(GF.users)}명 불변`}(번들 v2, 서비스 기본 가드레일)` : "–"],
   ], [2.6, 4.6, 2, 3.3], { caption: "오프라인 지표", zebra: true }),
   p("설정 선택은 검증 주차에서만 하고 테스트 주차에서는 보고만 하는 규칙을 유지한다. 차이의 통계적 유의성은 사용자 단위 쌍 부트스트랩 95% 구간으로 판단하며, 실제 로그에서는 주차를 늘려 시간 순 롤링 평가(학습 t주 → 평가 t+1주)로 바꾼다."),
   h2("7.2 교육 효과 지표(로드맵 도입으로 추가)"),
@@ -552,7 +556,7 @@ add(h1("7. 평가 계획"),
     ["배정 방식(2차본)", `고정 순서 검정: 1단계 A vs B를 α=5%로 검정해 귀무가설을 기각했을 때만 2단계 B vs C로 넘어간다(두 검정 전체의 1종 오류를 5%로 통제). 2단계는 시기 교란을 피하려고 B·C에 신규 사용자를 새로 배정한다. 두 질문을 모두 답하는 총 유입은 군당 표본의 4배(${num(4 * AB2)}명)로 3군 동시 운영(보정 없이 ${num(3 * AB2)}명, 비교 2개 보정 시 ${num(3 * abSize(0.22, 0.24, true, ZQ.a2_dunnett))}명)보다 많다. 대신 주 질문을 절반의 유입(${num(2 * AB2)}명)으로 먼저 답하고, 1단계에서 효과가 없으면 2단계를 생략한다`],
     ["1단계 대비를 고른 근거", (() => { const A_ = resBy.ABControl, BA = PR2["RouterNoGender+prereq-ABControl"], CA = PR2["RouterNoGender-ABControl"];
       return `오프라인 테스트 NDCG@5는 C ${fmt(resBy.RouterNoGender.ndcg)} > A ${A_ ? fmt(A_.ndcg) : "–"} > B ${fmt(resBy["RouterNoGender+prereq"].ndcg)} 순서다(A = 성별을 쓰지 않는 세그먼트 인기 설정 중 검증 1위, 6.3절 결과 표의 ‘세그먼트 인기(A/B 대조군 A)’ 행). B는 A보다 유의하게 낮고(B − A ${ci(BA)}), C는 A보다 유의하게 높다(C − A ${ci(CA)}). 오프라인 정답은 선수와 무관하게 단원을 고른 학습자의 실제 통과라서 선수 미이수 단원을 빼는 B가 불리하고, 이 비용의 크기는 선수 효과의 세기에 달려 있다(6.6절 민감도 실험). 그래도 B를 먼저 보는 이유는 B가 교육 순서를 지키는 실제 서비스 설정이고, 선수를 마친 단원을 추천받은 학습자의 통과율이 오르는지는 기록 재생으로 잴 수 없는 질문이기 때문이다. 오프라인 근거가 B에 불리하므로 주 비교는 양측 검정으로 두고(B가 낫다는 단측 가설은 사전 등록하지 않는다), 1단계에서 효과가 없거나 B가 낮으면 C를 별도 실험으로 시험한다`; })()],
-    ["기간·유입", `테스트 기간 상한은 단계별 8주. 8주 안에 1단계를 끝내려면 하루 진단 완료 신규 학습자가 MDE 2%p 기준 약 ${num(INFLOW2)}명, 3%p 기준 약 ${num(INFLOW3)}명 필요하다. 시작 전 2주의 실제 유입으로 MDE를 사전 등록하고, 상한에 도달하면 결과를 ‘판정 보류’로 보고한다`],
+    ["기간·유입", `테스트 기간 상한은 단계별 8주. 주 지표가 노출 후 7일 결과라 등록은 앞의 ${ENROLL_DAYS}일 안에 끝나야 하므로, 8주 안에 1단계를 끝내려면 하루 진단 완료 신규 학습자가 MDE 2%p 기준 약 ${num(INFLOW2)}명, 3%p 기준 약 ${num(INFLOW3)}명 필요하다. 시작 전 2주의 실제 유입으로 MDE를 사전 등록하고, 상한에 도달하면 결과를 ‘판정 보류’로 보고한다`],
     ["외생 변수", "동시 무작위 배정이므로 시장 충격은 두 군에 같이 작용해 효과 추정을 편향시키지 않는다. 실제 문제는 분산 증가, 처치×시기 상호작용, 외적 타당성이므로 가입 주차 코호트로 층화 배정하고 분석에 블록으로 넣으며, 사전 등록한 시장 급변 주간은 민감도 분석에서 따로 본다"],
     ["분석", "사전 등록한 지표와 분석 계획, 사용자 단위 비율 검정과 부트스트랩, 세그먼트별 이질 효과는 탐색적으로만 보고"],
     ["중단 규칙", "처치군의 이탈률이 대조군보다 유의하게 높거나 가드레일 지표 위반 시 중단"],
@@ -565,12 +569,13 @@ add(h1("7. 평가 계획"),
   bullet("안전: 화면·API 응답에서 투자 권유로 읽힐 수 있는 문구를 금칙어 검사로 차단하고, 유형 카드는 ‘교육용 분류’ 고지를 유지한다."),
   h2("7.5 수용 기준"),
   ...table(["기준", "통과 조건"], [
-    ["정확도", (() => { const a = PR2["RouterNoGender-POP"], b = PR2["RouterNoGender-Random"]; const ok = a && b && a.ci_low > 0 && b.ci_low > 0;
-      return `운영 설정의 테스트 NDCG@5가 인기·무작위보다 유의하게 높음(사용자 단위 쌍 부트스트랩 95% 구간이 0을 포함하지 않음) — 현재 ${ok ? "충족" : "미충족"}(인기 대비 ${ci(a)}, 무작위 대비 ${ci(b)})`; })()],
+    ["정확도", (() => { const a = PR2["RouterNoGender-POP"], b = PR2["RouterNoGender-Random"], c = PR2["RouterNoGender+prereq-POP"], e = PR2["RouterNoGender+prereq-Random"];
+      const sig = x => x && x.ci_low > 0, okOff = sig(a) && sig(b), okOn = sig(c) && sig(e);
+      return `운영 라우터의 테스트 NDCG@5가 인기·무작위보다 유의하게 높음(사용자 단위 쌍 부트스트랩 95% 구간이 0을 포함하지 않음). 서비스 기본(선수 가드레일 켬): ${okOn ? "충족" : "미충족"}(인기 대비 ${ci(c)}, 무작위 대비 ${ci(e)} — 인기 대비 여유가 작음). 가드레일 끔: ${okOff ? "충족" : "미충족"}(인기 대비 ${ci(a)}, 무작위 대비 ${ci(b)})`; })()],
     ["교육 순서", `가드레일 켬 상태에서 선수 미이수 비율 0, 짧은 목록 비율 20% 이하(선수 관계 조정 또는 완화 규칙으로 달성) — 현재 ${pct(resBy["RouterNoGender+prereq"].short_list_rate)}로 미충족, 8절 과제`],
-    ["공정성", `성별 뒤집기 불변 100%. 집단별 NDCG 격차는 전체·활성 두 기준으로 보고하고 활성 기준에서도 남는 격차는 원인을 분석한다(현재 학습활동 집단은 활성 기준 ${CT.length ? `${fmt(Math.max(...CT.map(x => x.ndcg_active)), 3)} vs ${fmt(Math.min(...CT.map(x => x.ndcg_active)), 3)}` : "–"}로 분석 과제). 같은 변수 안의 심화 노출 비율 격차 5%p 이내 — ${expGap <= 0.05 ? "현재 충족" : "현재 미충족"}(최대 ${expGaps.length ? `${VAR_KO[expGaps[0].v] || expGaps[0].v} ` : ""}${fmt(expGap, 3)}, 6.5절)`],
+    ["공정성", `성별 뒤집기 불변 100%${GF ? (GF.invariant === GF.users ? `(현재 번들 v2 테스트 사용자 ${num(GF.users)}명 전원 불변)` : `(현재 ${num(GF.invariant)}/${num(GF.users)}명 — 미충족)`) : ""}. 집단별 NDCG 격차는 전체·활성 두 기준으로 보고하고 활성 기준에서도 남는 격차는 원인을 분석한다(현재 학습활동 집단은 활성 기준 ${CT.length ? `${fmt(Math.max(...CT.map(x => x.ndcg_active)), 3)} vs ${fmt(Math.min(...CT.map(x => x.ndcg_active)), 3)}` : "–"}로 분석 과제). 같은 변수 안의 심화 노출 비율 격차 5%p 이내 — ${expGap <= 0.05 ? "현재 충족" : "현재 미충족"}(최대 ${expGaps.length ? `${VAR_KO[expGaps[0].v] || expGaps[0].v} ` : ""}${fmt(expGap, 3)}, 6.5절)`],
     ["재현성", "같은 seed·데이터로 다시 학습하면 결과 파일(테스트·검증·집단별 결과, 시간 열 제외)과 모델 상태 해시가 같음, 노트북 v1 재현 5자리 일치 — 현재 충족(v1·v2 각각 다시 학습해 비교)"],
-    ["운영", "요청당 응답 100ms 이하, 요청 중 재학습 없음, 모든 응답에 고지문 — 현재 충족(로컬 측정 중앙값: 기존 학습자 약 11ms, 새 학습자 약 22ms, 최대 40ms)"],
+    ["운영", "요청당 응답 100ms 이하, 요청 중 재학습 없음, 추천을 담은 모든 응답과 화면에 고지문 — 현재 충족(로컬 측정 중앙값: 기존 학습자 약 11ms, 새 학습자 약 22ms, 최대 40ms)"],
   ], [2.2, 10.3], { caption: "수용 기준", zebra: true }),
 );
 
@@ -587,7 +592,7 @@ add(h1("8. 남은 일정, 역할, 위험 관리"),
     ["공식 API 경로·필드·이용 조건 차이(KRX Open API, 공공데이터포털)", "수집 실패, 이용 조건 위반", "키 발급 후 활용 가이드와 실제 응답으로 경로·필드 확인, 실행당 호출 상한, 실패·빈 결과를 상태로 기록하고 이전 스냅샷·샘플을 신선도 표시와 함께 사용, 비상업 범위 유지(상용 전환 시 별도 이용 계약)"],
     ["개인정보(실제 로그 연결 시)", "재식별, 규제 위반", "가명처리 도구(매핑표 분리), 번들·API에 원시 연령·소득·분 단위 시각과 스키마 밖 열 미보관, 공개 산출물 k≥5와 보완 억제, 반출 표 행 순서 제거, 학습자 조회 API는 로컬에서만, 외부 공유는 비식별 내보내기만, 권한 분리·반출 심사·서빙 API 접근 통제 같은 조직 통제"],
     ["교육 자료 저작권·링크 변경", "자료 연결 끊김", "본문 미저장, 기관 루트+메뉴 경로 표시, 분기별 링크 점검"],
-    ["모의 데이터 편향", "규칙 과대평가", "위약 세계 검사, 파일럿 로그로 선수 페널티·CF 비중 보정"],
+    ["모의 데이터 편향", "규칙 과대평가", `위약 세계 점검(인구통계 열 섞기${PL ? `: ${PL_OK ? "거짓 이점 없음 확인" : "거짓 이점 발견 — 분석 중"}, 4.4절` : ""}), 파일럿 로그로 선수 페널티·CF 비중 보정`],
     ["가드레일로 인한 짧은 목록", "신규 학습자 추천 4개", "입문 단원 추가(선수 없는 단원 확대) 또는 ‘다음에 열릴 단원’ 보조 표시"],
     ["제도 변경(세제·연금 편입 규정)", "유형 카드 문구 오류", "문구를 데이터(taxonomy)로 분리해 갱신, 출처·확인일 표기"],
   ], [3, 2.5, 7], { caption: "위험과 대응", zebra: true }),
@@ -613,16 +618,16 @@ add(h1("9. 참고 자료"),
 // 부록 A. API
 add(pageBreak(), h1("부록 A. REST API 요약"),
   ...table(["메서드 · 경로", "입력", "출력"], [
-    ["GET /api/health, /api/meta", "—", "번들 생성 시각, 운영 라우터, 목적·기간 사전, 유형 이름, 설정 수, 가드레일 기본값"],
+    ["GET /api/health, /api/meta", "—", "번들 생성 시각, 운영 라우터, 목적·기간 사전, 유형 이름, 설정 수, 요청에서 생략할 때의 가드레일(선수 차단 켬)과 오프라인 평가 가드레일(선수 차단 끔), 학습자 조회 켜짐 여부"],
     ["GET /api/catalog", "—", "단원 목록(주제·수준·선수·출처·개념), 주제·그룹"],
     ["POST /api/parse", "text", "자연어에서 읽은 필드와 근거 표현, 경고"],
     ["GET /api/learners, /api/learners/{id}", "q, limit, offset", "모의 학습자 검색, 프로필·세그먼트·통과 단원·이력"],
     ["POST /api/recommend", "learner_id(학습자 조회가 켜진 서버에서만) 또는 learner{age, goal, horizon, risk, interests, placement, diagnosis, events…}, k, algorithm, guardrail{block_gap, plus_one_max, exclude_passed, prereq_block}(생략하면 화면 기본: 선수 단원 차단 켬), topic_cap, overrides, assume_passed(카탈로그 범위 안 단원 번호)", "추천 단원(점수·기여도·근거·선수 미이수·현재 단계·출처), 로드맵 요약, 검사 결과, 세그먼트 경로, 계산식, 주제×수준 배치도"],
     ["POST /api/roadmap", "learner_id(학습자 조회가 켜진 서버에서만) 또는 learner, assume_passed, overrides", "단계별 단원(상태·분·선수 미이수·출처), 진행률, 다음 단원, 연결 유형"],
-    ["POST /api/types", "learner 또는 goal, risk, assume_passed", "유형 카드(권장·열림, 개념 통과, 세금·연금·규제·주의, 통계, 출처), 유니버스 출처"],
+    ["POST /api/types", "learner_id(학습자 조회가 켜진 서버에서만) 또는 learner, 또는 goal·risk, assume_passed", "유형 카드(권장·열림, 개념 통과, 세금·연금·규제·주의, 통계, 출처), 유니버스 출처"],
     ["GET /api/quiz, POST /api/quiz/score", "answers{문항id: 보기}", "문항 목록(정답 제외) / 수준·정답 수·문항별 결과·진단 이벤트"],
     ["GET /api/sources", "—", "출처 등록부, 유니버스 출처(샘플/스냅샷), 유형 통계"],
-    ["POST /api/compare, GET /api/evaluation", "learner, methods", "기법별 Top-K 비교 / 번들의 평가 결과·집단별·노출·검증 상위·QA"],
+    ["POST /api/compare, GET /api/evaluation", "learner_id(학습자 조회가 켜진 서버에서만) 또는 learner, methods, guardrail(생략 시 화면 기본)", "기법별 Top-K 비교 / 번들의 평가 결과·집단별·노출·검증 상위·QA"],
     ["POST /api/parse-log, /api/designs, GET/DELETE /api/designs/{name}", "csv_text / name, payload", "로그 CSV → 이벤트 / 설계 저장·목록·삭제"],
   ], [3.2, 4.3, 5], { caption: "REST API 요약", size: 16, zebra: true }),
 );
@@ -655,19 +660,20 @@ add(h1("부록 C. 용어집"),
 
 // 부록 D. 재현
 add(h1("부록 D. 재현 방법과 테스트"),
-  p("아래 명령으로 전체를 재현할 수 있다(Python 3.11 이상, 약 3분)."),
+  p("아래 명령으로 전체를 재현할 수 있다(Python 3.11 이상. 걸리는 시간은 명령마다 적었다: 학습 한 번 약 3분)."),
   ...["python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt",
       "python -m etfrec train --out artifacts/bundle_v2            # 모의 데이터 v2 생성 → 학습·검증·테스트 → 번들",
       "python -m etfrec serve --bundle artifacts/bundle_v2         # http://127.0.0.1:8000 (API + 학습 설계 스튜디오)",
       "read -rs KRX_OPEN_API_KEY && export KRX_OPEN_API_KEY                # (선택) 키는 화면에 보이지 않게 입력(명령줄에 쓰면 셸 기록에 남음)",
       "python -m etfrec sources check && python -m etfrec sources sync --krx-csv 내려받은파일.csv   # 접근 점검·스냅샷",
       "python -m etfrec export-deid --bundle artifacts/bundle_v2 --k 5 --out deid/learners_k5.csv   # k-익명 학습자 표 반출",
-      "python scripts/regression_check.py                           # 노트북 B(v1) 기록과 5자리 일치 확인",
-      "python scripts/prereq_sensitivity.py docs/results/prereq_sensitivity.json   # 선수 페널티 민감도",
+      "python scripts/regression_check.py artifacts/bundle_v1     # 노트북 B(v1) 세계를 학습해 bundle_v1 저장, 기록과 5자리 일치 확인(약 2~3분)",
+      "python scripts/placebo_check.py docs/results/placebo_check.json   # 위약 세계(연령·소득·성별 열 섞기) 점검(약 3분)",
+      "python scripts/prereq_sensitivity.py docs/results/prereq_sensitivity.json   # 선수 페널티 민감도(약 2분)",
       `pytest -q                                                     # 자동화 테스트 ${TESTS}건 중 기본 실행 ${TESTS - 1}건 (약 30초)`,
-      "ETFREC_FULL=1 pytest -q -k full                              # 나머지 1건: 노트북 기록과 5자리 일치를 전체 학습으로 확인(약 2~3분)",
+      "ETFREC_FULL=1 pytest -q -k test_full_regression_matches_notebook   # 나머지 1건: 노트북 기록과 5자리 일치를 전체 학습으로 확인(약 2~3분)",
       "node scripts/ui_walkthrough.mjs http://127.0.0.1:8000 docs/screens          # Playwright 화면 점검·캡처(서버를 먼저 띄움)",
-      "docs/report/build/build.sh                                   # 그림 → report_data.json → 두 보고서(Word), node와 npm i docx 필요"]
+      "pip install matplotlib pillow && npm i docx && docs/report/build/build.sh   # 그림 → report_data.json → 두 보고서(Word). 위 두 번들이 있어야 함"]
     .map(c => new Paragraph({ spacing: { after: 40 }, indent: { left: 240 }, shading: { type: ShadingType.CLEAR, fill: "F1F3F0", color: "auto" },
       children: [new TextRun({ text: c, font: "Consolas", size: 17 })] })),
   spacer(80),

@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "etfrec"
 version = "1.0.0"
 description = "ETF 교육 콘텐츠 개인화·세그먼트 추천 시스템 (수업 프로젝트)"
-requires-python = ">=3.10"
+requires-python = ">=3.11"                # 테스트가 tomllib(3.11+)를 쓴다
 dependencies = [
   "numpy>=1.26", "pandas>=2.1", "scipy>=1.11", "scikit-learn>=1.3",
   "fastapi>=0.110", "uvicorn>=0.27", "httpx>=0.26", "pydantic>=2.5",

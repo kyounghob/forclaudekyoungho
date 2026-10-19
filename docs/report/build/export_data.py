@@ -82,6 +82,19 @@ data["global_name"] = b.algos[b.selection["families"]["Global"]].name
 data["family_best_names"] = {k: b.algos[v].name for k, v in b.selection["families"].items()}
 AB = b.selection.get("ab_control_algorithm")                     # A/B 대조군 A(평가 전용 행)의 설정 이름
 data["ab_control_name"] = b.algos[AB].name if AB is not None else None
+# 성별 뒤집기 불변: 보고 번들(v2)의 테스트 사용자 전원, 운영 라우터, 서비스 기본 가드레일(선수 차단 켬)로 성별만 바꾼 요청의 Top-5 비교
+from etfrec.config import GuardrailConfig
+from etfrec.service import RecommendationService
+_svc = RecommendationService(b)
+_g_on = GuardrailConfig(**{**b.config.guardrail.__dict__, "prereq_block": True})
+_same = 0
+for _uid in np.asarray(b.test_users, int):
+    _a = _svc.recommend(int(_uid), k=5, algorithm=b.selection["operational"], guard=_g_on)
+    _f = _svc.recommend(int(_uid), k=5, algorithm=b.selection["operational"], guard=_g_on, overrides={"gender": 1 - _a["segment"]["gender"]["code"]})
+    _same += [i["item"] for i in _a["items"]] == [i["item"] for i in _f["items"]]
+data["gender_flip"] = dict(users=int(len(b.test_users)), invariant=int(_same), router=b.selection["operational"])
+_pl = f"{ROOT}/docs/results/placebo_check.json"                    # 위약 세계(인구통계 열 섞기) 점검 결과(scripts/placebo_check.py)
+data["placebo"] = json.load(open(_pl, encoding="utf-8")) if os.path.exists(_pl) else None
 active = None
 pu = b.per_user
 if "RULE" in pu:
@@ -90,7 +103,7 @@ if "RULE" in pu:
 PAIRS = [("MLP_NEXT", "MLP"), ("MLP_NEXT", "POP"), ("MLP_NEXT", "RULE"), ("MLP_NEXT", "Global"), ("MF_BPR", "MF"), ("MLP_BPR", "MLP"),
          ("MLP_BPRU", "MLP"), ("MLP_BPRU", "MLP_BPR"), ("MLP", "Random"), ("RouterNoGender", "Global"), ("RouterNoGender", "POP"),
          ("RouterNoGender", "Random"), ("RouterNoGender+prereq", "POP"), ("MLP", "POP"),
-         ("RouterNoGender+prereq", "ABControl"), ("RouterNoGender", "ABControl"), ("ABControl", "POP")]
+         ("RouterNoGender+prereq", "ABControl"), ("RouterNoGender", "ABControl"), ("ABControl", "POP"), ("RouterNoGender+prereq", "Random")]
 paired = []
 for a, c in PAIRS:
     if a in pu and c in pu and len(pu[a]) == len(pu[c]):

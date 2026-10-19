@@ -164,7 +164,9 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
 
     @app.get("/api/meta")
     def meta():
-        return {**svc.meta(), "learners_enabled": bool(expose_learners)}
+        return {**svc.meta(), "learners_enabled": bool(expose_learners),
+                "guardrail": Guardrail().model_dump(),                         # 요청에서 생략할 때 쓰는 값(화면 기본)
+                "evaluation_guardrail": dict(bundle.config.guardrail.__dict__)}   # 오프라인 평가의 주 행에 쓴 값(선수 차단 끔)
 
     @app.get("/api/catalog")
     def catalog():

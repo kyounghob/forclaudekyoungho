@@ -26,6 +26,7 @@ def test_pipeline_outputs(small_bundle):
     assert "ABControl" in set(b.results.method) and "ABControl" not in b.selection["families"]
     assert b.algos[ab].family == "SEGPOP" and "gender" not in algo_uses(b.algos[ab], b.signal_meta)
     assert len(b.algos) > 1000 and len(b.signal_meta) >= 140
+    assert b.models.audit and all(len(a.get("state_sha256", "")) == 64 for a in b.models.audit)    # 모든 학습 모델에 상태 해시
 
 
 def test_offline_online_parity(small_bundle):
@@ -131,6 +132,11 @@ def test_api_endpoints(small_bundle, tmp_path):
             assert c.post(path, json={"learner": {"goal": "income"}, "assume_passed": bad}).status_code == 422, (path, bad)
     meta = c.get("/api/meta").json()
     assert meta["learners_enabled"] is True and meta["dataset"]["source"] == "synthetic"
+    assert meta["guardrail"]["prereq_block"] is True and meta["evaluation_guardrail"]["prereq_block"] is False   # 생략 시 기본 ≠ 평가 기본
+    for path, req in (("/api/recommend", {"learner_id": 1}), ("/api/compare", {"learner_id": 1, "methods": ["RULE"]}), ("/api/roadmap", {"learner_id": 1}),
+                      ("/api/types", {"goal": "pension"}), ("/api/recommend-new", {"topics": [1]})):
+        assert "권유하지 않" in c.post(path, json=req).json()["notice"], path           # 추천을 담은 응답마다 비권유 고지
+    assert "적합성 판단" in c.post("/api/roadmap", json={"learner_id": 1}).json()["notice"]   # 유형을 연결하는 로드맵에는 유형 고지까지
     g = small_bundle.catalog                                           # 가드레일을 생략하면 스키마 기본값(선수 단원 차단 켬)과 같다
     body = {"learner": {"goal": "income", "interests": [4, 18], "placement": 2}, "k": 5}
     a, b = c.post("/api/recommend", json=body).json(), c.post("/api/recommend", json={**body, "guardrail": {}}).json()

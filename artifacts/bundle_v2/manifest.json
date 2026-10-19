@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "created_at": "2026-10-19T15:27:25",
+  "created_at": "2026-10-19T20:21:53",
   "config": {
     "n_learners": 15000,
     "seed": 42,
@@ -302,7 +302,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.7249824680288927,
       "loss_last": 0.18310839796612147,
-      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471"
+      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471",
+      "state_sha256": "3dcf4ebd0d7eb00ea579673250f0d1293b26937f64672b9af966b58dd491b95f"
     },
     {
       "model": "MF_sampled",
@@ -315,7 +316,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.7257305622276915,
       "loss_last": 0.2103582878364594,
-      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471"
+      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471",
+      "state_sha256": "a238020c71524689354631bcbbb39498f8dfdea9da3095544f05f2f6e8d3e8ea"
     },
     {
       "model": "MF_sampled",
@@ -328,7 +330,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.7059786268139872,
       "loss_last": 0.10323692057694431,
-      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471"
+      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471",
+      "state_sha256": "5d40239339ef4d624c3ba17e6c57baef9611689a547a56e614a064c160f8f31d"
     },
     {
       "model": "MF_sampled",
@@ -341,7 +344,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.705580828038417,
       "loss_last": 0.12342113604221598,
-      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471"
+      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471",
+      "state_sha256": "d7fd16494e8eb25686f23870437f7990f16292966f44f74cb9c98b3bc1a3b663"
     },
     {
       "model": "MF_sampled",
@@ -354,7 +358,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.6683138626805084,
       "loss_last": 0.03335526191809681,
-      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471"
+      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471",
+      "state_sha256": "f640fbf1e7471f2063c54bb18f6a9365676cef728c30fb492fe4d3cc02127d26"
     },
     {
       "model": "MF_sampled",
@@ -367,7 +372,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.6685786112372597,
       "loss_last": 0.048339778085843145,
-      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471"
+      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471",
+      "state_sha256": "5b1d338b80343148113abdf2abb322e62622a8a27379c9a17b3cbbc0a51aa205"
     },
     {
       "model": "MF_BPR",
@@ -382,7 +388,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.6837334571596086,
       "loss_last": 0.26874937962746165,
-      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471"
+      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471",
+      "state_sha256": "9b89388dfd8dd682d563dc99bd4fea20b46eae620a1a3463144d3e80a193cbf7"
     },
     {
       "model": "MF_BPR",
@@ -397,7 +404,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.6904426861372797,
       "loss_last": 0.39474054069603565,
-      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471"
+      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471",
+      "state_sha256": "46cf1c912172afd85afaa0ea51967c676830f78d593410a9eabb4351e4fb2fd3"
     },
     {
       "model": "MF_BPR",
@@ -412,7 +420,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.6722961196284292,
       "loss_last": 0.13486420441178604,
-      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471"
+      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471",
+      "state_sha256": "e9857539680107c3f799bcd16ecc2993dccbb5ef0f444966651e617ed037f470"
     },
     {
       "model": "MF_BPR",
@@ -427,7 +436,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.681036282700896,
       "loss_last": 0.2511533980751672,
-      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471"
+      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471",
+      "state_sha256": "4c531f34bc8ea457bcdb5770484294a9cf8ec9de941f5f229bc71ace673c1955"
     },
     {
       "model": "MF_BPR",
@@ -442,7 +452,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.6479440872391006,
       "loss_last": 0.036505050693075976,
-      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471"
+      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471",
+      "state_sha256": "724dc83551fc3dc0b52c6d7131ab9e802bbe11673972e835182bd4ff9e704079"
     },
     {
       "model": "MF_BPR",
@@ -457,7 +468,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.6572997695292704,
       "loss_last": 0.12599833151614473,
-      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471"
+      "snapshot": "B:42:(15000, 66):2:4a99e17e1aab13018471",
+      "state_sha256": "f760f1f1dd5b5f44300847d9188e053ee8ed16086b775dff3fc921aeb244d5ec"
     },
     {
       "model": "mf_observed",
@@ -551,7 +563,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.6796668559093928,
       "loss_last": 0.23336868915497425,
-      "snapshot": "B:42:(15000, 66):3:8b3db2e3dc1d78e6a131"
+      "snapshot": "B:42:(15000, 66):3:8b3db2e3dc1d78e6a131",
+      "state_sha256": "0d484febd4a8f3882346c823fadd915d7ba022e664a217668bbb622954d92fb5"
     },
     {
       "model": "MF_BPR",
@@ -566,7 +579,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.6833265196568089,
       "loss_last": 0.4149656914108534,
-      "snapshot": "B:42:(15000, 66):3:8b3db2e3dc1d78e6a131"
+      "snapshot": "B:42:(15000, 66):3:8b3db2e3dc1d78e6a131",
+      "state_sha256": "093b5d61d4f9ddc55cbedb022452617a496e053dd9b262b40e42aa36e5927495"
     },
     {
       "model": "mf_observed",

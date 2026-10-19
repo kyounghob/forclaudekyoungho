@@ -1,0 +1,50 @@
+{
+ "n_learners": 15000,
+ "seed": 42,
+ "shuffled": [
+  "age",
+  "income",
+  "gender"
+ ],
+ "seconds": 159.4,
+ "global_algorithm": "아이템 CF(λ=10, confidence) ⊕ 규칙[관심 주제+수준 일치] (α_u, λ=30)",
+ "global_uses_demographics": [],
+ "no_demographics_algorithm": "아이템 CF(λ=10, confidence) ⊕ 규칙[관심 주제+수준 일치] (α_u, λ=30)",
+ "router_lambdas": {
+  "RouterFull": 3000.0,
+  "RouterNoGender": 3000.0,
+  "RouterNoGenderIncome": 3000.0
+ },
+ "test_ndcg": {
+  "Global": 0.1240546656187286,
+  "NoDemographics": 0.1240546656187286,
+  "RouterFull": 0.12093118781618568,
+  "RouterNoGender": 0.12042088246365178,
+  "RouterNoGenderIncome": 0.12176758774806805,
+  "POP": 0.10366776670397385
+ },
+ "paired": [
+  {
+   "a": "Global",
+   "b": "NoDemographics",
+   "diff": 0.0,
+   "ci_low": 0.0,
+   "ci_high": 0.0
+  },
+  {
+   "a": "RouterFull",
+   "b": "RouterNoGenderIncome",
+   "diff": -0.0008363999318823712,
+   "ci_low": -0.002061282655803613,
+   "ci_high": 0.00045014262303879954
+  },
+  {
+   "a": "RouterNoGender",
+   "b": "RouterNoGenderIncome",
+   "diff": -0.0013467052844162856,
+   "ci_low": -0.002375015332814342,
+   "ci_high": -0.00020060839119044464
+  }
+ ],
+ "qa_passed": true
+}

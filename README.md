@@ -16,7 +16,7 @@
 - 중간보고서(Word): `docs/report/중간보고서_ETF_교육_콘텐츠_추천시스템.docx` — 문제·시나리오, 추천 기법 요약과 한계, 데이터·확보 계획, 시스템 설계·구현 현황, 실험 결과(v1 재현, v2, 선수 가드레일 민감도), 평가 계획, 일정, 부록(API·퀴즈·용어집·재현).
 - 비판 검토·보완 보고서(Word): `docs/report/비판검토_보완보고서.docx` — 중간보고서 1차본에 대한 비판을 문장 단위로 검토해 수용·부분 수용·불수용 판정과 근거, 간과한 이유, 고친 코드와 바뀐 수치를 정리.
 - 중간보고서 1차본(비판 대상, 2026-10-13): `docs/report/중간보고서_1차본_2026-10-13.docx` — 비판 검토 보고서가 인용한 원문 대조용.
-- 보고서 그림: `docs/report/fig*.png`, 화면 캡처: `docs/screens/*.png`, 민감도 결과: `docs/results/prereq_sensitivity.json`, 보고서 생성: `docs/report/build/build.sh` 한 번으로 그림(`make_figures.py`) → 데이터(`export_data.py` → `report_data.json`) → Word(`build_report.js`·`build_critique_response.js`, node와 `npm i docx` 필요) → `docs/report/`로 복사합니다. 먼저 `artifacts/bundle_v2`·`bundle_v1`의 `bundle.pkl`이 있어야 합니다(저장소에 없으므로 아래 학습 명령으로 만듦). 그림 크기는 이미지 파일 헤더에서 읽어 비율을 맞춥니다.
+- 보고서 그림: `docs/report/fig*.png`, 화면 캡처: `docs/screens/*.png`, 민감도 결과: `docs/results/prereq_sensitivity.json`, 보고서 생성: `docs/report/build/build.sh` 한 번으로 그림(`make_figures.py`) → 데이터(`export_data.py` → `report_data.json`) → Word(`build_report.js`·`build_critique_response.js`, `pip install matplotlib pillow`와 node·`npm i docx` 필요) → `docs/report/`로 복사합니다. 먼저 `artifacts/bundle_v2`·`bundle_v1`의 `bundle.pkl`이 있어야 합니다(저장소에 없으므로 아래 학습 명령으로 만듦). 그림 크기는 이미지 파일 헤더에서 읽어 비율을 맞춥니다.
 
 ## 빠른 시작
 
@@ -115,7 +115,7 @@ python -m etfrec serve --bundle artifacts/bundle_v2     # http://127.0.0.1:8000
 | --- | --- | --- |
 | 카탈로그 | `etfrec/catalog.py` | v2: 주제 22 × 수준 3 = 66개 단원(절세 계좌·ISA 주제, 과표기준가·IRP 70% 한도 단원 보강), 선수 관계, 단원별 출처·개념 태그. v1(60단원)은 노트북 재현용 |
 | 분류·로드맵·퀴즈·학습 요점 | `etfrec/taxonomy.py`, `roadmap.py`, `quiz.py`, `lessons.py` | 목적·기간·ETF 유형 분류(기본예탁금·사전교육·모의거래·ISA·IRP 70%·과표기준가 안내, 기준일 2026-10-13), 단계별 로드맵 생성·우선순위 신호, 20문항 진단(단원 단위 채점), 세제·규제 단원 학습 요점 |
-| 생성기 | `etfrec/synth.py` | 규칙을 공개한 모의 학습 로그. v2는 투자 목적·기간을 표본추출하고 목적-주제 친화도와 선수 미이수 페널티를 반영. `--effect 0`이면 위약 세계 |
+| 생성기 | `etfrec/synth.py` | 규칙을 공개한 모의 학습 로그. v2는 투자 목적·기간을 표본추출하고 목적-주제 친화도와 선수 미이수 페널티를 반영. `--effect`는 주제 선호의 인구통계 효과 배율이며 0이어도 위약 세계가 아님(연령·소득이 목적·경험·성향을 거쳐 남음) — 위약 점검은 `scripts/placebo_check.py` |
 | 데이터 | `etfrec/data.py` | `profiles.csv`·`study_log.csv`·`catalog.csv` 스키마와 검증, 이벤트 플래그 정규화(퀴즈 통과 ⇒ 퀴즈 ⇒ 완료, 이탈 ⇒ 미완료, 고친 행 수 기록), 행동 점수(조회 1·완료 2·통과/저장 3의 최댓값) |
 | 특징 저장소 | `etfrec/features.py` | 기준 주 이전 로그로 반응 행렬·추정 수준·선호·세그먼트 코드·목적·기간 |
 | 신호 | `etfrec/signals.py` | 교안 공식: 인기, 세그먼트 인기(수축), 콘텐츠 코사인, 사용자 CF, 아이템 CF, MF, MLP, 규칙·맥락·목적·로드맵 신호 (163개) |
@@ -185,8 +185,8 @@ python -m etfrec serve --bundle artifacts/bundle_v2     # http://127.0.0.1:8000
 선택 기록·학습 감사·QA 116건·개인정보 감사는 `manifest.json`에 있습니다. 숫자는 가상 세계의 결과이며 실제 학습자
 성과가 아닙니다.
 
-노트북 B 원본 세계(v1: 60단원, 목적 없음)의 결과는 `artifacts/bundle_v1/`에 있으며 `python scripts/regression_check.py`가
-노트북 기록(RULE 0.17123, RouterNoGender 0.17119, UCF 0.14268 …)과 소수점 5자리까지 일치하는지 확인합니다.
+노트북 B 원본 세계(v1: 60단원, 목적 없음)의 결과는 `artifacts/bundle_v1/`에 있으며 `python scripts/regression_check.py artifacts/bundle_v1`이
+(v1 세계를 학습해 그 폴더에 번들을 저장하고) 노트북 기록(RULE 0.17123, RouterNoGender 0.17119, UCF 0.14268 …)과 소수점 5자리까지 일치하는지 확인합니다.
 
 ## 실제 로그 연결
 
@@ -221,15 +221,16 @@ curl -s localhost:8000/api/quiz | head -c 400; curl -s localhost:8000/api/source
 
 ```bash
 pytest -q                       # 지표 일치·가드레일·로드맵·퀴즈·도메인 규칙·KRX 분류·수집 정책·개인정보·파서·파이프라인·오프라인/온라인 Top-5 일치·API (약 30초)
-ETFREC_FULL=1 pytest -q -k full # 노트북 기록(seed 42, v1 세계)과 소수점 5자리 일치 확인 (약 2~3분)
+ETFREC_FULL=1 pytest -q -k test_full_regression_matches_notebook   # 노트북 기록(seed 42, v1 세계)과 소수점 5자리 일치 확인 (약 2~3분)
 # UI 점검(Playwright 필요: npm i playwright): 서버를 먼저 띄운 뒤 그 주소를 넘긴다(기본값은 http://127.0.0.1:8765)
 node scripts/ui_walkthrough.mjs http://127.0.0.1:8000 docs/screens   # 11단계 UI를 조작하며 화면 캡처 생성
 ```
 
 ## 범위와 한계
 
-- 모의 데이터이며 생성기의 연령·소득·성별·목적 효과와 선수 페널티는 가정값입니다. 위약 세계(`--effect 0`)에서는
-  인구통계를 쓰는 설정의 이점이 사라지는지로 파이프라인이 없는 효과를 만들어 내지 않는지 확인합니다.
+- 모의 데이터이며 생성기의 연령·소득·성별·목적 효과와 선수 페널티는 가정값입니다. 파이프라인이 없는 효과를 만들어 내지
+  않는지는 연령·연소득·성별 열을 학습자 사이에서 섞은 위약 세계(`python scripts/placebo_check.py`, 결과 `docs/results/placebo_check.json`)에서
+  인구통계를 쓰는 설정의 테스트 이점이 사라지는지로 확인합니다. 생성기의 `--effect 0`은 위약이 아닙니다(연령·소득이 목적·경험·성향을 거쳐 행동에 남음).
 - 수준·선수 가드레일은 수업의 교육 처방이 아니라 이 프로젝트의 시연 정책입니다. 선수 가드레일은 모의 세계에서
   정확도 비용이 있으므로, 실제 로그에서는 선수 단원을 건너뛴 학습자의 통과율로 페널티 크기를 보정해야 합니다.
 - KRX 종목 기본정보는 정보데이터시스템 화면에서 사람이 내려받은 파일(CSV, 엔진이 설치된 경우 Excel)로만 넣고, 시세는 KRX Open API·공공데이터포털

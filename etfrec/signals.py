@@ -272,6 +272,11 @@ class Reference:
         return np.asarray((self.Rw > 0).sum(1)).ravel()
 
 
+def _factor_hash(P: np.ndarray, Q: np.ndarray) -> str:
+    """점수에 쓰는 최종 인자 행렬(P, Q)의 SHA-256 — 같은 seed로 다시 학습했을 때 같은 모델인지 확인하는 재현성 기록."""
+    return hashlib.sha256(np.ascontiguousarray(P).tobytes() + np.ascontiguousarray(Q).tobytes()).hexdigest()
+
+
 class ModelStore:
     """스냅샷별 학습 모델 캐시(MF 요인, 관측 MF·MLP 가중치). 서빙 번들에 그대로 저장된다."""
 
@@ -289,7 +294,7 @@ class ModelStore:
             P, Q, _, audit = neural.train_mf(coo.row, coo.col, coo.data, ref.n_users, ref.n_items, k=f, reg=reg)
             unseen = ref.item_support == 0
             Q[unseen] = 0.0                                        # 학습에 한 번도 안 나온 단원은 0점
-            audit.update(snapshot=ref.snapshot_key)
+            audit.update(snapshot=ref.snapshot_key, state_sha256=_factor_hash(P, Q))
             self.audit.append(audit)
             self.mf[key] = (P, Q)
         return self.mf[key]
@@ -301,7 +306,7 @@ class ModelStore:
             coo = ref.Rw.tocoo()
             P, Q, _, audit = neural.train_mf_bpr(coo.row, coo.col, ref.n_users, ref.n_items, k=f, reg=reg)
             Q[ref.item_support == 0] = 0.0
-            audit.update(snapshot=ref.snapshot_key)
+            audit.update(snapshot=ref.snapshot_key, state_sha256=_factor_hash(P, Q))
             self.audit.append(audit)
             self.mf_bpr[key] = (P, Q)
         return self.mf_bpr[key]

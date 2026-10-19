@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "created_at": "2026-10-19T15:26:50",
+  "created_at": "2026-10-19T20:21:18",
   "config": {
     "n_learners": 15000,
     "seed": 42,
@@ -301,7 +301,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.7896402383349215,
       "loss_last": 0.19062051784847317,
-      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
+      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8",
+      "state_sha256": "9a86c93bb086dc70b71a7c5123143e04ae61d947cacaf87bb2b5ac9d862a522e"
     },
     {
       "model": "MF_sampled",
@@ -314,7 +315,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.789303902840184,
       "loss_last": 0.21808001252211498,
-      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
+      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8",
+      "state_sha256": "87ae3ba6b4c2875b0e5b0dc3a9a187e6af0c81a8f046d1e29275170fca1de392"
     },
     {
       "model": "MF_sampled",
@@ -327,7 +329,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.7646791601406531,
       "loss_last": 0.10515033260862913,
-      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
+      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8",
+      "state_sha256": "2539363dd110cfa8f3f2206c9839cf87e646266ba72994960ee644c2afae66fd"
     },
     {
       "model": "MF_sampled",
@@ -340,7 +343,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.7639955431913842,
       "loss_last": 0.1256956761851575,
-      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
+      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8",
+      "state_sha256": "f24bb9b8949375055a0a7ce102987bd997867854676ca0ee5e572505a12c3dad"
     },
     {
       "model": "MF_sampled",
@@ -353,7 +357,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.7351275120492262,
       "loss_last": 0.033348362599497715,
-      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
+      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8",
+      "state_sha256": "3e8a56cd28bb3ac79c3fd2361d901b4ee460bf7f6830ae47db0c019dc5371ae5"
     },
     {
       "model": "MF_sampled",
@@ -366,7 +371,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.7357132757824123,
       "loss_last": 0.04823765416484391,
-      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
+      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8",
+      "state_sha256": "22e733128698cee55f556406a4f1f9895c303a28811375768f1963a89e4ff15b"
     },
     {
       "model": "MF_BPR",
@@ -381,7 +387,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.6818047505894503,
       "loss_last": 0.26788468993257203,
-      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
+      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8",
+      "state_sha256": "0e954abacfde18fa91575ed8e3652a872e160a3dde7afc4661e693b2b05df8f0"
     },
     {
       "model": "MF_BPR",
@@ -396,7 +403,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.6892274273004955,
       "loss_last": 0.39288892525697394,
-      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
+      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8",
+      "state_sha256": "00a41687fbf5194eac665e025f7c84ab5d0a601be11359d5aa2c174164490408"
     },
     {
       "model": "MF_BPR",
@@ -411,7 +419,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.6685039772847984,
       "loss_last": 0.1292053109654837,
-      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
+      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8",
+      "state_sha256": "cad1ce4e8e12a9c0377c73fdcd782e4282819997512b686ef3edceee9f324583"
     },
     {
       "model": "MF_BPR",
@@ -426,7 +435,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.6771447536627484,
       "loss_last": 0.24717062647027377,
-      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
+      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8",
+      "state_sha256": "58964c86f06faf951e0285452c6e7dae75b0b11856263e016e9e648793f6ad8d"
     },
     {
       "model": "MF_BPR",
@@ -441,7 +451,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.6473103424511939,
       "loss_last": 0.034502003309844334,
-      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
+      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8",
+      "state_sha256": "0d231eadcc0c2a7ceee939fdfb09cbbbde451f8ae394f5d7d9dbe87bce44196f"
     },
     {
       "model": "MF_BPR",
@@ -456,7 +467,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.6572434453703822,
       "loss_last": 0.12339095758631967,
-      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8"
+      "snapshot": "B:42:(15000, 60):2:327c48d2bfd8a08361c8",
+      "state_sha256": "8d081fab70d29508cfb653b93efb7d114a44455be44690d8c37b424a024c62d5"
     },
     {
       "model": "mf_observed",
@@ -550,7 +562,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.739137266498103,
       "loss_last": 0.24254444106053372,
-      "snapshot": "B:42:(15000, 60):3:a8b11695a67fc02f6ab5"
+      "snapshot": "B:42:(15000, 60):3:a8b11695a67fc02f6ab5",
+      "state_sha256": "540b6e467534a1904ecbfd3e3e32ed4737b451abce285b4e7ff6215760d1fceb"
     },
     {
       "model": "MF_sampled",
@@ -563,7 +576,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.6791206483433434,
       "loss_last": 0.13338811851042068,
-      "snapshot": "B:42:(15000, 60):3:a8b11695a67fc02f6ab5"
+      "snapshot": "B:42:(15000, 60):3:a8b11695a67fc02f6ab5",
+      "state_sha256": "e0488c8357386e79a690ce9030a8def4f30e71d983a5720fc4026668df8290d6"
     },
     {
       "model": "MF_BPR",
@@ -578,7 +592,8 @@
       "final_negative_collisions": 0,
       "loss_first": 0.6830926803773933,
       "loss_last": 0.41970333273364935,
-      "snapshot": "B:42:(15000, 60):3:a8b11695a67fc02f6ab5"
+      "snapshot": "B:42:(15000, 60):3:a8b11695a67fc02f6ab5",
+      "state_sha256": "e517871c09223e0a4b199b0ab62452b58f2c1f85bf2476c81d1cbe311d93376b"
     },
     {
       "model": "mf_observed",

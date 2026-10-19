@@ -28,6 +28,8 @@ from .synth import LOG_COLUMNS
 from .util import json_safe
 from .zoo import FAMILY_KO, decompose, explain, score_algo
 
+TYPE_NOTICE = NOTICE + " 유형 안내는 학습 순서를 돕기 위한 분류이며 개별 상품의 적합성 판단이 아닙니다."
+
 EVENT_FIELDS = ["item", "week", "day", "hour", "minute", "complete", "quiz", "quiz_pass", "save", "drop", "replay"]
 
 
@@ -309,7 +311,7 @@ class RecommendationService:
         need = set()
         for algo, *_ in resolved.values():
             need.update(algo.signals)
-        out = dict(learner=ctx, level=level, candidates=int(len(ca)), methods=[])
+        out = dict(learner=ctx, level=level, candidates=int(len(ca)), methods=[], notice=NOTICE)
         if len(ca) == 0:
             return json_safe(out)
         cands = CandidateBatch(np.array([ctx["user"] if ctx["user"] is not None else -1]), ca[None, :])
@@ -382,6 +384,7 @@ class RecommendationService:
             for u in s.get("units", []):
                 u["sources"] = sources_for_items(u["sources"])
         rm["learner"] = ctx
+        rm["notice"] = TYPE_NOTICE                                      # 로드맵 끝 단계가 ETF 유형을 연결하므로 유형 고지까지
         return json_safe(rm)
 
     def types(self, learner=None, goal: str = None, risk: int = None, assume_passed=()) -> dict:
@@ -408,7 +411,7 @@ class RecommendationService:
                               unlocked=(passed is not None and n_pass == len(concepts)), stats=stats.get(key),
                               sources=[source_info(k) for k in (["kifin_leverage", "krx_data", "krx_etf_info"] if key == "leverage_inverse" else ["krx_data", "krx_etf_info", "am_guidebooks"])]))
         return json_safe(dict(goal=goal, goal_label=goal_label(goal), risk=risk, cards=cards, universe=self.universe_public,
-                              universe_rows=int(len(self.universe)), notice=NOTICE + " 유형 안내는 학습 순서를 돕기 위한 분류이며 개별 상품의 적합성 판단이 아닙니다."))
+                              universe_rows=int(len(self.universe)), notice=TYPE_NOTICE))
 
     def quiz_questions(self) -> list:
         return public_questions()
