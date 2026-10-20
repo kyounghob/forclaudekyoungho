@@ -13,7 +13,7 @@
 
 ## 보고서
 
-- 중간보고서(Word): `docs/report/중간보고서_ETF_교육_콘텐츠_추천시스템.docx` — 문제·시나리오, 추천 기법 요약과 한계, 데이터·확보 계획, 시스템 설계·구현 현황, 실험 결과(v1 재현, v2, 선수 가드레일 민감도), 평가 계획, 일정, 부록(API·퀴즈·용어집·재현).
+- 중간보고서(Word): `docs/report/중간보고서_ETF_교육_콘텐츠_추천시스템.docx` — 채점 기준 대응표, 문제·시나리오(대상 사용자·추천 아이템·사용 상황)와 기대효과(측정 지표·목표), 추천 기법 요약과 한계, 적용 기법·비교 방법, 데이터·확보 계획(데이터 예시·반응 해석), 시스템 설계·구현 현황, 실험 결과(v1 재현, v2, 선수 가드레일 민감도), 평가 계획, 일정, 부록(API·퀴즈·용어집·재현).
 - 비판 검토·보완 보고서(Word): `docs/report/비판검토_보완보고서.docx` — 중간보고서 1차본에 대한 비판을 문장 단위로 검토해 수용·부분 수용·불수용 판정과 근거, 간과한 이유, 고친 코드와 바뀐 수치를 정리.
 - 중간보고서 1차본(비판 대상, 2026-10-13): `docs/report/중간보고서_1차본_2026-10-13.docx` — 비판 검토 보고서가 인용한 원문 대조용.
 - 보고서 그림: `docs/report/fig*.png`, 화면 캡처: `docs/screens/*.png`, 민감도 결과: `docs/results/prereq_sensitivity.json`, 위약 세계 점검: `docs/results/placebo_check.json`(`scripts/placebo_check.py`), 보고서 생성: `docs/report/build/build.sh` 한 번으로 그림(`make_figures.py`) → 데이터(`export_data.py` → `report_data.json`) → Word(`build_report.js`·`build_critique_response.js`, `pip install matplotlib pillow`와 node·`npm i docx` 필요) → `docs/report/`로 복사합니다. 먼저 `artifacts/bundle_v2`·`bundle_v1`의 `bundle.pkl`이 있어야 합니다(저장소에 없으므로 아래 학습 명령으로 만듦). 그림 크기는 이미지 파일 헤더에서 읽어 비율을 맞춥니다.
