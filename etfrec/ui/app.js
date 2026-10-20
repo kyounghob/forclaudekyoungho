@@ -65,7 +65,7 @@
   function learnerRef() {
     const L = state.learner;
     if (isExisting()) return { learner_id: state.learnerId };
-    const events = L.events.map(e => ({ item: e.item, week: e.week || 0, complete: !!e.complete, quiz: !!e.quiz, quiz_pass: !!e.quiz_pass, save: !!e.save, drop: !!e.drop, replay: !!e.replay }));
+    const events = L.events.map(e => ({ item: e.item, week: e.week || 0, complete: !!e.complete, quiz: !!e.quiz, quiz_pass: !!e.quiz_pass, save: !!e.save, drop: !!e.drop, replay: !!e.replay, ...(e.source ? { source: e.source } : {}) }));   // source: 진단 통과는 서버가 수준 갱신에서 뺀다
     return { learner: { label: L.label || "새 학습자", age: L.age ?? 35, gender: L.gender, income: L.income, exp: L.exp, risk: L.risk, mobile: L.mobile, interests: L.interests, placement: L.placement, hour: L.hour, goal: L.goal, horizon: L.horizon, diagnosis: L.diagnosis, events } };
   }
   function buildRequest(extra = {}) {
@@ -509,7 +509,7 @@
     html += `<h4>방법별 NDCG@5 (사용자 평균, 테스트 ${EVAL.test_audit.week}주차)</h4>` + res.map(r => `<div class="evbar ${r.method === opName ? "op" : ""}"><span title="${esc(r.method)}">${esc(r.method)}</span><div class="ebar"><i style="width:${(100 * r.ndcg / maxN).toFixed(1)}%"></i></div><span class="num">${fmt(r.ndcg, 4)}</span></div>`).join("");
     const hasAct = res.some(r => r.ndcg_active != null);
     html += `<div class="table-wrap"><table class="table"><tr><th>방법</th><th>NDCG@5 (전체)</th>${hasAct ? "<th>NDCG@5 (활성 사용자)</th>" : ""}<th>Diversity@5</th><th>Hit@5</th>${hasAct ? "<th>Hit@5 (활성)</th>" : ""}${hasPre ? "<th>선수 미이수 비율</th>" : ""}<th>전역 1위 대비 차이 [95% 구간]</th></tr>` + res.map(r => `<tr><td>${esc(r.method)}</td><td class="num">${fmt(r.ndcg)}</td>${hasAct ? `<td class="num">${fmt(r.ndcg_active)}</td>` : ""}<td class="num">${fmt(r.diversity, 3)}</td><td class="num">${fmt(r.hit_diagnostic, 3)}</td>${hasAct ? `<td class="num">${fmt(r.hit_active, 3)}</td>` : ""}${hasPre ? `<td class="num">${r.prereq_violation_rate != null ? fmt(r.prereq_violation_rate, 3) : "–"}</td>` : ""}<td class="num">${fmt(r.difference_vs_global)} [${fmt(r.ci_low)}, ${fmt(r.ci_high)}]</td></tr>`).join("") + `</table></div>`;
-    if (hasAct) html += `<p class="muted small">전체 = 다음 주 정답이 없는 사용자도 NDCG 0으로 평균에 포함(노트북 규칙, 보수적). 활성 사용자 = 후보 안에 정답이 1개 이상인 사용자만 평균(추천 시스템 평가에서 흔한 관행, ${(res[0] && res[0].active_users) ? res[0].active_users.toLocaleString() : "–"}명). 모든 방법이 같은 활성 집합으로 평가되므로 두 값의 비가 같고 방법 순위도 같습니다(학습 QA에서 확인). 절대 차이는 활성 기준에서 그 비만큼 커집니다.</p>`;
+    if (hasAct) html += `<p class="muted small">전체 = 다음 주 정답이 없는 사용자도 NDCG 0으로 평균에 포함(노트북 규칙). 활성 사용자 = 후보 안에 정답이 1개 이상인 사용자만 평균(추천 시스템 평가에서 흔한 관행, ${(res[0] && res[0].active_users) ? res[0].active_users.toLocaleString() : "–"}명). 모든 방법이 같은 활성 집합으로 평가되므로 두 값의 비가 같고 방법 순위도 같습니다(학습 QA에서 확인). 절대 차이는 활성 기준에서 그 비만큼 커집니다. 집단 비교는 다릅니다: 집단마다 활성 비율이 달라 기준에 따라 집단 순서가 바뀔 수 있습니다(아래 표).</p>`;
     if (hasPre) html += `<p class="muted small">선수 미이수 비율 = Top-5 중 선수 단원을 아직 통과하지 않은 단원의 비율. '+prereq' 행은 같은 운영 라우터에 선수 단원 가드레일을 켠 결과입니다.</p>`;
     if (res.some(r => r.method === "ABControl")) html += `<p class="muted small">'ABControl' 행은 온라인 A/B 실험 대조군 A(성별을 쓰지 않는 세그먼트 인기 설정 중 검증 1위)를 같은 테스트 주차에서 잰 오프라인 값입니다. 평가 전용이라 추천 화면의 기법 선택에는 없습니다.</p>`;
     const g = EVAL.group_results.filter(x => x.method === "Global");
@@ -540,7 +540,8 @@
   function applyDesign(p) {
     if (!p || !p.state) return toast("설계 파일 형식이 아닙니다");
     const s = p.state; Object.assign(state, { ...s, ...VOLATILE, memo: p.memo || "" }); migrate();
-    if (isExisting()) api(`/api/learners/${state.learnerId}`).then(i => { state.learnerInfo = i; });
+    if (META.learners_enabled === false && state.source === "existing") { state.source = "new"; state.learnerId = null; }   // 이 서버에서는 기준 학습자를 열 수 없다
+    if (isExisting()) api(`/api/learners/${state.learnerId}`).then(i => { state.learnerInfo = i; }).catch(() => { state.learnerId = null; });
     $("#nl-text").value = state.nl.text || ""; $$("input[name=source]").forEach(r => r.checked = r.value === state.source); $("#existing-picker").hidden = state.source !== "existing";
     save(); goStep(2);
   }

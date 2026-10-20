@@ -109,6 +109,34 @@ def test_unit_status_negation_and_sentence_scope():
     assert status("'ETF란 무엇인가'는 통과했어.") == ["pass"] and status("'ETF란 무엇인가'는 끝까지 다 봤어") == ["complete"]
 
 
+def test_unit_status_reads_common_positive_and_negative_forms():
+    def status(text):
+        ev = parse_onboarding(text, cat)["fields"]["events"]
+        return ["pass" if e["quiz_pass"] else "complete" if e["complete"] else "view" for e in ev]
+    U = "'ETF란 무엇인가'"
+    want = {f"{U} 퀴즈는 처음엔 떨어졌는데 재시험에서 통과했어.": "pass",          # 실패어가 통과보다 앞이면 통과
+            "'레버리지·인버스 ETF란'은 가격이 떨어질 때 수익이 나는 구조를 배워서 통과했어.": "pass",
+            f"{U}는 통과는 전에 했어.": "pass", f"{U}는 지난주에 통과했어.": "pass", f"{U}는 완료는 전에 했어.": "complete",
+            f"{U}는 수강을 전부 마쳤어.": "complete", f"{U}는 1.5배속으로 끝까지 봤어.": "complete", f"{U}는 0.5배속으로 다 봤어.": "complete",
+            f"{U}는 중간에 끊지 않고 끝까지 봤어.": "complete", f"{U}는 전부 다 봤어.": "complete",
+            f"{U}는 통과 안됐어.": "view", f"{U}는 통과 안함.": "view", f"{U}는 통과하지는 못했어.": "view", f"{U}는 통과하진 못했어.": "view",
+            f"{U}는 통과는 아직이야.": "view", f"{U}는 통과하는 데 실패했어.": "view", f"{U}는 끝까지 보지 못했어.": "view", f"{U}는 완료 안됨.": "view",
+            f"{U}는 통과하지 못했어.": "view", f"{U}는 통과 못 했어.": "view", f"{U}는 통과 전이야.": "view", f"{U}는 수강 중이야.": "view",
+            f"{U}는 통과하려고 공부 중이야.": "view", f"{U}는 통과하고 싶어.": "view", f"{U}는 미통과야.": "view", f"{U}는 불합격이었어.": "view",
+            f"{U}는 통과할 줄 알았는데 떨어졌어.": "view",                       # 실패어가 마지막이면 통과가 아니다
+            f"{U}는 퀴즈를 통과했고 점수가 조금 떨어졌지만 괜찮아.": "view"}       # 애매하면 통과로 보지 않는다(잘못 읽으면 후보에서 빠짐)
+    for text, w in want.items():
+        assert status(text) == [w], (text, status(text))
+
+
+def test_income_reads_eok_and_monthly_forms_like_design_scrub():
+    for text, want in (("45세 직장인, 연소득 1억 2천만원, 연금 준비", 12000.0), ("45세, 연봉 1억5천만원", 15000.0), ("연봉 1억 2000만원", 12000.0),
+                       ("월급 450만원 받는 직장인", 5400.0), ("연소득 1.2억", 12000.0), ("연봉 6천", 6000.0)):
+        assert parse_onboarding(text, cat)["fields"]["income"] == want, text
+    for text in ("목돈 5000만원 있음", "연금소득 1,500만원 넘으면 어떻게 돼?", "ISA 한도 2,000만원"):
+        assert "income" not in parse_onboarding(text, cat)["fields"], text     # 소득 키워드가 없는 금액은 소득으로 읽지 않는다
+
+
 def test_experience_window_stays_in_its_clause():
     for text in ("경험 없음. 3년 이상 장기 투자 예정", "ETF 구조에 관심 있는 초보, 경험 없어. 3년 이상 모을 거야", "경험 없고 3년 이상 장기 투자할 거야"):
         assert parse_onboarding(text, cat)["fields"]["exp"] == 0, text      # 다음 문장·뒤의 기간 표현이 경험을 뒤집지 않는다

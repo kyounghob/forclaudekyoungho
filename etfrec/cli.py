@@ -155,7 +155,9 @@ def cmd_pseudonymize(a):
     log.to_csv(os.path.join(out, "study_log.csv"), index=False, encoding="utf-8-sig")
     os.makedirs(os.path.dirname(mp), exist_ok=True)
     mapping.to_csv(mp, index=False, encoding="utf-8-sig")
-    print(json.dumps(dict(users=len(profiles), log_rows=len(log), training_input=out, mapping=mp,
+    print(json.dumps(dict(users=len(profiles), log_rows=len(log), raw_log_rows=len(raw_l),
+                          events_merged_into_attempts=len(raw_l) - len(log) if "session_id" in raw_l.columns else None,
+                          training_input=out, mapping=mp,
                           dropped_profile_columns=sorted(set(raw_p.columns) - set(profiles.columns)),
                           dropped_log_columns=sorted(set(raw_l.columns) - set(log.columns)),
                           note="day·minute는 0(시각 제거), hour는 4개 시간대. 원시 연령·연소득은 학습 입력에만 있고 번들에는 남지 않습니다"),

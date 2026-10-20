@@ -1,11 +1,12 @@
 import os
 
 import numpy as np
+import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
 from etfrec.api import create_app
-from etfrec.config import GuardrailConfig
+from etfrec.config import GuardrailConfig, TrainConfig
 from etfrec.service import LearnerInput, RecommendationService
 from etfrec.zoo import algo_uses
 
@@ -130,6 +131,8 @@ def test_api_endpoints(small_bundle, tmp_path):
     for bad in ([n], [999], [-1]):
         for path in ("/api/recommend", "/api/roadmap", "/api/types"):
             assert c.post(path, json={"learner": {"goal": "income"}, "assume_passed": bad}).status_code == 422, (path, bad)
+        assert c.post("/api/types", json={"goal": "trading", "risk": 2, "assume_passed": bad}).status_code == 422, bad   # 학습자 없이 불러도
+    assert c.post("/api/types", json={"goal": "trading", "risk": 2, "assume_passed": [0]}).status_code == 200
     meta = c.get("/api/meta").json()
     assert meta["learners_enabled"] is True and meta["dataset"]["source"] == "synthetic"
     assert meta["guardrail"]["prereq_block"] is True and meta["evaluation_guardrail"]["prereq_block"] is False   # 생략 시 기본 ≠ 평가 기본
@@ -210,6 +213,26 @@ def test_dataset_normalizes_event_flags():
     lg4 = ds.log.copy(); lg4["understood"] = "maybe"
     with pytest.raises(ValueError, match="understood"):
         Dataset(ds.profiles, lg4, ds.catalog)
+
+
+def test_event_stream_with_session_id_is_grouped_into_attempts():
+    from etfrec.data import Dataset, events_to_attempts
+    ds = Dataset.synthetic(TrainConfig(n_learners=60))
+    base = dict(week=0, day=1, hour=1, minute=10, complete=0, quiz=0, quiz_pass=0, save=0, drop=0, replay=0)
+    ev = pd.DataFrame([dict(base, user=0, item=3, session_id="s1"),                                   # 조회 이벤트
+                       dict(base, user=0, item=3, session_id="s1", minute=25, complete=1, quiz=1, quiz_pass=1),   # 같은 시도의 완료·통과
+                       dict(base, user=0, item=3, session_id="s2", week=1, minute=5),                 # 다른 세션 = 다른 시도
+                       dict(base, user=1, item=3, session_id="s1", drop=1)])                          # 세션 번호가 같아도 학습자가 다르면 다른 시도
+    att, rep = events_to_attempts(ev)
+    assert rep == dict(events=4, attempts=3, merged=1, session_column="session_id") and "session_id" not in att.columns
+    first = att[(att.user == 0) & (att.week == 0)].iloc[0]
+    assert first.complete and first.quiz_pass and first.minute == 10                                # 플래그는 OR, 시각은 첫 이벤트
+    d = Dataset(ds.profiles, ev, ds.catalog)
+    assert len(d.log) == 3 and d.summary()["attempt_grouping"]["merged"] == 1 and "session_id" not in d.dropped_columns["log"]
+    assert d.log[(d.log.user == 0) & (d.log.week == 0)].score.tolist() == [3.0]                     # 묶지 않으면 조회 1 + 통과 3의 두 시도
+    assert events_to_attempts(ds.log)[1] is None and Dataset(ds.profiles, ds.log, ds.catalog).attempt_grouping is None
+    with pytest.raises(ValueError, match="session_id"):
+        events_to_attempts(ev.assign(session_id=[None, "s1", "s2", "s1"]))
 
 
 def test_pairwise_models_cover_only_pair_users(small_bundle):

@@ -60,8 +60,13 @@ await shot("05_roadmap");
 // 6단계: 설정
 await step(6);
 await shot("06_settings", false);
-// 7단계: 추천 미리보기
+// 7단계: 추천 미리보기 — 진단 통과 이벤트가 source를 실은 채로 가는지 확인한다(서버는 진단 통과를 수준 갱신에서 뺀다)
+const recReq = page.waitForRequest(r => r.url().endsWith("/api/recommend") && r.method() === "POST", { timeout: 20000 });
 await step(7);
+const sentEvents = ((JSON.parse((await recReq).postData() || "{}").learner || {}).events || []);
+const diagSent = sentEvents.filter(e => e.source === "diagnosis").length;
+console.log("diagnosis events sent", diagSent, "of", sentEvents.length);
+if (!diagSent) errors.push("check: 7단계 추천 요청의 진단 이벤트에 source가 없습니다");
 await page.waitForSelector("#rec-view:not([hidden])", { timeout: 20000 });
 await shot("07_preview");
 // 8단계: 시뮬레이션

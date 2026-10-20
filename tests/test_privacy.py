@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import os
+from datetime import date
 
 import numpy as np
 import pandas as pd
@@ -122,6 +123,11 @@ def test_build_pseudonymized_inputs_coarsens_and_separates_mapping():
     b2 = log[log.user == m["B-2"]]
     assert b2.item.tolist() == [4, 0, 2] and b2.hour.tolist() == [0, 0, 3]        # 주·분 순서로 정렬, 시간대 = 출근·출근·심야
     Dataset(profiles, log, Catalog.default())                                     # 학습 입력 스키마로 바로 읽힌다
+    stream = pd.concat([raw_log.assign(session_id=[f"x{i}" for i in range(5)]),                        # 같은 세션의 두 번째 이벤트(완료)
+                        raw_log.iloc[[2]].assign(session_id="x2", complete=1, drop=0, minute=raw_log.minute[2] + 9)])
+    _, log2, _ = build_pseudonymized_inputs(prof, stream, "member_id", KEY)
+    assert len(log2) == 5 and "session_id" not in log2.columns                    # 시도 단위로 묶고 세션 ID는 버린다
+    assert log2[(log2.user == m["B-2"]) & (log2["item"] == 2)].complete.tolist() == [True]
 
 
 def test_pseudonymize_cli_requires_env_key_and_external_mapping(tmp_path, monkeypatch):
@@ -239,7 +245,8 @@ def test_design_save_replaces_raw_age_income_with_bands(small_bundle, tmp_path):
     assert not any(("47" in s and "세" in s) or "5230" in s or "5,230" in s or "47살" in s for s in strings)
     L = saved["payload"]["state"]["learner"]
     assert L["age_band"] == 2 and L["income_q"] == q and L["goal"] == "income"
-    assert saved["payload"]["result"]["learner"]["profile"]["연령대"] == "40대"
+    assert "result" not in saved["payload"]                                   # 서버 출력(추천 결과의 학습자 프로필)은 저장하지 않는다
+    assert privacy.scrub_design(payload["result"], edges)["learner"]["profile"]["연령대"] == "40대"   # 학습자 표 꼴(연령 → 연령대)도 가린다
     assert saved["payload"]["state"]["nl"]["parsed"]["evidence"][0] == {"field": "age_band", "value": 2, "matched": "40대"}
     assert saved["payload"]["state"]["nl"]["text"].startswith("[40대] 직장인") and saved["payload"]["state"]["sim"] == {"age_band": "", "income_q": ""}
     got = c.get("/api/designs/p1").json()                                    # 불러올 때는 구간 대표값(원값 아님)
@@ -326,11 +333,53 @@ def test_learner_lookup_can_be_switched_off(small_bundle, tmp_path):
 
 def test_scrub_text_masks_whole_keywordless_amounts():
     E = [3020, 4110, 5350, 7282]
-    cases = {"1억 2천만원": "[소득 5분위(상위 20%)]", "1억2천만원": "[소득 5분위(상위 20%)]", "5,000만원": "[소득 3분위]", "7000만원": "[소득 4분위]",
-             "1억원": "[소득 5분위(상위 20%)]", "연봉 1억 2천만원": "[소득 5분위(상위 20%)]",
-             "연소득은 7천만원, 1억 2천만원, 5천만원, 45세 이상": "[소득 4분위], [소득 5분위(상위 20%)], [소득 3분위], [40대] 이상"}
+    cases = {"1억 2천만원": "[금액]", "1억2천만원": "[금액]", "5,000만원": "[금액]", "7000만원": "[금액]", "1억원": "[금액]", "1.5억원": "[금액]",
+             "연봉 1억 2천만원": "[소득 5분위(상위 20%)]",
+             "연소득은 7천만원, 1억 2천만원, 5천만원, 45세 이상": "[소득 4분위], [금액], [금액], [40대] 이상",
+             "ISA는 연 2,000만원, 총 1억원까지 납입 가능. 비과세 200만원.": "ISA는 연 [금액], 총 [금액]까지 납입 가능. 비과세 [금액].",
+             "국내 ETF 투자자 600만 명, 순자산 100억": "국내 ETF 투자자 600만 명, 순자산 100억",       # '원'이 없는 수치는 금액으로 보지 않는다
+             "연금소득 1,500만원 넘으면": "연금소득 [금액] 넘으면", "소득 3분위": "소득 3분위"}
     for text, want in cases.items():
         assert scrub_text(text, E) == want, (text, scrub_text(text, E))
+
+
+def test_scrub_text_reads_more_income_and_age_forms():
+    E = [3020, 4110, 5350, 7282]
+    q5, q4, q2 = "[소득 5분위(상위 20%)]", "[소득 4분위]", "[소득 2분위]"
+    cases = {"연봉 1억 2000만원": q5, "연봉 1억 2,000만원": q5, "연소득 1.2억": q5, "연봉 6천": q4, "연봉 6천5백": q4, "연봉 65,000,000원": q4,
+             "연소득 6000": q4, "월급 450만원": q4, "월 소득 300만원": q2, "내 소득은 5천만원이야": "내 [소득 3분위]이야",   # 월급은 12배(연 5,400만원)
+             "연봉 2025년 기준": "연봉 2025년 기준", "65세": "[60세 이상]", "25세 직장인": "[29세 이하] 직장인"}
+    born = date.today().year - 1980
+    want_born = "[" + privacy._label("age_band", privacy._age_code(born)) + "]"
+    cases.update({"1980년생": want_born, "80년생": want_born})
+    for text, want in cases.items():
+        got = scrub_text(text, E)
+        assert got == want, (text, got)
+        assert scrub_text(got, E) == got, text                       # 불러올 때 다시 가려도 같다('[60세 이상]'이 '[[60세 이상] 이상]'이 되지 않음)
+    assert privacy.income_from_text("45세 직장인, 연소득 1억 2천만원, 연금 준비") == (12000.0, "연소득 1억 2천만원")
+    assert privacy.income_from_text("목돈 5000만원 있음")[0] is None and privacy.income_from_text("연금소득 1,500만원")[0] is None
+
+
+def test_design_save_drops_server_outputs_and_hides_learner_designs_when_lookup_is_off(small_bundle, tmp_path):
+    on = TestClient(create_app(small_bundle, designs_dir=str(tmp_path)))
+    rec = on.post("/api/recommend", json={"learner_id": 7, "k": 5}).json()
+    rm = on.post("/api/roadmap", json={"learner_id": 7}).json()
+    payload = {"summary": "#7 · 장기", "memo": "ISA는 연 2,000만원까지", "result": rec, "roadmap": rm,
+               "state": {"source": "existing", "learnerId": 7, "learnerInfo": {"user": 7, "profile": {"성별": "여성"}}, "result": rec, "roadmap": rm}}
+    assert on.post("/api/designs", json={"name": "existing7", "payload": payload}).status_code == 200
+    saved = json.loads((tmp_path / "existing7.json").read_text(encoding="utf-8"))
+    keys, _ = _keys_and_strings(saved)
+    assert not keys & {"result", "roadmap", "learnerInfo", "profile", "topic_map", "history"} and saved["saved_with_learners"] is True
+    assert saved["payload"]["memo"] == "ISA는 연 [금액]까지" and saved["payload"]["state"]["learnerId"] == 7
+    off = TestClient(create_app(small_bundle, designs_dir=str(tmp_path), expose_learners=False))
+    assert off.get("/api/designs").json() == [] and off.get("/api/designs/existing7").status_code == 404   # 켠 서버에서 저장한 설계는 내려보내지 않는다
+    assert off.post("/api/designs", json={"name": "public1", "payload": {"summary": "새 학습자", "state": {"source": "new"}}}).status_code == 200
+    assert [d["name"] for d in off.get("/api/designs").json()] == ["public1"] and off.get("/api/designs/public1").status_code == 200
+    legacy = dict(saved); legacy.pop("saved_with_learners"); legacy["name"] = "legacy"; legacy["payload"] = dict(saved["payload"], result=rec)
+    (tmp_path / "legacy.json").write_text(json.dumps(legacy, ensure_ascii=False), encoding="utf-8")
+    assert off.get("/api/designs/legacy").status_code == 404                   # 표시가 없는 이전 파일도 켠 서버의 것으로 본다
+    got = on.get("/api/designs/legacy").json()
+    assert "result" not in got["payload"] and [d["name"] for d in on.get("/api/designs").json()] == ["existing7", "legacy", "public1"]
 
 
 def test_design_scrub_covers_names_lists_events_and_more_forms(small_bundle, tmp_path):

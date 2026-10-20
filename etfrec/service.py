@@ -187,11 +187,14 @@ class RecommendationService:
             log[c] = log[c].astype(bool)
         return score_attempts(log)
 
-    def _batch_for(self, learner, assume_passed=(), overrides=None) -> tuple:
-        """기존 학습자 번호 또는 LearnerInput → (LearnerBatch, 설명용 맥락)."""
+    def _check_assumed(self, assume_passed):
         bad = [i for i in assume_passed if isinstance(i, bool) or not isinstance(i, (int, np.integer)) or not 0 <= int(i) < self.catalog.n_items]
         if bad:                                       # 음수 번호가 뒤에서부터 단원을 가리키거나 범위 밖 번호가 500이 되지 않게
             raise ValueError(f"카탈로그에 없는 단원 번호 {bad[:5]}(통과 가정은 0~{self.catalog.n_items - 1})")
+
+    def _batch_for(self, learner, assume_passed=(), overrides=None) -> tuple:
+        """기존 학습자 번호 또는 LearnerInput → (LearnerBatch, 설명용 맥락)."""
+        self._check_assumed(assume_passed)
         if isinstance(learner, LearnerInput):
             lb, F1 = self._adhoc_batch(learner)
             ctx = dict(user=None, label=learner.label, profile=F1.users.iloc[0].to_dict(), diagnosis=learner.diagnosis)
@@ -389,6 +392,7 @@ class RecommendationService:
 
     def types(self, learner=None, goal: str = None, risk: int = None, assume_passed=()) -> dict:
         """목적·성향에 맞는 ETF 유형 안내 카드(교육용). 학습자를 주면 개념 통과 여부를 함께 표시한다."""
+        self._check_assumed(assume_passed)                          # 학습자 없이 불러도 범위 밖 번호는 거절한다(통과 가정은 학습자가 있을 때만 쓰임)
         passed = None
         if learner is not None:
             lb, ctx = self._batch_for(learner, assume_passed)

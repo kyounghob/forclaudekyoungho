@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import re
 
+from .privacy import income_from_text
+
 from .catalog import Catalog
 
 # 길이가 긴 키워드부터 검사한다. "금 etf"처럼 짧은 키워드는 바로 앞 글자가 한글이면 단어 일부로 보고 건너뛴다(연금 ETF·현금 ETF ≠ 금 ETF).
@@ -107,25 +109,38 @@ def _longest(text, table, lo=0, hi=None, exclude=()):
 
 
 PASS_VERBS = ("통과", "합격", "맞췄", "끝냈")
-DONE_VERBS = ("완료", "다 봤", "끝까지", "수강")
+DONE_VERBS = ("완료", "다 봤", "끝까지", "수강", "마쳤")
 FAIL_WORDS = ("떨어", "불합격", "미통과", "낙제")
-_NEG_AFTER = re.compile(r"\s*(?:하지|를|을|은|는|도|에|에는)?\s*(?:못|않|안\s|안했|실패|전|중)")
+_NEG_PREFIX = ("미", "불")                                              # 미완료·미통과·불합격
+_NEG_AFTER = re.compile(                                                # 동사 바로 뒤의 부정·실패·의도·미완 표현
+    r"\s*(?:하지는|하지|하진|를|을|은|는|도|에는|에|이|가)?\s*"
+    r"(?:못|않|안\s*(?:했|됐|됨|함|해|돼|되)|안\s|실패|아직|하려|하고\s*싶|하는\s*데\s*실패|데\s*실패|목표"
+    r"|전(?:이|인|임|\s*상태|$|\s*[.,!?)])|중(?:이|인|$|\s*[.,!?)]))"
+    r"|\s*\S{0,3}지\s*(?:는\s*)?못")                                     # '끝까지 보지 못했어'·'다 듣지 못했어'
 
 
-def _affirmed(gap: str, words) -> bool:
-    """gap에 동사가 있고 부정·실패가 붙지 않았는지. '통과하지 못했어'·'통과 못 했어'·'통과 실패'·'통과 전'·'미완료'·'수강 중'은 아니다."""
+def _affirmed(gap: str, words, after: int = 0) -> bool:
+    """gap에서 after 위치 이후에 부정·실패가 붙지 않은 동사가 있는지. '통과하지 못했어'·'통과 안됐어'·'통과는 아직'·'통과 전이야'·
+    '통과하는 데 실패'·'미완료'·'불합격'·'수강 중'·'끝까지 보지 못했어'는 아니고, '통과는 전에 했어'·'수강을 전부 마쳤어'는 맞다."""
     for w in words:
         for m in re.finditer(re.escape(w), gap):
-            if gap[max(0, m.start() - 1):m.start()] == "미" or _NEG_AFTER.match(gap, m.end()):
+            if m.start() < after or gap[max(0, m.start() - 1):m.start()] in _NEG_PREFIX or _NEG_AFTER.match(gap, m.end()):
                 continue
             return True
     return False
 
 
+def _passed(gap: str) -> bool:
+    """통과: 마지막 실패 표현('떨어'·'불합격'…)보다 뒤에 긍정 통과 동사가 있어야 한다. '처음엔 떨어졌는데 재시험에서 통과했어'는 통과,
+    '통과할 줄 알았는데 떨어졌어'는 아니다(애매하면 통과로 보지 않는다: 잘못 통과로 읽으면 그 단원이 후보에서 빠진다)."""
+    last_fail = max((m.end() for w in FAIL_WORDS for m in re.finditer(re.escape(w), gap)), default=-1)
+    return _affirmed(gap, PASS_VERBS, after=last_fail)
+
+
 def _clauses(text):
     """문장부호(. , ! ? 줄바꿈)로 나눈 구간 [(시작, 끝)]."""
     out, start = [], 0
-    for m in re.finditer(r"[.,!?\n]", text):
+    for m in re.finditer(r"(?<!\d)[.,](?!\d)|[!?\n]", text):           # 숫자 사이의 점·쉼표(1.5배, 1,000)는 경계가 아니다
         out.append((start, m.start())); start = m.end()
     out.append((start, len(text)))
     return out
@@ -189,14 +204,10 @@ def parse_onboarding(text: str, catalog: Catalog) -> dict:
         m = re.search(r"(\d)0\s*대", t)
         if m:
             fields["age"] = int(m.group(1)) * 10 + 5; evidence.append(dict(field="age", value=fields["age"], matched=m.group(0)))
-    # 소득
-    m = re.search(r"(연소득|연봉|소득)\s*(약\s*)?(\d{1,3}(?:,\d{3})+|\d{3,5})\s*만\s*원?", t)
-    if m:
-        fields["income"] = float(m.group(3).replace(",", "")); evidence.append(dict(field="income", value=fields["income"], matched=m.group(0)))
-    else:
-        m = re.search(r"(\d)\s*천\s*만\s*원", t)
-        if m:
-            fields["income"] = float(m.group(1)) * 1000; evidence.append(dict(field="income", value=fields["income"], matched=m.group(0)))
+    # 소득: 저장 설계 가림과 같은 규칙(privacy.income_from_text — 억 단위 합산, 월급은 연으로 환산)
+    inc, matched = income_from_text(raw)
+    if inc is not None:
+        fields["income"] = inc; evidence.append(dict(field="income", value=inc, matched=matched))
     # 요청 개수
     m = re.search(r"(\d{1,2})\s*개(?!월)", t)
     if m and 1 <= int(m.group(1)) <= 20:
@@ -207,10 +218,9 @@ def parse_onboarding(text: str, catalog: Catalog) -> dict:
     verbs = []                                                       # 따옴표마다 그 뒤 동사 구간의 (통과, 완료)
     for k, mq in enumerate(quotes):
         nxt = quotes[k + 1].start() if k + 1 < len(quotes) else min(len(raw), mq.end() + 40)
-        end = re.search(r"[.!?\n]", raw[mq.end():nxt])                  # 동사는 같은 문장 안에서만 찾는다
+        end = re.search(r"(?<!\d)\.(?!\d)|[!?\n]", raw[mq.end():nxt])     # 동사는 같은 문장 안에서만 찾는다(1.5배속의 점은 문장 끝이 아님)
         gap = raw[mq.end():mq.end() + end.start() if end else nxt]
-        failed = any(w in gap for w in FAIL_WORDS)
-        verbs.append((not failed and _affirmed(gap, PASS_VERBS), _affirmed(gap, DONE_VERBS),
+        verbs.append((_passed(gap), _affirmed(gap, DONE_VERBS),
                       k + 1 < len(quotes) and re.fullmatch(r"\s*(와|과|,|및|하고|랑|이랑)\s*", gap) is not None))
     for k in range(len(verbs) - 2, -1, -1):                         # 'A와 B는 통과' → A는 B의 동사를 따른다
         if verbs[k][2]:

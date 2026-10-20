@@ -33,8 +33,10 @@ for g in GOALS:
 diffstat = subprocess.run(["git", "-C", ROOT, "diff", "--stat", "HEAD~0", "--"], capture_output=True, text=True).stdout
 changed = subprocess.run(["git", "-C", ROOT, "log", "--since=6 hours ago", "--stat", "--format=%h %s"], capture_output=True, text=True).stdout
 V1_COMMIT = "9322f6e"                                   # 중간보고서 1차본(비판 대상)을 넣은 커밋
-changed_since_v1 = subprocess.run(["git", "-C", ROOT, "diff", "--name-only", V1_COMMIT, "HEAD", "--", "etfrec", "scripts", "tests", "docs/report/build"],
-                                  capture_output=True, text=True).stdout.split()
+_SCOPE = ["etfrec", "scripts", "tests", "docs/report/build"]
+# 작업 트리 기준(커밋 전 변경 포함) + 아직 추적하지 않는 새 파일: 같은 변경에서 고치거나 만든 파일이 목록에서 빠지지 않게
+changed_since_v1 = sorted(set(subprocess.run(["git", "-C", ROOT, "diff", "--name-only", V1_COMMIT, "--", *_SCOPE], capture_output=True, text=True).stdout.split())
+                          | set(subprocess.run(["git", "-C", ROOT, "ls-files", "--others", "--exclude-standard", "--", *_SCOPE], capture_output=True, text=True).stdout.split()))
 FACTS = [
     dict(key="etf_market", fact="2025년 말 국내 상장 ETF 1,058종목, 순자산총액 297조 2천억 원(전년 대비 71% 증가); 2025년 7월 1,000종목 돌파",
          sources=["https://www.sidae.com/article/2025123016143338248", "https://www.heraldk.com/article/2025072215004989760"]),
@@ -210,14 +212,14 @@ data["fix9"] = [
 data["change9"] = f"비공식 호출 코드 0줄. 공식 API 3종(KRX Open API 일별매매정보, 공공데이터포털 증권상품시세정보·KRX상장종목정보) + 사람이 내려받은 파일 정규화. 상태 7종·파일별 기준일·해시 기록, 원자적 교체·형식 검사·키 가림, 수집 테스트 {nsrc}건."
 data["fix10"] = [
     "저장 최소화: 번들 프로필·특징 저장소·learner_profiles.csv에서 원시 연령·연소득을 없애고 연령대·소득분위 구간만 남겼다. 모델 입력은 원래 구간 코드라 결과가 같다(v1 14개 값 5자리 일치를 다시 확인했고, 변경 전후 v1 결과 파일이 시간 열을 빼고 동일). 번들 로그는 주차·4개 시간대·주 안 순서(seq)만 남기고 일·분을 버린다.",
-    "API·화면: /api/learners와 학습자 상세는 구간 코드·이름만 반환한다. 기존 학습자를 새 학습자로 복사하면 입력란에 구간 대표값을 채우고 원값이 아니라고 표시한다. 저장 설계는 쓰기 전에 원값을 구간 코드로 바꾸고 자유 입력의 연령·소득 표현(예: 45세, 연봉 5,000만원)을 구간 이름으로 가린다.",
+    "API·화면: /api/learners와 학습자 상세는 구간 코드·이름만 반환한다. 기존 학습자를 새 학습자로 복사하면 입력란에 구간 대표값을 채우고 원값이 아니라고 표시한다. 저장 설계는 서버가 만든 추천·로드맵 결과를 저장하지 않고, 쓰기 전에 원값을 구간 코드로 바꾸며, 자유 입력의 연령·출생 연도·소득 표현(예: 45세, 1980년생, 연봉 1억 2000만원, 월급 450만원)을 구간 이름으로, 소득 키워드 없이 ‘원’을 붙인 금액을 중립 표기 [금액]으로 가린다.",
     f"감사 대상 정정: 저장된 준식별자 {len(PSM['quasi_identifiers'])}개 조합 전체를 k={PSM['k']}로 감사한다(현재 번들: {QQ.get('groups', 0):,}개 셀 중 k 미만 {QQ.get('groups_below_k', 0):,}개, {QQ.get('users_below_k', 0):,}명 = {100 * (QQ.get('share_below_k') or 0):.1f}%). 2차본 초안의 ‘라우팅 k=20 충족’ 대신 실제 라우터 잎 크기를 잰다(운영 라우터 잎 {LFN.get('leaves')}개 중 20명 미만 {LFN.get('leaves_below')}개, 최소 {LFN.get('min_leaf')}명, λ={lam_txt}). 추천 경로 출력은 20명 미만 노드의 정확한 n과 원시 평균을 숨긴다.",
     f"반출 k-익명화: export-deid는 일반화 계층을 한 단계씩 적용하고 남은 작은 셀을 국소 억제해 모든 셀이 5명 이상일 때만 파일을 쓴다(현재 번들: 일반화 {len(RL.get('generalized', []))}단계, 억제 {RL.get('suppressed_rows', 0)}행, 삭제 {RL.get('removed_rows', 0)}행 → {RL.get('rows_out', 0):,}/{RL.get('rows_in', 0):,}행, 최소 셀 {RL.get('final_min_group')}명). 가명 번호·관심 주제·진단 수준은 내보내지 않는다.",
     f"공개 집단표: group_results·advanced_exposure에서 5명 미만 집단을 빼고 활성 5명 미만이면 활성 기준 값을 비운다(현재 번들은 해당 행 {PGR.get('rows_removed', 0)}건, 최소 셀 {PGR.get('min_users')}명).",
     f"QA: 개인정보 검사 {len(PSM['qa'])}건(원값·일분 비저장, 공개 셀 ≥ 5, 감사 열 누락 없음)을 번들 저장 전에 실행하고, 하나라도 실패하면 학습을 멈춘다(현재 {pq_ok}/{len(PSM['qa'])} 통과).",
     "가명처리 도구: `pseudonymize` 명령이 운영 원본의 외부 회원 ID를 HMAC-SHA256 가명과 연속 번호로 바꾼다. 키는 환경변수에서만 읽고(16자 미만이면 거부), 매핑표는 학습 입력 폴더 밖에만 쓰며, 로그의 일·분을 지운다.",
     "정책 구분: manifest의 privacy.policy를 ‘코드로 강제되는 항목’(강제하는 코드·검사 이름 포함)과 ‘조직 정책’(권한·망 분리, 역할 분리, 반출 심사, 접근 기록 감사, 외부 결합 통제, 보관·삭제, 재식별 금지)으로 나눴다. 현재는 모의 데이터라 실제 개인정보를 처리하지 않는다는 점과, 서비스 제공(이용자 동의·계약 근거)과 가명정보 특례(통계 작성·과학적 연구·공익적 기록 보존 목적의 재이용)의 구분을 중간보고서 4.5절에 적었다.",
-    "최종 검토 반영(5절 표): 학습 입력의 스키마 밖 열(외부 회원 ID·분 단위 시각·IP 등)을 읽을 때 버리고 번들 로그는 허용 열만 남긴다(QA 확인). 반출 표는 반출 값으로 정렬해 원래 학습자 순서를 지운다. API로 고를 수 있는 기법은 화면의 기법 목록뿐이고(임의 설정 번호는 개발 모드), 학습자 조회 API는 로컬 실행에서만 기본으로 켠다. 경로 출력은 크기 구간만 보이고 원시 평균을 내보내지 않으며, 공개 집단표는 보완 억제를 한다. 저장 설계 가림을 설계 이름·모든 문자열·여러 표기·이벤트 시각으로 넓혔고, 매핑표 경로는 실제 경로로 비교한다.",
+    "최종 검토 반영(5절 표): 학습 입력의 스키마 밖 열(외부 회원 ID·분 단위 시각·IP 등)을 읽을 때 버리고 번들 로그는 허용 열만 남긴다(QA 확인). 반출 표는 반출 값으로 정렬해 원래 학습자 순서를 지운다. API로 고를 수 있는 기법은 화면의 기법 목록뿐이고(임의 설정 번호는 개발 모드), 학습자 조회 API는 로컬 실행에서만 기본으로 켠다. 경로 출력은 크기 구간만 보이고 원시 평균을 내보내지 않으며, 공개 집단표는 보완 억제를 한다. 저장 설계 가림을 설계 이름·모든 문자열·여러 표기·이벤트 시각으로 넓혔고, 매핑표 경로는 실제 경로로 비교한다. 마지막 적대적 점검 뒤에는 금액 표기(억 뒤 아라비아 숫자·소수 억·원 단위·월급 환산)와 출생 연도를 더 읽고, 서버 출력은 저장하지 않으며, 학습자 조회를 켠 서버에서 저장한 설계는 꺼진 서버가 내려보내지 않게 했다.",
     f"검증: 개인정보 테스트 {npriv}건(tests/test_privacy.py)과 번들 전체 탐색(원시 연령·연소득 배열과 일·분 열이 어디에도 없음).",
 ]
 data["change10"] = f"원시 연령·연소득·일·분과 스키마 밖 열 비저장, 저장 준식별자 {len(PSM['quasi_identifiers'])}개 k=5 감사(서빙 학습자 표 확장 조합 포함), 라우터 잎 실측·경로 출력 크기 구간, export-deid(최소 셀 {RL.get('final_min_group')}명, 행 순서 제거), 공개 집단표 5명 미만 제외·보완 억제, 학습자 조회 API 로컬 한정·임의 설정 번호 차단, 개인정보 QA {len(PSM['qa'])}건, 가명처리 도구, 정책 구분."

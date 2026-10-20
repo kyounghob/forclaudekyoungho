@@ -22,6 +22,7 @@ from . import __version__
 from .config import GuardrailConfig
 from .nlparse import EXAMPLES, parse_onboarding
 from .pipeline import Bundle
+from .privacy import strip_outputs
 from .service import EVENT_FIELDS, LearnerInput, RecommendationService
 from .util import json_safe
 
@@ -283,6 +284,11 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
             raise HTTPException(422, "설계 이름이 비어 있습니다")
         return s
 
+    def _visible(d: dict) -> bool:
+        """학습자 조회를 켠 서버에서 저장한 설계(기준 학습자 선택·프로필 복사가 들어 있을 수 있음)는 꺼진 서버가 내려보내지 않는다.
+        표시가 없는 이전 파일도 켠 서버에서 저장한 것으로 본다."""
+        return bool(expose_learners) or d.get("saved_with_learners") is False
+
     @app.get("/api/designs")
     def list_designs():
         out = []
@@ -290,33 +296,38 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
             if fn.endswith(".json"):
                 with open(os.path.join(designs_dir, fn), encoding="utf-8") as f:
                     d = json.load(f)
-                out.append(dict(name=d.get("name", fn[:-5]), saved_at=d.get("saved_at"),
-                                summary=svc.scrub_design({"summary": str(d.get("summary", ""))})["summary"]))
+                if _visible(d):
+                    out.append(dict(name=d.get("name", fn[:-5]), saved_at=d.get("saved_at"),
+                                    summary=svc.scrub_design({"summary": str(d.get("summary", ""))})["summary"]))
         return out
 
     @app.post("/api/designs")
     def save_design(d: Design):
-        """쓰기 전에 연령·연소득 원값을 구간 코드로 바꾸고, 설계 이름과 모든 문자열의 연령·소득 표현을 구간 이름으로 가린다
-        (etfrec.privacy.scrub_design·scrub_text). 이름·주소 같은 그 밖의 개인 표현은 가리지 못하므로 입력하지 않는다."""
+        """쓰기 전에 서버가 만든 출력(추천·로드맵 결과: 학습자 프로필·통과 단원·학습 카드가 들어 있음)을 버리고, 연령·연소득 원값을 구간 코드로
+        바꾸고, 설계 이름과 모든 문자열의 연령·소득 표현을 구간 이름으로 가린다(etfrec.privacy.strip_outputs·scrub_design·scrub_text).
+        이름·주소 같은 그 밖의 개인 표현은 가리지 못하므로 입력하지 않는다."""
         name = _safe_name(svc.scrub_design({"name": d.name})["name"])          # 파일 이름에도 연령·소득이 남지 않게
-        clean = svc.scrub_design(d.payload)
+        clean = svc.scrub_design(strip_outputs(d.payload))
         payload = dict(name=name, saved_at=time.strftime("%Y-%m-%d %H:%M:%S"), payload=clean,
-                       summary=str(clean.get("summary", ""))[:120],
-                       privacy="연령·연소득은 구간 코드로만 저장, 문자열의 연령·소득 표현은 구간 이름으로 가림(이름 등 그 밖의 표현은 가리지 못함)")
+                       summary=str(clean.get("summary", ""))[:120], saved_with_learners=bool(expose_learners),
+                       privacy="추천·로드맵 결과는 저장하지 않음, 연령·연소득은 구간 코드로만 저장, 문자열의 연령·소득 표현은 구간 이름으로 가림"
+                               "(이름 등 그 밖의 표현은 가리지 못함)")
         with open(os.path.join(designs_dir, name + ".json"), "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
         return {"saved": name, "saved_at": payload["saved_at"]}
 
     @app.get("/api/designs/{name}")
     def get_design(name: str):
-        """불러오기: 원값을 다시 지우고(이전 파일 대비) state.learner의 연령·소득 입력란은 구간 대표값으로 채운다(원값 복원 아님)."""
+        """불러오기: 서버 출력과 원값을 다시 지우고(이전 파일 대비) state.learner의 연령·소득 입력란은 구간 대표값으로 채운다(원값 복원 아님)."""
         p = os.path.join(designs_dir, _safe_name(name) + ".json")
         if not os.path.exists(p):
             raise HTTPException(404, "저장된 설계가 없습니다")
         with open(p, encoding="utf-8") as f:
             d = json.load(f)
+        if not _visible(d):
+            raise HTTPException(404, "저장된 설계가 없습니다")
         if isinstance(d.get("payload"), dict):
-            d["payload"] = svc.load_design(d["payload"])
+            d["payload"] = svc.load_design(strip_outputs(d["payload"]))
         d["summary"] = svc.scrub_design({"summary": str(d.get("summary", ""))})["summary"]
         return d
 

@@ -10,6 +10,8 @@ CSV 스키마(운영 로그를 연결할 때 그대로 맞추면 된다)
     catalog.csv   item, title, topic, level, short
     두 CSV에서 위 스키마(와 profiles의 goal·horizon, study_log의 score·understood) 밖의 열은 읽을 때 버리고 이름을 summary.dropped_columns에
     남긴다(외부 회원 ID·분 단위 시각·IP 같은 열이 학습·번들로 들어가지 않게. 외부 ID는 `pseudonymize`로 먼저 바꾼다).
+    이벤트 스트림(한 행 = 조회·완료·퀴즈 같은 이벤트 하나)은 session_id 열을 함께 주면 (user, item, session_id) 단위 시도로 묶는다
+    (events_to_attempts: 플래그 OR, 시각은 첫 이벤트). 묶은 결과는 summary.attempt_grouping에 남고 세션 열은 버린다.
 """
 from __future__ import annotations
 
@@ -86,6 +88,36 @@ def _as_bool(col: pd.Series, name: str) -> pd.Series:
     return out.astype(bool)
 
 
+SESSION_COLUMN = "session_id"
+
+
+def events_to_attempts(log: pd.DataFrame, session_col: str = SESSION_COLUMN) -> tuple:
+    """이벤트 스트림을 시도 단위로 묶는다: 같은 (학습자, 단원, 세션)의 행이 한 시도다. 플래그는 OR, 시각(주차·일·시·분)은 그 시도의 첫 이벤트,
+    입력 점수가 있으면 최댓값·이해 여부는 OR. 세션 열이 없으면 이미 시도 단위로 보고 그대로 둔다(반환 (로그, None)).
+    묶지 않으면 조회 이벤트와 완료·퀴즈 이벤트가 따로 시도로 세어져 행동 점수(1 + 3)와 조회 수가 부풀려진다.
+    반환 (시도 로그, dict(events, attempts, merged, session_column)). 세션 열은 묶은 뒤 버린다(외부 세션 ID가 학습·번들로 들어가지 않게)."""
+    if session_col not in log.columns:
+        return log, None
+    lg = log.copy()
+    if lg[session_col].isna().any():
+        raise ValueError(f"{session_col} 열에 빈 값이 {int(lg[session_col].isna().sum())}건 있습니다(이벤트를 시도로 묶을 수 없음)")
+    for c in [c for c in BOOL_COLUMNS + ["understood"] if c in lg.columns]:
+        lg[c] = _as_bool(lg[c], c)
+    if "score" in lg.columns:
+        lg["score"] = pd.to_numeric(lg["score"]).astype(float)
+    times = [c for c in ("week", "day", "hour", "minute") if c in lg.columns]
+    lg = lg.sort_values(["user"] + times, kind="mergesort")
+    keys = ["user", "item", session_col]
+    agg = {c: "first" for c in lg.columns if c not in keys}
+    agg.update({c: "any" for c in BOOL_COLUMNS + ["understood"] if c in lg.columns})
+    if "score" in lg.columns:
+        agg["score"] = "max"
+    out = lg.groupby(keys, sort=False, as_index=False).agg(agg)
+    out = out.sort_values(["user"] + times, kind="mergesort").reset_index(drop=True)
+    out = out[[c for c in log.columns if c != session_col]]
+    return out, dict(events=int(len(log)), attempts=int(len(out)), merged=int(len(log) - len(out)), session_column=session_col)
+
+
 @dataclass
 class Dataset:
     profiles: pd.DataFrame
@@ -108,6 +140,7 @@ class Dataset:
         if not np.array_equal(self.profiles.user.values, np.arange(self.n_users)):
             raise ValueError("profiles.user는 0부터 연속된 번호여야 합니다(외부 회원 ID가 있으면 `python -m etfrec pseudonymize`로 "
                              "가명 번호로 바꾼 뒤 학습하세요)")
+        self.log, self.attempt_grouping = events_to_attempts(self.log)   # 세션 열이 있는 이벤트 스트림이면 시도 단위로 묶는다
         # 학습 스키마 밖 열(외부 회원 ID·분 단위 시각·IP 등)은 학습에도 저장에도 쓰지 않으므로 여기서 버리고 이름만 남긴다
         keep_p = set(PROFILE_COLUMNS) | set(OPTIONAL_PROFILE_COLUMNS)
         keep_l = set(LOG_COLUMNS) | {"score", "understood"}
@@ -187,6 +220,7 @@ class Dataset:
                     pass_without_quiz=int((lg.quiz_pass.astype(bool) & ~lg.quiz.astype(bool)).sum()),
                     quiz_without_complete=int((lg.quiz.astype(bool) & ~lg.complete.astype(bool)).sum()),
                     event_repairs=getattr(self, "event_repairs", None), dropped_columns=getattr(self, "dropped_columns", None),
+                    attempt_grouping=getattr(self, "attempt_grouping", None),
                     attempts_by_week={int(k): int(v) for k, v in lg.groupby("week").size().items()},
                     mastery_label_equals_quiz=bool(np.array_equal(lg.understood, lg.quiz_pass)),
                     distinct_pairs=int(lg.groupby(["user", "item"]).ngroups),

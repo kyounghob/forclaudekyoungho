@@ -2,8 +2,8 @@
 
 1. 저장 최소화 — 모델은 연령대·소득분위 구간 코드만 쓴다. 원시 연령·연소득은 학습 중 메모리에서 소득 5분위 경계를
    계산하는 데만 쓰고 번들에 남기지 않는다. 특징 저장소(features.FeatureStore)에는 원값 필드가 없고, 번들 프로필은
-   generalize_profiles, 번들 로그는 minimize_log(허용 열만: 일·분과 학습 스키마 밖 열 삭제)를 거친다. 저장 설계는 scrub_design이
-   원값을 구간 코드로 바꾸고 모든 문자열의 연령·소득 표현을 가린다.
+   generalize_profiles, 번들 로그는 minimize_log(허용 열만: 일·분과 학습 스키마 밖 열 삭제)를 거친다. 저장 설계는 strip_outputs가
+   서버 출력(추천·로드맵 결과)을 버리고, scrub_design이 원값을 구간 코드로 바꾸고 모든 문자열의 연령·소득·금액 표현을 가린다.
 2. 가명처리 — pseudonymize_ids·build_pseudonymized_inputs(CLI ``pseudonymize``): 외부 회원 ID → HMAC-SHA256 가명 → 연속 번호.
    운영 원본을 학습 입력으로 바꾸는 도구이며 모의 데이터 학습에는 쓰지 않는다(모의 데이터에는 외부 ID가 없다).
 3. 반출 k-익명화 — enforce_k_anonymity(CLI ``export-deid``): 일반화 계층을 한 단계씩 적용하고 남은 작은 셀은 국소 억제한다.
@@ -20,13 +20,14 @@ import copy
 import hashlib
 import hmac
 import re
+from datetime import date
 
 import numpy as np
 import pandas as pd
 
 from .catalog import EXPS, LABELS, RISKS
 from .config import GOALS, HORIZONS, SEG_VARS
-from .data import OPTIONAL_PROFILE_COLUMNS, PROFILE_COLUMNS
+from .data import OPTIONAL_PROFILE_COLUMNS, PROFILE_COLUMNS, SESSION_COLUMN, events_to_attempts
 from .features import AGE_BAND_REP, AGE_CUTS, income_quintile
 from .synth import LOG_COLUMNS
 
@@ -92,11 +93,12 @@ POLICY_IMPLEMENTED = [
               "API로 고를 수 있는 기법은 화면의 기법 목록(기법군 1위·라우터)뿐이고 임의 설정 번호는 개발 모드에서만 받는다",
          enforced_by=["service.RecommendationService.learners/learner", "FeatureStore.income_median", "api.create_app(expose_learners)",
                       "cli serve --expose-learners", "service.resolve_algorithm(allow_any_config)", "tests/test_privacy.py"]),
-    dict(item="저장 설계 최소화: /api/designs는 쓰기 전에 연령·연소득 원값을 구간 코드로 바꾸고(숫자로 읽을 수 없으면 버림), 설계 이름과 모든 문자열의 "
-              "연령·소득 표현(예: 45세, 45세 이상, 연봉 5,000만원, 연소득은 7천만원)과 키워드 없이 쓴 금액(1억 2천만원, 5천만원, 7000만원; 소득으로 보고 통째로)을 구간 이름으로 가리며, "
-              "이벤트의 일·분은 버리고 시각은 4개 시간대로 바꾼다. "
-              "그 밖의 표현(이름 등)은 가리지 못한다",
-         enforced_by=["privacy.scrub_design", "privacy.scrub_text", "api.save_design"]),
+    dict(item="저장 설계 최소화: /api/designs는 서버가 만든 추천·로드맵 결과(학습자 프로필·통과 단원·학습 카드)를 저장하지 않고, 연령·연소득 원값을 "
+              "구간 코드로 바꾸며(숫자로 읽을 수 없으면 버림), 설계 이름과 모든 문자열의 연령 표현(45세, 만 45세, 1980년생)과 소득 키워드가 붙은 금액"
+              "(연봉 5,000만원, 연소득은 7천만원, 연봉 1억 2000만원, 연봉 6천, 월급 450만원 → 연으로 환산)을 구간 이름으로, 키워드 없이 '원'을 붙여 쓴 금액"
+              "(1억 2천만원, 1.5억원, 65,000,000원)은 통째로 중립 표기 [금액]으로 가린다. 이벤트의 일·분은 버리고 시각은 4개 시간대로 바꾼다. "
+              "학습자 조회를 켠 서버에서 저장한 설계는 꺼진 서버가 내려보내지 않는다. 그 밖의 표현(이름 등)은 가리지 못한다",
+         enforced_by=["privacy.strip_outputs", "privacy.scrub_design", "privacy.scrub_text", "api.save_design", "api.get_design"]),
     dict(item="작은 셀 비공개: 추천 경로 출력은 노드 크기를 구간('20명 미만'·'20~49명'…)으로만 내보내고 원시 평균을 내보내지 않는다(부모−형제 차분으로 "
               "숨긴 노드를 복원하지 못하게). 집단별 표(group_results·advanced_exposure)는 5명 미만 집단을 빼고 활성 5명 미만이면 활성 기준 값을 비우며, "
               "한 변수에서 하나만 빠지면 가장 작은 집단을 하나 더 빼거나 비워(보완 억제) 합계 차분으로 복원되지 않게 한다",
@@ -296,20 +298,54 @@ def suppress_small_groups(df: pd.DataFrame, k: int = K_RELEASE) -> tuple:
 # ============================ 저장 설계 ============================
 _TEXT_KEYS = ("text", "memo", "summary", "label", "matched")       # 이전 호환용 이름(이제는 모든 문자열을 가린다)
 _AGE_RE = re.compile(r"(?<!\d)(\d{2})\s*(세|살)")                    # '45세 이상'·'만 45세'도 숫자 부분을 구간으로 바꾼다
-_MONEY = r"(?:(\d+)\s*억(?:\s*(\d)\s*천)?(?:\s*(\d)\s*백)?\s*(?:만\s*)?원?|(\d)\s*천\s*(?:(\d)\s*백\s*)?만\s*원?|(\d{1,3}(?:,\d{3})+|\d{3,5})\s*만\s*원?)"
-_INC_RE = re.compile(r"(연소득|연봉|소득|수입|연수입|월급)(?:\s*(?:은|는|이|가|을|를|:|=))?\s*(?:약\s*)?" + _MONEY)
-_MONEY_RE = re.compile(r"(?<![\d,.])" + _MONEY)                     # 키워드 없이 쓴 금액 전체(1억 2천만원·5천만원·5,000만원·7000만원·1억원)
+_BIRTH_RE = re.compile(r"(?<!\d)((?:19|20)\d{2}|\d{2})\s*년생")      # 1980년생·80년생 → 연령대
+# 금액(만원 단위로 환산). 억 뒤의 아라비아 숫자 만 단위(1억 2000만), 한글 천·백(1억 2천5백만), 소수 억(1.2억), 원 단위(65,000,000원)
+_AMOUNT = (r"(?P<dec>\d+\.\d+)\s*억"
+           r"|(?P<eok>\d+)\s*억(?:\s*(?P<eokm>\d{1,4}(?:,\d{3})?)\s*만|\s*(?P<eokth>\d)\s*천(?:\s*(?P<eokbk>\d)\s*백)?(?:\s*만)?"
+           r"|\s*(?P<eokbk2>\d)\s*백(?:\s*만)?)?"
+           r"|(?P<th>\d)\s*천(?:\s*(?P<thbk>\d)\s*백)?\s*만"
+           r"|(?P<man>\d{1,3}(?:,\d{3})+|\d{2,5})\s*만"
+           r"|(?P<won>\d{1,3}(?:,\d{3}){2,})(?=\s*원)")
+# 소득 키워드. 앞 글자가 한글이면 다른 낱말의 일부로 본다(연금소득·배당소득·소득공제의 '소득'은 학습자 소득이 아니다)
+_INC_KW = r"(?<![가-힣])(?P<kw>연소득|연봉|연수입|월\s*소득|월\s*수입|월급|세전\s*연봉|소득|수입)(?!\s*(?:공제|세|분위|구간|기준|대비|요건))"
+_MONTHLY = re.compile(r"월\s*소득|월\s*수입|월급")
+# 소득 키워드 뒤: 위 금액 + 만을 생략한 'N천(N백)'(연봉 6천) + 단위 없는 숫자(연소득 6000 → 만원으로 봄; 뒤에 년·개·% 같은 단위가 오면 아님)
+_INC_RE = re.compile(_INC_KW + r"(?:\s*(?:은|는|이|가|을|를|:|=))?\s*(?:약\s*)?(?:" + _AMOUNT
+                     + r"|(?P<kth>\d)\s*천(?:\s*(?P<kbk>\d)\s*백)?(?!\s*만)"
+                     + r"|(?P<bare>\d{3,5})(?![\d,.%]|\s*(?:만|억|천|원|년|개|명|세|살|월|일|주|회|위|분위|배)))\s*원?")
+_MONEY_RE = re.compile(r"(?<![\d,.])(?:" + _AMOUNT + r")\s*원")     # 키워드 없이 쓴 금액: '원'이 붙은 것만(개수·인원은 제외)
+_AMOUNT_RE = re.compile(r"(?<![\d,.])(?:" + _AMOUNT + r")")         # 값 하나를 읽을 때(입력란의 '5000만원'·'1억 2천')
+_MASKED_RE = re.compile(r"\[(?:" + "|".join(re.escape(x) for x in (*_AGE, *_INC, "금액")) + r")\]")   # 이미 가린 표기('[60세 이상]'은 다시 가리지 않음)
 _HOUR_BANDS = (10, 15, 22)                                           # 0~23시 → 4개 시간대(출근·점심·저녁·심야)
 
 
-def _money_manwon(m, base: int) -> float:
-    """_MONEY 그룹(base부터 6개) → 만원 단위 금액. 1억 2천만원 = 12,000, 7천만원 = 7,000, 5,000만원 = 5,000."""
-    eok, eok_th, eok_bk, th, th_bk, plain = (m.group(base + i) for i in range(6))
-    if eok:
-        return int(eok) * 10000 + int(eok_th or 0) * 1000 + int(eok_bk or 0) * 100
-    if th:
-        return int(th) * 1000 + int(th_bk or 0) * 100
-    return float(plain.replace(",", ""))
+def _amount_manwon(m) -> float:
+    """금액 정규식의 이름 그룹 → 만원 단위. 1억 2천만원·1억 2000만원 = 12,000, 1.5억 = 15,000, 7천만원 = 7,000, 65,000,000원 = 6,500."""
+    g = {k: v for k, v in m.groupdict().items() if v}
+    if "dec" in g:
+        v = float(g["dec"]) * 10000
+    elif "eok" in g:
+        v = int(g["eok"]) * 10000 + int(g.get("eokm", "0").replace(",", "")) + int(g.get("eokth", 0)) * 1000 + \
+            (int(g.get("eokbk", 0)) + int(g.get("eokbk2", 0))) * 100
+    elif "th" in g:
+        v = int(g["th"]) * 1000 + int(g.get("thbk", 0)) * 100
+    elif "man" in g:
+        v = float(g["man"].replace(",", ""))
+    elif "won" in g:
+        v = float(g["won"].replace(",", "")) / 10000
+    elif "kth" in g:
+        v = int(g["kth"]) * 1000 + int(g.get("kbk", 0)) * 100
+    else:
+        v = float(g["bare"])
+    return v * 12 if g.get("kw") and _MONTHLY.fullmatch(g["kw"]) else v                         # 월급·월 소득은 연으로 환산
+
+
+def income_from_text(text: str):
+    """문장에서 소득 키워드가 붙은 금액을 만원 단위로 읽는다(월급·월 소득은 12배). 키워드가 없는 금액은 목돈·적립액·한도일 수 있어
+    소득으로 보지 않는다(저장 설계 가림도 분위 없이 [금액]으로만 가린다). 못 읽으면 (None, None) — 자연어 파서와 저장 설계 가림이 같은
+    규칙을 쓴다."""
+    m = _INC_RE.search(text)
+    return (float(_amount_manwon(m)), m.group(0)) if m else (None, None)
 
 
 def _num(v):
@@ -336,8 +372,8 @@ def _parse_income(v):
     x = _num(v)
     if x is not None or not isinstance(v, str):
         return x
-    m = re.search(_MONEY, v)
-    return _money_manwon(m, 1) if m else None
+    m = _AMOUNT_RE.search(v)
+    return _amount_manwon(m) if m else None
 
 
 def _age_code(age):
@@ -354,13 +390,28 @@ def _label(var, code):
     return LABELS[var][code] if code is not None and 0 <= code < len(LABELS[var]) else "미상"
 
 
+def _birth_age(year: str) -> int:
+    y = int(year)
+    y = y if y >= 1900 else (1900 + y if y > date.today().year % 100 else 2000 + y)
+    return date.today().year - y
+
+
 def scrub_text(s: str, income_edges) -> str:
-    """자유 입력 문장의 연령(45세, 45세 이상, 만 45세)·소득(연봉 5,000만원, 연소득은 7천만원, 연봉 1억 2천만원) 표현과 키워드 없이 쓴
-    금액(1억 2천만원, 5천만원, 5,000만원, 7000만원, 1억원; 소득으로 보고 분위 이름으로)을 [구간 이름]으로 바꾼다. 금액은 통째로 바꾸므로
+    """자유 입력 문장의 연령(45세, 45세 이상, 만 45세, 1980년생·80년생)과 소득(연봉 5,000만원, 연소득은 7천만원, 연봉 1억 2000만원,
+    연봉 6천, 연소득 6000, 월급 450만원 → 연으로 환산) 표현을 [구간 이름]으로 바꾼다. 소득 키워드가 없는 금액은 '원'이 붙은 것만
+    중립 표기 [금액]으로 바꾼다(1억 2천만원·5,000만원·1.5억원·65,000,000원; 소득인지 알 수 없어 분위를 붙이지 않음). 금액은 통째로 바꾸므로
     '1억' 같은 앞부분이 남지 않는다. 이름·주소 같은 그 밖의 표현은 가리지 못한다."""
-    s = _AGE_RE.sub(lambda m: f"[{_label('age_band', _age_code(m.group(1)))}]", s)
-    s = _INC_RE.sub(lambda m: f"[{_label('income_q', _income_code(_money_manwon(m, 2), income_edges))}]", s)
-    return _MONEY_RE.sub(lambda m: f"[{_label('income_q', _income_code(_money_manwon(m, 1), income_edges))}]", s)
+    out, last = [], 0
+    for m in _MASKED_RE.finditer(s):                                  # 불러올 때 다시 가려도 결과가 같게, 이미 가린 표기는 건너뛴다
+        out += [_scrub_plain(s[last:m.start()], income_edges), m.group(0)]; last = m.end()
+    return "".join(out) + _scrub_plain(s[last:], income_edges)
+
+
+def _scrub_plain(s: str, income_edges) -> str:
+    s = _AGE_RE.sub(lambda m: f"[{_label('age_band', _age_code(m.group(1)))}]", s)          # 연령 먼저: 출생 연도의 구간 이름('[60세 이상]')을 다시 읽지 않게
+    s = _BIRTH_RE.sub(lambda m: f"[{_label('age_band', _age_code(_birth_age(m.group(1))))}]", s)
+    s = _INC_RE.sub(lambda m: f"[{_label('income_q', _income_code(_amount_manwon(m), income_edges))}]", s)
+    return _MONEY_RE.sub("[금액]", s)
 
 
 def _scrub_event(o: dict) -> dict:
@@ -370,6 +421,20 @@ def _scrub_event(o: dict) -> dict:
     if h is not None and h > 3:
         o["hour"] = int(np.digitize(h, _HOUR_BANDS))
     return o
+
+
+SERVER_OUTPUT_KEYS = ("result", "roadmap", "simResult", "compare", "typesResult", "learnerInfo")
+
+
+def strip_outputs(payload):
+    """저장 설계에서 서버가 만든 출력(추천·비교·시뮬레이션·로드맵·유형 결과, 기준 학습자 정보)을 뺀다. 불러올 때 다시 계산하므로 필요 없고,
+    학습자 프로필·통과 단원과 학습 카드 문장(제도 금액)이 들어 있어 저장하지 않는다. 최상위와 state 안을 본다."""
+    if not isinstance(payload, dict):
+        return payload
+    out = {k: v for k, v in payload.items() if k not in SERVER_OUTPUT_KEYS}
+    if isinstance(out.get("state"), dict):
+        out["state"] = {k: v for k, v in out["state"].items() if k not in SERVER_OUTPUT_KEYS}
+    return out
 
 
 def scrub_design(payload, income_edges):
@@ -443,6 +508,7 @@ def build_pseudonymized_inputs(raw_profiles: pd.DataFrame, raw_log: pd.DataFrame
     - 가명 = HMAC-SHA256 앞 16자, user = 가명 정렬 순서의 연속 번호(가입·ID 순서가 드러나지 않는다)
     - 로그: 외부 ID → user. 시각은 주차 + 4개 시간대로 축약(minute = 주 시작부터의 분, 모의 생성기와 같은 정의가 있으면
       거기서 시간대를 다시 계산)하고, day·minute 열은 형식 호환을 위해 0으로 채운다(같은 주 안의 순서는 행 순서로만 남는다)
+    - 이벤트 스트림이면(session_id 열) (학습자, 단원, 세션) 단위 시도로 묶고 세션 열은 버린다(data.events_to_attempts)
     - 학습 스키마(data.PROFILE_COLUMNS·goal·horizon / synth.LOG_COLUMNS·score·understood) 밖의 열은 버린다
     - 원시 연령·연소득은 남긴다(소득 분위 경계 계산에 필요). 학습 환경 밖으로 내보내지 않는다
     반환 (profiles, log, mapping[external_id, pseudonym, user]). mapping은 학습 환경 밖에 따로 보관한다."""
@@ -471,8 +537,9 @@ def build_pseudonymized_inputs(raw_profiles: pd.DataFrame, raw_log: pd.DataFrame
     unknown = int((~lid.isin(lookup)).sum())
     if unknown:
         raise ValueError(f"프로필에 없는 외부 ID의 로그가 {unknown}건 있습니다")
-    log = raw_log[[c for c in raw_log.columns if c in LOG_COLUMNS or c in ("score", "understood")]].copy()
+    log = raw_log[[c for c in raw_log.columns if c in LOG_COLUMNS or c in ("score", "understood", SESSION_COLUMN)]].copy()
     log["user"] = lid.map(lookup).astype(int).values
+    log, _ = events_to_attempts(log)
     if "minute" in log.columns:                                   # 주 안의 분 → 4개 시간대(출근·점심·저녁·심야)
         log["hour"] = np.digitize((log["minute"].astype(int) % 1440) // 60, [10, 15, 22])
         log = log.sort_values(["user", "week", "minute"], kind="stable")
