@@ -125,16 +125,34 @@ def test_unit_status_reads_common_positive_and_negative_forms():
             f"{U}는 통과하려고 공부 중이야.": "view", f"{U}는 통과하고 싶어.": "view", f"{U}는 미통과야.": "view", f"{U}는 불합격이었어.": "view",
             f"{U}는 통과할 줄 알았는데 떨어졌어.": "view",                       # 실패어가 마지막이면 통과가 아니다
             f"{U}는 퀴즈를 통과했고 점수가 조금 떨어졌지만 괜찮아.": "view"}       # 애매하면 통과로 보지 않는다(잘못 읽으면 후보에서 빠짐)
+    want.update({f"{U}는 퀴즈 점수가 40. 나머지는 다 통과했어.": "view",          # 숫자로 끝난 문장도 문장 끝이다(다음 문장의 통과를 읽지 않음)
+                 f"{U}는 2회차까지만 봤어, 진도율 30. 다른 단원은 다 완료했어.": "view",
+                 f"{U}는 통과 전에 포기했어.": "view", f"{U}는 완료 전에 포기했어.": "view", f"{U}는 통과 중간에 그만뒀어.": "view",
+                 f"{U}는 수강 중에 그만뒀어.": "view", f"{U}는 수강 중단했어.": "view", f"{U}는 수강 도중에 그만뒀어.": "view",
+                 f"{U}는 통과를 하지 못했어.": "view", f"{U}는 통과는 하지 못했어.": "view", f"{U}는 퀴즈 못 맞췄어.": "view",
+                 f"{U}는 못 끝냈어.": "view", f"{U}는 안 끝냈어.": "view", f"{U}는 통과하는 데에 실패했어.": "view", f"{U}는 통과한 적 없어.": "view",
+                 f"{U}는 통과할 거야.": "view", f"{U}는 통과 예정.": "view", f"{U}는 끝까지 보진 못했어.": "view", f"{U}는 끝까지 보지 않았어.": "view",
+                 f"{U}는 수강 신청만 했어.": "view", f"{U}는 통과 전부 했어.": "pass", f"{U}는 시간 안에 통과했어.": "pass",
+                 f"{U}는 한 번도 안 떨어지고 통과했어.": "pass", f"{U}는 1.5배속으로 보고 통과했어.": "pass"})
     for text, w in want.items():
         assert status(text) == [w], (text, status(text))
+    f = parse_onboarding("45세 직장인, 연소득 1억 2천만원, 'ETF란 무엇인가'는 처음엔 떨어졌는데 재시험에서 통과했어", cat)["fields"]
+    assert "placement" not in f and f["income"] == 12000.0                     # '처음엔'(부사)은 수준이 아니다
+    assert "placement" not in parse_onboarding("'ETF란 무엇인가'는 중간에 그만뒀어", cat)["fields"]
+    assert parse_onboarding("ETF는 처음 배워요", cat)["fields"]["placement"] == 1
+    from etfrec.nlparse import _clauses
+    assert _clauses("나이 45. 경험 없음") == [(0, 5), (6, 12)] and _clauses("1.5배, 1,000원") == [(0, 4), (5, 12)]   # 양쪽이 숫자일 때만 경계 아님
 
 
 def test_income_reads_eok_and_monthly_forms_like_design_scrub():
     for text, want in (("45세 직장인, 연소득 1억 2천만원, 연금 준비", 12000.0), ("45세, 연봉 1억5천만원", 15000.0), ("연봉 1억 2000만원", 12000.0),
                        ("월급 450만원 받는 직장인", 5400.0), ("연소득 1.2억", 12000.0), ("연봉 6천", 6000.0)):
         assert parse_onboarding(text, cat)["fields"]["income"] == want, text
-    for text in ("목돈 5000만원 있음", "연금소득 1,500만원 넘으면 어떻게 돼?", "ISA 한도 2,000만원"):
-        assert "income" not in parse_onboarding(text, cat)["fields"], text     # 소득 키워드가 없는 금액은 소득으로 읽지 않는다
+    for text in ("목돈 5000만원 있음", "연금소득 1,500만원 넘으면 어떻게 돼?", "ISA 한도 2,000만원", "부업 수입 50만원", "연봉 2024 기준 5천만원"):
+        assert "income" not in parse_onboarding(text, cat)["fields"], text     # 키워드가 없거나(부업·연도) 소득으로 볼 수 없는 금액
+    for text, want in (("한 달 수입 400만원인 직장인", 4800.0), ("매달 수입 300만원", 3600.0), ("연봉 5000 월급 400", 5000.0), ("연봉 60,000,000", 6000.0),
+                       ("연봉 6000 세후로는 적어", 6000.0)):
+        assert parse_onboarding(text, cat)["fields"]["income"] == want, text
 
 
 def test_experience_window_stays_in_its_clause():

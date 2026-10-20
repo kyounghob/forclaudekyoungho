@@ -348,7 +348,10 @@ def test_scrub_text_reads_more_income_and_age_forms():
     q5, q4, q2 = "[소득 5분위(상위 20%)]", "[소득 4분위]", "[소득 2분위]"
     cases = {"연봉 1억 2000만원": q5, "연봉 1억 2,000만원": q5, "연소득 1.2억": q5, "연봉 6천": q4, "연봉 6천5백": q4, "연봉 65,000,000원": q4,
              "연소득 6000": q4, "월급 450만원": q4, "월 소득 300만원": q2, "내 소득은 5천만원이야": "내 [소득 3분위]이야",   # 월급은 12배(연 5,400만원)
-             "연봉 2025년 기준": "연봉 2025년 기준", "65세": "[60세 이상]", "25세 직장인": "[29세 이하] 직장인"}
+             "연봉 2025년 기준": "연봉 2025년 기준", "65세": "[60세 이상]", "25세 직장인": "[29세 이하] 직장인",
+             "연봉 6000 세후로는 적어": f"{q4} 세후로는 적어", "연봉 4800 회사원": "[소득 3분위] 회사원", "연봉 5,000 정도": "[소득 3분위] 정도",
+             "연봉 60000000원": q4, "연봉 60,000,000": q4, "연봉 5000 월급 400": "[소득 3분위] [소득 3분위]", "연봉 2024 기준 5천만원": "연봉 2024 기준 [금액]",
+             "한 달 수입 400만원인 직장인": "[소득 3분위]인 직장인", "부업 수입 50만원": "부업 수입 [금액]"}   # 띄어 쓴 다음 낱말은 단위가 아니다
     born = date.today().year - 1980
     want_born = "[" + privacy._label("age_band", privacy._age_code(born)) + "]"
     cases.update({"1980년생": want_born, "80년생": want_born})
@@ -358,6 +361,12 @@ def test_scrub_text_reads_more_income_and_age_forms():
         assert scrub_text(got, E) == got, text                       # 불러올 때 다시 가려도 같다('[60세 이상]'이 '[[60세 이상] 이상]'이 되지 않음)
     assert privacy.income_from_text("45세 직장인, 연소득 1억 2천만원, 연금 준비") == (12000.0, "연소득 1억 2천만원")
     assert privacy.income_from_text("목돈 5000만원 있음")[0] is None and privacy.income_from_text("연금소득 1,500만원")[0] is None
+    for text in ("연봉 " + "9" * 400 + "억", "연소득 1" + "0" * 400 + ".5억"):                 # 아주 긴 숫자도 예외 없이 처리한다
+        assert scrub_text(text, E) == scrub_text(scrub_text(text, E), E) and privacy.income_from_text(text)[0] is None
+
+
+def c_parse(bundle, text):
+    return TestClient(create_app(bundle)).post("/api/parse", json={"text": text}).status_code
 
 
 def test_design_save_drops_server_outputs_and_hides_learner_designs_when_lookup_is_off(small_bundle, tmp_path):
@@ -380,6 +389,11 @@ def test_design_save_drops_server_outputs_and_hides_learner_designs_when_lookup_
     assert off.get("/api/designs/legacy").status_code == 404                   # 표시가 없는 이전 파일도 켠 서버의 것으로 본다
     got = on.get("/api/designs/legacy").json()
     assert "result" not in got["payload"] and [d["name"] for d in on.get("/api/designs").json()] == ["existing7", "legacy", "public1"]
+    assert off.post("/api/designs", json={"name": "existing7", "payload": {"summary": "x"}}).status_code == 409   # 볼 수 없는 설계는 덮어쓰지도
+    assert off.delete("/api/designs/existing7").status_code == 404 and (tmp_path / "existing7.json").exists()  # 지우지도 못한다
+    (tmp_path / "broken.json").write_text("{not json", encoding="utf-8")
+    assert on.get("/api/designs").status_code == 200 and off.get("/api/designs").status_code == 200        # 깨진 파일 하나가 목록을 막지 않는다
+    assert c_parse(small_bundle, "연봉 " + "9" * 400 + "억") == 200
 
 
 def test_design_scrub_covers_names_lists_events_and_more_forms(small_bundle, tmp_path):

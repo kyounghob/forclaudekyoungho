@@ -38,7 +38,9 @@ TOPIC_KEYWORDS = {
     "ESG ETF": ["esg", "그린워싱", "친환경"],
 }
 LEFT_BOUNDARY = {"금 etf", "금값", "금 가격"}            # 앞 글자가 한글이면 다른 단어의 일부(연금 ETF, 현금 가격)
-NOT_FOLLOWED_BY = {"보수": "적"}                          # '보수적'(위험성향)은 비용 주제가 아니다
+NOT_FOLLOWED_BY = {"보수": ("적",),                       # '보수적'(위험성향)은 비용 주제가 아니다
+                   "처음": ("엔", "에", "부터", "으로"),   # '처음엔 떨어졌는데'(부사)는 수준이 아니다
+                   "중간": ("에",)}                        # '중간에 그만뒀어'는 수준 2가 아니다
 INTEREST_CUES = ["관심", "궁금", "배우고", "알고 싶", "공부하고 싶"]
 LEVEL_WORDS = [(3, ["고급", "심화", "상급", "전문", "어려운"]), (2, ["중급", "중간"]), (1, ["초급", "입문", "처음", "기초", "초보", "왕초보", "쉬운"])]
 # 경험은 '경험'이라는 말 주변(앞 8자 ~ 뒤 14자)에서만 읽고, 가장 긴 표현을 고른다('1~3년'이 '3년'보다, '3년 이상'이 '3년'보다 우선).
@@ -73,7 +75,7 @@ EXAMPLES = [
 def _find(text, table):
     for value, words in table:
         for w in words:
-            if w in text:
+            if any(_ok_at(text, w, pos) for pos in _occurrences(text, w)):   # 경계 규칙('처음엔'·'중간에'·'보수적')을 지킨다
                 return value, w
     return None, None
 
@@ -89,8 +91,7 @@ def _ok_at(text, w, pos):
     """키워드 경계: LEFT_BOUNDARY 키워드는 앞 글자가 한글이면, NOT_FOLLOWED_BY 키워드는 뒤에 금지 글자가 오면 일치로 보지 않는다."""
     if w in LEFT_BOUNDARY and pos > 0 and "가" <= text[pos - 1] <= "힣":
         return False
-    nf = NOT_FOLLOWED_BY.get(w)
-    return not (nf and text.startswith(nf, pos + len(w)))
+    return not any(text.startswith(x, pos + len(w)) for x in NOT_FOLLOWED_BY.get(w, ()))
 
 
 def _longest(text, table, lo=0, hi=None, exclude=()):
@@ -112,19 +113,25 @@ PASS_VERBS = ("통과", "합격", "맞췄", "끝냈")
 DONE_VERBS = ("완료", "다 봤", "끝까지", "수강", "마쳤")
 FAIL_WORDS = ("떨어", "불합격", "미통과", "낙제")
 _NEG_PREFIX = ("미", "불")                                              # 미완료·미통과·불합격
+_NEG_BEFORE = re.compile(r"(?:^|[\s,])(?:못|안)\s*$")                    # 동사 바로 앞의 부정: '못 끝냈어'·'퀴즈 못 맞췄어'·'안 끝냈어'
 _NEG_AFTER = re.compile(                                                # 동사 바로 뒤의 부정·실패·의도·미완 표현
-    r"\s*(?:하지는|하지|하진|를|을|은|는|도|에는|에|이|가)?\s*"
-    r"(?:못|않|안\s*(?:했|됐|됨|함|해|돼|되)|안\s|실패|아직|하려|하고\s*싶|하는\s*데\s*실패|데\s*실패|목표"
+    r"\s*(?:전(?![부체])|중(?![요심])|도중)"                               # 조사 없이 바로 붙은 '전·중'(통과 전에, 수강 중에·중단·중간에·도중에)은 아직 아님
+    r"|\s*신청"                                                         # 수강 신청만 했어
+    r"|\s*(?:하지는|하지|하진|를|을|은|는|도|에는|에|이|가)?\s*(?:하지는|하지|하진)?\s*"
+    r"(?:못|않|안\s*(?:했|됐|됨|함|해|돼|되)|안\s|실패|아직|하려|하고\s*싶|(?:하는\s*)?데(?:에)?\s*실패|목표|예정|계획"
+    r"|할\s*(?:거|게|래|예정|계획|생각)|한\s*적\s*(?:이\s*|은\s*)?없"
     r"|전(?:이|인|임|\s*상태|$|\s*[.,!?)])|중(?:이|인|$|\s*[.,!?)]))"
-    r"|\s*\S{0,3}지\s*(?:는\s*)?못")                                     # '끝까지 보지 못했어'·'다 듣지 못했어'
+    r"|\s*\S{0,3}(?:지|진)\s*(?:는\s*|도\s*)?(?:못|않)")                 # '끝까지 보지 못했어'·'보진 못했어'·'보지 않았어'
 
 
 def _affirmed(gap: str, words, after: int = 0) -> bool:
-    """gap에서 after 위치 이후에 부정·실패가 붙지 않은 동사가 있는지. '통과하지 못했어'·'통과 안됐어'·'통과는 아직'·'통과 전이야'·
-    '통과하는 데 실패'·'미완료'·'불합격'·'수강 중'·'끝까지 보지 못했어'는 아니고, '통과는 전에 했어'·'수강을 전부 마쳤어'는 맞다."""
+    """gap에서 after 위치 이후에 부정·실패·계획이 붙지 않은 동사가 있는지. '통과하지 못했어'·'통과를 하지 못했어'·'못 끝냈어'·'통과 안됐어'·
+    '통과는 아직'·'통과 전에 포기했어'·'통과할 거야'·'통과한 적 없어'·'통과하는 데 실패'·'미완료'·'불합격'·'수강 중에 그만뒀어'·'수강 신청만'·
+    '끝까지 보진 못했어'는 아니고, '통과는 전에 했어'(조사가 끼면 '이전에')·'수강을 전부 마쳤어'는 맞다."""
     for w in words:
         for m in re.finditer(re.escape(w), gap):
-            if m.start() < after or gap[max(0, m.start() - 1):m.start()] in _NEG_PREFIX or _NEG_AFTER.match(gap, m.end()):
+            if (m.start() < after or gap[max(0, m.start() - 1):m.start()] in _NEG_PREFIX or _NEG_BEFORE.search(gap[:m.start()])
+                    or _NEG_AFTER.match(gap, m.end())):
                 continue
             return True
     return False
@@ -140,7 +147,7 @@ def _passed(gap: str) -> bool:
 def _clauses(text):
     """문장부호(. , ! ? 줄바꿈)로 나눈 구간 [(시작, 끝)]."""
     out, start = [], 0
-    for m in re.finditer(r"(?<!\d)[.,](?!\d)|[!?\n]", text):           # 숫자 사이의 점·쉼표(1.5배, 1,000)는 경계가 아니다
+    for m in re.finditer(r"(?<!\d)[.,]|[.,](?!\d)|[!?\n]", text):      # 양쪽이 모두 숫자인 점·쉼표(1.5배, 1,000)만 경계가 아니다
         out.append((start, m.start())); start = m.end()
     out.append((start, len(text)))
     return out
@@ -218,7 +225,7 @@ def parse_onboarding(text: str, catalog: Catalog) -> dict:
     verbs = []                                                       # 따옴표마다 그 뒤 동사 구간의 (통과, 완료)
     for k, mq in enumerate(quotes):
         nxt = quotes[k + 1].start() if k + 1 < len(quotes) else min(len(raw), mq.end() + 40)
-        end = re.search(r"(?<!\d)\.(?!\d)|[!?\n]", raw[mq.end():nxt])     # 동사는 같은 문장 안에서만 찾는다(1.5배속의 점은 문장 끝이 아님)
+        end = re.search(r"(?<!\d)\.|\.(?!\d)|[!?\n]", raw[mq.end():nxt])  # 동사는 같은 문장 안에서만(1.5배속의 점은 문장 끝이 아니고 '점수가 40.'은 끝)
         gap = raw[mq.end():mq.end() + end.start() if end else nxt]
         verbs.append((_passed(gap), _affirmed(gap, DONE_VERBS),
                       k + 1 < len(quotes) and re.fullmatch(r"\s*(와|과|,|및|하고|랑|이랑)\s*", gap) is not None))

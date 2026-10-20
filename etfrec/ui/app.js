@@ -131,7 +131,7 @@
     for (const k of ["placement", "exp", "risk", "mobile", "hour", "gender", "age", "income", "goal", "horizon"]) if (f[k] != null) L[k] = f[k];
     if (f.placement != null) state.touched.placement = true;
     if (f.goal != null || f.horizon != null) state.touched.goal = true;
-    if (f.events) L.events = f.events;
+    if (f.events) L.events = L.events.filter(e => e.source === "diagnosis").concat(f.events);   // 적용한 진단 통과 행은 남긴다
     if (f.k) state.settings.k = f.k;
     state.source = "new"; $$("input[name=source]").forEach(r => r.checked = r.value === "new"); $("#existing-picker").hidden = true;
     const names = { interests: "관심 주제", placement: "진단 수준", exp: "투자 경험", risk: "위험성향", mobile: "기기", hour: "학습 시간대", gender: "성별", age: "연령", income: "연소득(만원)", k: "추천 개수", events: "학습 기록", goal: "투자 목적", horizon: "투자 기간" };

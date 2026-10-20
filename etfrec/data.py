@@ -99,8 +99,12 @@ def events_to_attempts(log: pd.DataFrame, session_col: str = SESSION_COLUMN) -> 
     if session_col not in log.columns:
         return log, None
     lg = log.copy()
-    if lg[session_col].isna().any():
-        raise ValueError(f"{session_col} 열에 빈 값이 {int(lg[session_col].isna().sum())}건 있습니다(이벤트를 시도로 묶을 수 없음)")
+    blank = lg[session_col].isna() | (lg[session_col].astype(str).str.strip() == "")
+    if blank.any():
+        raise ValueError(f"{session_col} 열에 빈 값이 {int(blank.sum())}건 있습니다(이벤트를 시도로 묶을 수 없음)")
+    for c in ("user", "item"):                                         # 빈 번호는 groupby가 조용히 버리므로 먼저 거절한다
+        if c in lg.columns and lg[c].isna().any():
+            raise ValueError(f"{c} 열에 빈 값이 {int(lg[c].isna().sum())}건 있습니다")
     for c in [c for c in BOOL_COLUMNS + ["understood"] if c in lg.columns]:
         lg[c] = _as_bool(lg[c], c)
     if "score" in lg.columns:

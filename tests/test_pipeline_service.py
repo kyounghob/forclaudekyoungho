@@ -233,6 +233,10 @@ def test_event_stream_with_session_id_is_grouped_into_attempts():
     assert events_to_attempts(ds.log)[1] is None and Dataset(ds.profiles, ds.log, ds.catalog).attempt_grouping is None
     with pytest.raises(ValueError, match="session_id"):
         events_to_attempts(ev.assign(session_id=[None, "s1", "s2", "s1"]))
+    with pytest.raises(ValueError, match="session_id"):
+        events_to_attempts(ev.assign(session_id=["", "s1", " ", "s1"]))                         # 빈 세션 번호도 거절(모든 주가 한 시도가 됨)
+    with pytest.raises(ValueError, match="item"):
+        events_to_attempts(ev.assign(item=[3, np.nan, 3, 3]))                                  # 빈 단원 번호를 조용히 버리지 않는다
 
 
 def test_pairwise_models_cover_only_pair_users(small_bundle):

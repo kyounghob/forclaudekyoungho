@@ -284,6 +284,14 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
             raise HTTPException(422, "설계 이름이 비어 있습니다")
         return s
 
+    def _read_design(path: str) -> dict:
+        try:
+            with open(path, encoding="utf-8") as f:
+                d = json.load(f)
+        except (OSError, ValueError):
+            return {}
+        return d if isinstance(d, dict) else {}
+
     def _visible(d: dict) -> bool:
         """학습자 조회를 켠 서버에서 저장한 설계(기준 학습자 선택·프로필 복사가 들어 있을 수 있음)는 꺼진 서버가 내려보내지 않는다.
         표시가 없는 이전 파일도 켠 서버에서 저장한 것으로 본다."""
@@ -294,8 +302,7 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
         out = []
         for fn in sorted(os.listdir(designs_dir)):
             if fn.endswith(".json"):
-                with open(os.path.join(designs_dir, fn), encoding="utf-8") as f:
-                    d = json.load(f)
+                d = _read_design(os.path.join(designs_dir, fn))               # 읽지 못하는 파일 하나가 목록 전체를 막지 않게
                 if _visible(d):
                     out.append(dict(name=d.get("name", fn[:-5]), saved_at=d.get("saved_at"),
                                     summary=svc.scrub_design({"summary": str(d.get("summary", ""))})["summary"]))
@@ -307,12 +314,15 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
         바꾸고, 설계 이름과 모든 문자열의 연령·소득 표현을 구간 이름으로 가린다(etfrec.privacy.strip_outputs·scrub_design·scrub_text).
         이름·주소 같은 그 밖의 개인 표현은 가리지 못하므로 입력하지 않는다."""
         name = _safe_name(svc.scrub_design({"name": d.name})["name"])          # 파일 이름에도 연령·소득이 남지 않게
+        target = os.path.join(designs_dir, name + ".json")
+        if os.path.exists(target) and not _visible(_read_design(target)):     # 이 서버가 볼 수 없는 설계는 덮어쓰지 않는다
+            raise HTTPException(409, "같은 이름의 설계가 있어 저장하지 않았습니다. 다른 이름을 쓰세요")
         clean = svc.scrub_design(strip_outputs(d.payload))
         payload = dict(name=name, saved_at=time.strftime("%Y-%m-%d %H:%M:%S"), payload=clean,
                        summary=str(clean.get("summary", ""))[:120], saved_with_learners=bool(expose_learners),
                        privacy="추천·로드맵 결과는 저장하지 않음, 연령·연소득은 구간 코드로만 저장, 문자열의 연령·소득 표현은 구간 이름으로 가림"
                                "(이름 등 그 밖의 표현은 가리지 못함)")
-        with open(os.path.join(designs_dir, name + ".json"), "w", encoding="utf-8") as f:
+        with open(target, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
         return {"saved": name, "saved_at": payload["saved_at"]}
 
@@ -322,8 +332,7 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
         p = os.path.join(designs_dir, _safe_name(name) + ".json")
         if not os.path.exists(p):
             raise HTTPException(404, "저장된 설계가 없습니다")
-        with open(p, encoding="utf-8") as f:
-            d = json.load(f)
+        d = _read_design(p)
         if not _visible(d):
             raise HTTPException(404, "저장된 설계가 없습니다")
         if isinstance(d.get("payload"), dict):
@@ -335,6 +344,8 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
     def delete_design(name: str):
         p = os.path.join(designs_dir, _safe_name(name) + ".json")
         if os.path.exists(p):
+            if not _visible(_read_design(p)):                                  # 볼 수 없는 설계는 지우지도 못한다
+                raise HTTPException(404, "저장된 설계가 없습니다")
             os.remove(p)
         return {"deleted": name}
 

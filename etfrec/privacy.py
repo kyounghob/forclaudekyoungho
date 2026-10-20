@@ -299,53 +299,73 @@ def suppress_small_groups(df: pd.DataFrame, k: int = K_RELEASE) -> tuple:
 _TEXT_KEYS = ("text", "memo", "summary", "label", "matched")       # 이전 호환용 이름(이제는 모든 문자열을 가린다)
 _AGE_RE = re.compile(r"(?<!\d)(\d{2})\s*(세|살)")                    # '45세 이상'·'만 45세'도 숫자 부분을 구간으로 바꾼다
 _BIRTH_RE = re.compile(r"(?<!\d)((?:19|20)\d{2}|\d{2})\s*년생")      # 1980년생·80년생 → 연령대
-# 금액(만원 단위로 환산). 억 뒤의 아라비아 숫자 만 단위(1억 2000만), 한글 천·백(1억 2천5백만), 소수 억(1.2억), 원 단위(65,000,000원)
-_AMOUNT = (r"(?P<dec>\d+\.\d+)\s*억"
-           r"|(?P<eok>\d+)\s*억(?:\s*(?P<eokm>\d{1,4}(?:,\d{3})?)\s*만|\s*(?P<eokth>\d)\s*천(?:\s*(?P<eokbk>\d)\s*백)?(?:\s*만)?"
+# 금액(만원 단위로 환산). 억 뒤의 아라비아 숫자 만 단위(1억 2000만), 한글 천·백(1억 2천5백만), 소수 억(1.2억), 원 단위(65,000,000원·60000000원).
+# 자릿수에 상한을 둔다(아주 긴 숫자를 넣어도 변환이 넘치지 않게).
+_AMOUNT = (r"(?P<dec>\d{1,4}\.\d{1,4})\s*억"
+           r"|(?P<eok>\d{1,4})\s*억(?:\s*(?P<eokm>\d{1,4}(?:,\d{3})?)\s*만|\s*(?P<eokth>\d)\s*천(?:\s*(?P<eokbk>\d)\s*백)?(?:\s*만)?"
            r"|\s*(?P<eokbk2>\d)\s*백(?:\s*만)?)?"
            r"|(?P<th>\d)\s*천(?:\s*(?P<thbk>\d)\s*백)?\s*만"
-           r"|(?P<man>\d{1,3}(?:,\d{3})+|\d{2,5})\s*만"
-           r"|(?P<won>\d{1,3}(?:,\d{3}){2,})(?=\s*원)")
-# 소득 키워드. 앞 글자가 한글이면 다른 낱말의 일부로 본다(연금소득·배당소득·소득공제의 '소득'은 학습자 소득이 아니다)
-_INC_KW = r"(?<![가-힣])(?P<kw>연소득|연봉|연수입|월\s*소득|월\s*수입|월급|세전\s*연봉|소득|수입)(?!\s*(?:공제|세|분위|구간|기준|대비|요건))"
-_MONTHLY = re.compile(r"월\s*소득|월\s*수입|월급")
-# 소득 키워드 뒤: 위 금액 + 만을 생략한 'N천(N백)'(연봉 6천) + 단위 없는 숫자(연소득 6000 → 만원으로 봄; 뒤에 년·개·% 같은 단위가 오면 아님)
+           r"|(?P<man>\d{1,3}(?:,\d{3}){1,2}|\d{2,5})\s*만"
+           r"|(?P<won>\d{1,3}(?:,\d{3}){2,4}|\d{7,13})(?=\s*원)")
+# 소득 키워드. 앞 글자가 한글이면 다른 낱말의 일부로 보고(연금소득·배당소득·소득공제의 '소득'은 학습자 소득이 아니다), 부업·가구·배우자처럼
+# 다른 사람이나 다른 벌이를 가리키는 수식어가 붙어도 학습자 소득으로 보지 않는다. 한 달·매달·매월·월 + 소득·수입과 월급은 월 금액이다
+_INC_KW = (r"(?<![가-힣])(?<!부업 )(?<!가구 )(?<!부부 )(?<!배우자 )(?<!남편 )(?<!아내 )"
+           r"(?P<kw>연소득|연봉|연수입|(?:한\s*달|매달|매월|월)\s*(?:소득|수입)|월급|세전\s*연봉|소득|수입)"
+           r"(?!\s*(?:공제|세|분위|구간|기준|대비|요건))")
+_MONTHLY = re.compile(r"(?:한\s*달|매달|매월|월)\s*(?:소득|수입)|월급")
+# 소득 키워드 뒤: 위 금액 + 만을 생략한 'N천(N백)'(연봉 6천) + 원을 생략한 원 단위(연봉 60,000,000) + 단위 없는 숫자(연소득 6000·5,000 → 만원).
+# 단위 없는 숫자는 바로 붙은 단위(6000년·5000명·45세)나 띄어 쓴 만·억·천·원이 오면 아니고, 1950~2039 뒤에 년·기준이 오면 연도로 본다.
+# 띄어 쓴 다음 낱말('연봉 6000 세후')은 단위로 보지 않는다
 _INC_RE = re.compile(_INC_KW + r"(?:\s*(?:은|는|이|가|을|를|:|=))?\s*(?:약\s*)?(?:" + _AMOUNT
                      + r"|(?P<kth>\d)\s*천(?:\s*(?P<kbk>\d)\s*백)?(?!\s*만)"
-                     + r"|(?P<bare>\d{3,5})(?![\d,.%]|\s*(?:만|억|천|원|년|개|명|세|살|월|일|주|회|위|분위|배)))\s*원?")
+                     + r"|(?P<bigwon>\d{1,3}(?:,\d{3}){2,4}|\d{7,13})(?!\d|[,.]\d)"
+                     + r"|(?!(?:19[5-9]\d|20[0-3]\d)\s*(?:년|기준))(?P<bare>\d{1,2},\d{3}|\d{3,5})"
+                     + r"(?!\d|[,.]\d|%|\s*(?:만|억|천|원)|(?:년|개|명|세|살|월|일|주|회|위|분|배|번|차|등|점|시간)))(?:\s*원)?")   # 뒤 공백은 남긴다
 _MONEY_RE = re.compile(r"(?<![\d,.])(?:" + _AMOUNT + r")\s*원")     # 키워드 없이 쓴 금액: '원'이 붙은 것만(개수·인원은 제외)
 _AMOUNT_RE = re.compile(r"(?<![\d,.])(?:" + _AMOUNT + r")")         # 값 하나를 읽을 때(입력란의 '5000만원'·'1억 2천')
 _MASKED_RE = re.compile(r"\[(?:" + "|".join(re.escape(x) for x in (*_AGE, *_INC, "금액")) + r")\]")   # 이미 가린 표기('[60세 이상]'은 다시 가리지 않음)
 _HOUR_BANDS = (10, 15, 22)                                           # 0~23시 → 4개 시간대(출근·점심·저녁·심야)
 
 
-def _amount_manwon(m) -> float:
-    """금액 정규식의 이름 그룹 → 만원 단위. 1억 2천만원·1억 2000만원 = 12,000, 1.5억 = 15,000, 7천만원 = 7,000, 65,000,000원 = 6,500."""
+def _amount_manwon(m):
+    """금액 정규식의 이름 그룹 → 만원 단위. 1억 2천만원·1억 2000만원 = 12,000, 1.5억 = 15,000, 7천만원 = 7,000, 65,000,000원 = 6,500.
+    월급·월 소득은 12배로 연 금액이 된다. 읽을 수 없으면(넘침·무한대) None."""
     g = {k: v for k, v in m.groupdict().items() if v}
-    if "dec" in g:
-        v = float(g["dec"]) * 10000
-    elif "eok" in g:
-        v = int(g["eok"]) * 10000 + int(g.get("eokm", "0").replace(",", "")) + int(g.get("eokth", 0)) * 1000 + \
-            (int(g.get("eokbk", 0)) + int(g.get("eokbk2", 0))) * 100
-    elif "th" in g:
-        v = int(g["th"]) * 1000 + int(g.get("thbk", 0)) * 100
-    elif "man" in g:
-        v = float(g["man"].replace(",", ""))
-    elif "won" in g:
-        v = float(g["won"].replace(",", "")) / 10000
-    elif "kth" in g:
-        v = int(g["kth"]) * 1000 + int(g.get("kbk", 0)) * 100
-    else:
-        v = float(g["bare"])
-    return v * 12 if g.get("kw") and _MONTHLY.fullmatch(g["kw"]) else v                         # 월급·월 소득은 연으로 환산
+    try:
+        if "dec" in g:
+            v = float(g["dec"]) * 10000
+        elif "eok" in g:
+            v = int(g["eok"]) * 10000 + int(g.get("eokm", "0").replace(",", "")) + int(g.get("eokth", 0)) * 1000 + \
+                (int(g.get("eokbk", 0)) + int(g.get("eokbk2", 0))) * 100
+        elif "th" in g:
+            v = int(g["th"]) * 1000 + int(g.get("thbk", 0)) * 100
+        elif "man" in g:
+            v = float(g["man"].replace(",", ""))
+        elif "won" in g or "bigwon" in g:
+            v = float(g.get("won", g.get("bigwon", "")).replace(",", "")) / 10000
+        elif "kth" in g:
+            v = int(g["kth"]) * 1000 + int(g.get("kbk", 0)) * 100
+        elif "bare" in g:
+            v = float(g["bare"].replace(",", ""))
+        else:
+            return None
+        v = float(v)
+    except (OverflowError, ValueError):
+        return None
+    if not np.isfinite(v):
+        return None
+    return v * 12 if g.get("kw") and _MONTHLY.fullmatch(g["kw"]) else v
 
 
 def income_from_text(text: str):
-    """문장에서 소득 키워드가 붙은 금액을 만원 단위로 읽는다(월급·월 소득은 12배). 키워드가 없는 금액은 목돈·적립액·한도일 수 있어
+    """문장에서 소득 키워드가 붙은 금액을 만원 단위로 읽는다(월급·한 달 수입은 12배). 키워드가 없는 금액은 목돈·적립액·한도일 수 있어
     소득으로 보지 않는다(저장 설계 가림도 분위 없이 [금액]으로만 가린다). 못 읽으면 (None, None) — 자연어 파서와 저장 설계 가림이 같은
     규칙을 쓴다."""
-    m = _INC_RE.search(text)
-    return (float(_amount_manwon(m)), m.group(0)) if m else (None, None)
+    for m in _INC_RE.finditer(text):
+        v = _amount_manwon(m)
+        if v is not None:
+            return float(v), m.group(0)
+    return None, None
 
 
 def _num(v):
@@ -401,16 +421,25 @@ def scrub_text(s: str, income_edges) -> str:
     연봉 6천, 연소득 6000, 월급 450만원 → 연으로 환산) 표현을 [구간 이름]으로 바꾼다. 소득 키워드가 없는 금액은 '원'이 붙은 것만
     중립 표기 [금액]으로 바꾼다(1억 2천만원·5,000만원·1.5억원·65,000,000원; 소득인지 알 수 없어 분위를 붙이지 않음). 금액은 통째로 바꾸므로
     '1억' 같은 앞부분이 남지 않는다. 이름·주소 같은 그 밖의 표현은 가리지 못한다."""
-    out, last = [], 0
-    for m in _MASKED_RE.finditer(s):                                  # 불러올 때 다시 가려도 결과가 같게, 이미 가린 표기는 건너뛴다
-        out += [_scrub_plain(s[last:m.start()], income_edges), m.group(0)]; last = m.end()
-    return "".join(out) + _scrub_plain(s[last:], income_edges)
+    for _ in range(4):                                                # 다시 가려도 같아질 때까지: 저장한 글을 불러올 때 다시 가려도 바뀌지 않는다
+        out, last = [], 0
+        for m in _MASKED_RE.finditer(s):                              # 이미 가린 표기는 건너뛴다
+            out += [_scrub_plain(s[last:m.start()], income_edges), m.group(0)]; last = m.end()
+        t = "".join(out) + _scrub_plain(s[last:], income_edges)
+        if t == s:
+            break
+        s = t
+    return s
+
+
+def _income_mask(v, income_edges) -> str:
+    return "[금액]" if v is None else f"[{_label('income_q', _income_code(v, income_edges))}]"   # 읽을 수 없는 금액도 숫자는 가린다
 
 
 def _scrub_plain(s: str, income_edges) -> str:
     s = _AGE_RE.sub(lambda m: f"[{_label('age_band', _age_code(m.group(1)))}]", s)          # 연령 먼저: 출생 연도의 구간 이름('[60세 이상]')을 다시 읽지 않게
     s = _BIRTH_RE.sub(lambda m: f"[{_label('age_band', _age_code(_birth_age(m.group(1))))}]", s)
-    s = _INC_RE.sub(lambda m: f"[{_label('income_q', _income_code(_amount_manwon(m), income_edges))}]", s)
+    s = _INC_RE.sub(lambda m: _income_mask(_amount_manwon(m), income_edges), s)
     return _MONEY_RE.sub("[금액]", s)
 
 
