@@ -130,6 +130,23 @@ def test_build_pseudonymized_inputs_coarsens_and_separates_mapping():
     assert log2[(log2.user == m["B-2"]) & (log2["item"] == 2)].complete.tolist() == [True]
 
 
+@pytest.mark.parametrize("bad_id", [None, np.nan, pd.NA, "", "  ", "\t\n"])
+@pytest.mark.parametrize("table", ["profiles", "log"])
+def test_pseudonymize_rejects_missing_external_ids_before_string_conversion(bad_id, table):
+    prof, raw_log = _raw_inputs()
+    frame = prof if table == "profiles" else raw_log
+    frame.loc[0, "member_id"] = bad_id
+    with pytest.raises(ValueError, match=f"{table}.*외부 ID.*빈 값"):
+        build_pseudonymized_inputs(prof, raw_log, "member_id", KEY)
+
+
+@pytest.mark.parametrize("state", [[1], "corrupt", 3, True, None])
+def test_hydrate_design_tolerates_non_mapping_state(state):
+    payload = {"state": state, "memo": "설계 메모"}
+    result = privacy.hydrate_design(payload, np.array([1000, 2000, 3000, 4000, 5000]))
+    assert result == payload and result is not payload
+
+
 def test_pseudonymize_cli_requires_env_key_and_external_mapping(tmp_path, monkeypatch):
     prof, raw_log = _raw_inputs()
     pc, lc = tmp_path / "raw_profiles.csv", tmp_path / "raw_log.csv"

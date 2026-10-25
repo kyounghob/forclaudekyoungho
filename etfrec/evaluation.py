@@ -110,23 +110,32 @@ def make_select(cands: CandidateBatch, lb: LearnerBatch, catalog: Catalog, k=K, 
 # ---------- 지표 ----------
 def row_metrics(sel, cands: CandidateBatch, item_cat, k=K):
     """행별 NDCG@k(이진), Hit@k, Diversity@k(실제 표시된 쌍만), 선택 아이템."""
-    sel = np.asarray(sel, dtype=int)[:, :k]; k = sel.shape[1]
+    if not isinstance(k, (int, np.integer)) or k < 1:
+        raise ValueError("k는 양의 정수여야 합니다")
+    sel = np.asarray(sel, dtype=int)
+    if sel.ndim != 2 or sel.shape[0] != cands.R:
+        raise ValueError("선택 배열은 후보와 같은 행 수의 2차원 배열이어야 합니다")
+    sel = sel[:, :k]
+    width = sel.shape[1]
     valid = (sel >= 0) & (sel < cands.L); s0 = np.where(valid, sel, 0)
     if cands.L == 0:
-        z = np.zeros(cands.R); return z, z.copy(), z.copy(), np.full((cands.R, k), -1)
+        z = np.zeros(cands.R); return z, z.copy(), z.copy(), np.full((cands.R, width), -1)
     valid &= np.take_along_axis(cands.valid, s0, 1)
     gains = np.take_along_axis(cands.rel, s0, 1) & valid
-    disc = 1 / np.log2(np.arange(2, k + 2))
+    disc = 1 / np.log2(np.arange(2, width + 2))
     dcg = (gains * disc).sum(1)
     nrel = cands.rel.sum(1) if cands.full_relevant_count is None else np.asarray(cands.full_relevant_count)
+    if nrel.shape != (cands.R,) or not np.isfinite(nrel).all() or (nrel < 0).any():
+        raise ValueError("IDCG 정답 수는 행별 유한한 비음수여야 합니다")
     nrel = np.minimum(nrel, k).astype(int)
-    cs = np.r_[0, np.cumsum(disc)]; idcg = cs[nrel]
+    # 표시 길이가 k보다 짧아도 IDCG는 요청된 k와 고정 정답 수를 기준으로 한다.
+    cs = np.r_[0, np.cumsum(1 / np.log2(np.arange(2, k + 2)))]; idcg = cs[nrel]
     nd = np.divide(dcg, idcg, out=np.zeros_like(dcg), where=idcg > 0)
     items = np.where(valid, np.take_along_axis(cands.cand0, s0, 1), -1)
     cats = np.asarray(item_cat)[np.maximum(items, 0)]
     same = np.zeros(cands.R); pairs = np.zeros(cands.R)
-    for a in range(k):
-        for b in range(a + 1, k):
+    for a in range(width):
+        for b in range(a + 1, width):
             pair = valid[:, a] & valid[:, b]
             pairs += pair; same += pair & (cats[:, a] == cats[:, b])
     div = np.divide(pairs - same, pairs, out=np.zeros_like(pairs), where=pairs > 0)
@@ -146,21 +155,57 @@ def bootstrap_ci(x, n=500, seed=SEED):
 
 # ---------- 평가 자료 ----------
 def primary_eval(week: int, F: FeatureStore, log: pd.DataFrame, catalog: Catalog, guard: GuardrailConfig) -> tuple:
-    """평가 주 week에 학습 기록이 있는 학습자마다 후보(미통과·수준 가드레일)와 정답(그 주 퀴즈 통과)."""
+    """평가 주에 시도한 사용자만 평가한다(전체 가입자나 A/B 배정자가 아님).
+
+    정답 집합은 추천 직전 미통과·수준 조건을 충족한 단원의 다음 주 통과다.
+    선수 조건은 추천 후보만 제한한다. 선수 필터로 정답을 지우지 않고 동일한
+    full_relevant_count로 IDCG를 계산하므로 필터 전후 지표를 비교할 수 있다.
+    같은 주 여러 번 통과한 단원은 한 정답이고, 이전 주 기통과의 재통과는 제외한다.
+    """
+    from dataclasses import replace
+
+    if F.week != week:
+        raise ValueError("특징 스냅샷과 평가 주가 다릅니다")
     wk = log[log.week == week]
     users = np.unique(wk.user.values)
-    C = np.full((len(users), catalog.n_items), -1, dtype=int); R = np.zeros_like(C, dtype=bool)
+    if len(users) == 0:
+        raise ValueError(f"평가 주 {week}에 학습 로그가 없습니다")
+    C = np.full((len(users), catalog.n_items), -1, dtype=int)
+    R = np.zeros_like(C, dtype=bool)
     passed = np.zeros((F.n, catalog.n_items), bool)
-    lg = wk[wk.quiz_pass]; passed[lg.user.values, lg.item.values] = True
-    raw = int(passed.sum())
+    lg = wk[wk.quiz_pass]
+    passed[lg.user.values, lg.item.values] = True
+    reference_guard = replace(guard, prereq_block=False)
+    reference_count = np.zeros(len(users), dtype=int)
     for r, u in enumerate(users):
-        ca = candidate_items(F.und[u], F.level[u], catalog, guard)
-        C[r, :len(ca)] = ca; R[r, :len(ca)] = passed[u, ca]
+        base = candidate_items(F.und[u], F.level[u], catalog, reference_guard)
+        reference_count[r] = passed[u, base].sum()
+        ca = base if not guard.prereq_block else candidate_items(F.und[u], F.level[u], catalog, guard)
+        C[r, :len(ca)] = ca
+        R[r, :len(ca)] = passed[u, ca]
     cands = CandidateBatch(users, C, R)
-    cands.audit = dict(mode="next-week observed quiz-pass; hard-eligible unmastered units", week=int(week), rows=int(len(users)),
-                       zero_observed_target=int((R.sum(1) == 0).sum()), raw_positive_items=raw, eligible_positive_items=int(R.sum()),
-                       raw_positive_users=int(passed[users].any(1).sum()), eligible_positive_users=int((R.sum(1) > 0).sum()),
-                       eligible_min=int(cands.valid.sum(1).min()), eligible_max=int(cands.valid.sum(1).max()))
+    cands.full_relevant_count = reference_count
+    selectable_count = R.sum(1)
+    cands.audit = dict(
+        mode="next-week observed quiz-pass; targets fixed before prerequisite filtering",
+        week=int(week), rows=int(len(users)), population="users with at least one attempt in the evaluation week",
+        dataset_users=int(F.n), zero_observed_target=int((reference_count == 0).sum()),
+        zero_selectable_target=int((selectable_count == 0).sum()),
+        raw_positive_items=int(passed.sum()), eligible_positive_items=int(reference_count.sum()),
+        selectable_positive_items=int(selectable_count.sum()),
+        prerequisite_blocked_positive_items=int(reference_count.sum() - selectable_count.sum()),
+        raw_positive_users=int(passed[users].any(1).sum()),
+        eligible_positive_users=int((reference_count > 0).sum()),
+        selectable_positive_users=int((selectable_count > 0).sum()),
+        eligible_min=int(cands.valid.sum(1).min()), eligible_max=int(cands.valid.sum(1).max()),
+        guardrail=dict(guard.__dict__),
+        target_policy="unique evaluation-week quiz passes, unpassed and level-eligible at snapshot; prerequisite filter excluded from target definition",
+        idcg_policy="sum of 1/log2(rank+1) through min(full_relevant_count, k); unchanged by prerequisite filtering",
+        repeat_pass_policy="deduplicate within evaluation week; previously passed units excluded when exclude_passed=True",
+        zero_target_policy="retain as NDCG=0; also report positive-target-user mean",
+        short_list_policy="pad with -1; padded ranks have zero gain; fixed k IDCG",
+        aggregation="one request per evaluation-week active user; arithmetic user mean",
+    )
     lb = LearnerBatch.from_store(F, users)
     return cands, lb
 

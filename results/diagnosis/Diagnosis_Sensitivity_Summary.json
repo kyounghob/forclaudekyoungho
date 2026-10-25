@@ -1,0 +1,331 @@
+{
+  "execution": "completed",
+  "evaluation_users": 6544,
+  "synthetic_population": 15000,
+  "seed": 42,
+  "response_seed": 20261752,
+  "questions": 20,
+  "unique_pass_eligible_units": 17,
+  "assumptions": {
+    "probability_rows": "original placement 1,2,3; columns question level 1,2,3",
+    "correct_probability": {
+      "conservative": [
+        [
+          0.4,
+          0.25,
+          0.25
+        ],
+        [
+          0.65,
+          0.45,
+          0.25
+        ],
+        [
+          0.8,
+          0.65,
+          0.45
+        ]
+      ],
+      "central": [
+        [
+          0.6,
+          0.3,
+          0.25
+        ],
+        [
+          0.8,
+          0.6,
+          0.35
+        ],
+        [
+          0.9,
+          0.8,
+          0.6
+        ]
+      ],
+      "optimistic": [
+        [
+          0.75,
+          0.45,
+          0.3
+        ],
+        [
+          0.9,
+          0.75,
+          0.5
+        ],
+        [
+          0.97,
+          0.9,
+          0.75
+        ]
+      ]
+    },
+    "all_questions_answered": true,
+    "wrong_option": "(correct_option+1) mod 4",
+    "common_random_uniforms": true,
+    "diagnosis_merge": "und OR recognised; level=max(existing study-derived level, diagnosis level)",
+    "no_prerequisite_backfill": true,
+    "behaviour_matrix_unchanged": true,
+    "cohort": "no_study_history means no study attempts before recommendation, before adding diagnostic recognition"
+  },
+  "leakage_control": "Answers use only original placement and independent random uniforms. Neither generated future quiz outcomes nor future study records enter answers. theta in the generator is topic preference, not mastery, and was not used.",
+  "limitation": "Hypothetical sensitivity only. This does not estimate real diagnostic item accuracy, real service shortlist frequency, diagnosis validity, or learning effects. Independent question correctness and recognition of every correct answer can falsely credit guessing; no latent knowledge truth is available to quantify that error. No pass is inferred for an untested prerequisite.",
+  "decision": "Do not automatically add entry units because of the old 52% rate. Re-measure on actual diagnosis-plus-study records in pilot; expand reviewed introductory units only if genuine shortages remain.",
+  "baseline": [
+    {
+      "scenario": "no_diagnosis",
+      "cohort": "all",
+      "users": 6544,
+      "candidate_mean": 5.45018337408313,
+      "candidate_median": 4.0,
+      "short_list_users": 3403,
+      "short_list_rate": 0.5200183374083129,
+      "displayed_mean": 4.45476772616137,
+      "empty_users": 0,
+      "four_units_users": 3238,
+      "diagnosis_recognised_units_mean": 0.0,
+      "level_increased_users": 0,
+      "current_stage_core_users": 6544,
+      "current_stage_goal_users": 0,
+      "current_stage_advanced_users": 0,
+      "current_stage_connect_users": 0
+    },
+    {
+      "scenario": "no_diagnosis",
+      "cohort": "no_study_history",
+      "users": 928,
+      "candidate_mean": 4.0,
+      "candidate_median": 4.0,
+      "short_list_users": 928,
+      "short_list_rate": 1.0,
+      "displayed_mean": 4.0,
+      "empty_users": 0,
+      "four_units_users": 928,
+      "diagnosis_recognised_units_mean": 0.0,
+      "level_increased_users": 0,
+      "current_stage_core_users": 928,
+      "current_stage_goal_users": 0,
+      "current_stage_advanced_users": 0,
+      "current_stage_connect_users": 0
+    },
+    {
+      "scenario": "no_diagnosis",
+      "cohort": "has_study_history",
+      "users": 5616,
+      "candidate_mean": 5.689814814814815,
+      "candidate_median": 5.0,
+      "short_list_users": 2475,
+      "short_list_rate": 0.4407051282051282,
+      "displayed_mean": 4.52991452991453,
+      "empty_users": 0,
+      "four_units_users": 2310,
+      "diagnosis_recognised_units_mean": 0.0,
+      "level_increased_users": 0,
+      "current_stage_core_users": 5616,
+      "current_stage_goal_users": 0,
+      "current_stage_advanced_users": 0,
+      "current_stage_connect_users": 0
+    }
+  ],
+  "scenarios": [
+    {
+      "scenario": "conservative",
+      "cohort": "all",
+      "users": 6544,
+      "candidate_mean": 14.829156479217604,
+      "candidate_median": 15.0,
+      "short_list_users": 132,
+      "short_list_rate": 0.020171149144254278,
+      "displayed_mean": 4.978453545232274,
+      "empty_users": 0,
+      "four_units_users": 123,
+      "diagnosis_recognised_units_mean": 7.733190709046455,
+      "level_increased_users": 118,
+      "current_stage_core_users": 6543,
+      "current_stage_goal_users": 1,
+      "current_stage_advanced_users": 0,
+      "current_stage_connect_users": 0
+    },
+    {
+      "scenario": "conservative",
+      "cohort": "no_study_history",
+      "users": 928,
+      "candidate_mean": 13.79094827586207,
+      "candidate_median": 13.0,
+      "short_list_users": 25,
+      "short_list_rate": 0.02693965517241379,
+      "displayed_mean": 4.9719827586206895,
+      "empty_users": 0,
+      "four_units_users": 24,
+      "diagnosis_recognised_units_mean": 7.6842672413793105,
+      "level_increased_users": 7,
+      "current_stage_core_users": 928,
+      "current_stage_goal_users": 0,
+      "current_stage_advanced_users": 0,
+      "current_stage_connect_users": 0
+    },
+    {
+      "scenario": "conservative",
+      "cohort": "has_study_history",
+      "users": 5616,
+      "candidate_mean": 15.000712250712251,
+      "candidate_median": 15.0,
+      "short_list_users": 107,
+      "short_list_rate": 0.019052706552706553,
+      "displayed_mean": 4.9795227920227925,
+      "empty_users": 0,
+      "four_units_users": 99,
+      "diagnosis_recognised_units_mean": 7.741274928774929,
+      "level_increased_users": 111,
+      "current_stage_core_users": 5615,
+      "current_stage_goal_users": 1,
+      "current_stage_advanced_users": 0,
+      "current_stage_connect_users": 0
+    },
+    {
+      "scenario": "central",
+      "cohort": "all",
+      "users": 6544,
+      "candidate_mean": 17.55348410757946,
+      "candidate_median": 19.0,
+      "short_list_users": 33,
+      "short_list_rate": 0.0050427872860635695,
+      "displayed_mean": 4.994957212713937,
+      "empty_users": 0,
+      "four_units_users": 33,
+      "diagnosis_recognised_units_mean": 9.884015892420537,
+      "level_increased_users": 530,
+      "current_stage_core_users": 6543,
+      "current_stage_goal_users": 1,
+      "current_stage_advanced_users": 0,
+      "current_stage_connect_users": 0
+    },
+    {
+      "scenario": "central",
+      "cohort": "no_study_history",
+      "users": 928,
+      "candidate_mean": 16.75,
+      "candidate_median": 18.0,
+      "short_list_users": 10,
+      "short_list_rate": 0.010775862068965518,
+      "displayed_mean": 4.989224137931035,
+      "empty_users": 0,
+      "four_units_users": 10,
+      "diagnosis_recognised_units_mean": 9.816810344827585,
+      "level_increased_users": 50,
+      "current_stage_core_users": 928,
+      "current_stage_goal_users": 0,
+      "current_stage_advanced_users": 0,
+      "current_stage_connect_users": 0
+    },
+    {
+      "scenario": "central",
+      "cohort": "has_study_history",
+      "users": 5616,
+      "candidate_mean": 17.68625356125356,
+      "candidate_median": 19.0,
+      "short_list_users": 23,
+      "short_list_rate": 0.004095441595441595,
+      "displayed_mean": 4.9959045584045585,
+      "empty_users": 0,
+      "four_units_users": 23,
+      "diagnosis_recognised_units_mean": 9.895121082621083,
+      "level_increased_users": 480,
+      "current_stage_core_users": 5615,
+      "current_stage_goal_users": 1,
+      "current_stage_advanced_users": 0,
+      "current_stage_connect_users": 0
+    },
+    {
+      "scenario": "optimistic",
+      "cohort": "all",
+      "users": 6544,
+      "candidate_mean": 19.73624694376528,
+      "candidate_median": 21.0,
+      "short_list_users": 9,
+      "short_list_rate": 0.0013753056234718827,
+      "displayed_mean": 4.998624694376528,
+      "empty_users": 0,
+      "four_units_users": 9,
+      "diagnosis_recognised_units_mean": 11.934902200488997,
+      "level_increased_users": 1851,
+      "current_stage_core_users": 6542,
+      "current_stage_goal_users": 2,
+      "current_stage_advanced_users": 0,
+      "current_stage_connect_users": 0
+    },
+    {
+      "scenario": "optimistic",
+      "cohort": "no_study_history",
+      "users": 928,
+      "candidate_mean": 19.28987068965517,
+      "candidate_median": 21.0,
+      "short_list_users": 0,
+      "short_list_rate": 0.0,
+      "displayed_mean": 5.0,
+      "empty_users": 0,
+      "four_units_users": 0,
+      "diagnosis_recognised_units_mean": 11.924568965517242,
+      "level_increased_users": 261,
+      "current_stage_core_users": 928,
+      "current_stage_goal_users": 0,
+      "current_stage_advanced_users": 0,
+      "current_stage_connect_users": 0
+    },
+    {
+      "scenario": "optimistic",
+      "cohort": "has_study_history",
+      "users": 5616,
+      "candidate_mean": 19.810007122507123,
+      "candidate_median": 21.0,
+      "short_list_users": 9,
+      "short_list_rate": 0.0016025641025641025,
+      "displayed_mean": 4.998397435897436,
+      "empty_users": 0,
+      "four_units_users": 9,
+      "diagnosis_recognised_units_mean": 11.936609686609687,
+      "level_increased_users": 1590,
+      "current_stage_core_users": 5614,
+      "current_stage_goal_users": 2,
+      "current_stage_advanced_users": 0,
+      "current_stage_connect_users": 0
+    }
+  ],
+  "target_definition": [
+    {
+      "scenario": "conservative",
+      "baseline_targets": 5826,
+      "after_diagnosis_targets": 4809,
+      "baseline_targets_removed_as_diagnosis_known": 1028,
+      "newly_level_eligible_future_targets": 11,
+      "prerequisite_blocked_remaining_targets": 2660,
+      "caution": "Target membership changes after recognition; no NDCG improvement is computed or causally compared."
+    },
+    {
+      "scenario": "central",
+      "baseline_targets": 5826,
+      "after_diagnosis_targets": 4490,
+      "baseline_targets_removed_as_diagnosis_known": 1352,
+      "newly_level_eligible_future_targets": 16,
+      "prerequisite_blocked_remaining_targets": 2251,
+      "caution": "Target membership changes after recognition; no NDCG improvement is computed or causally compared."
+    },
+    {
+      "scenario": "optimistic",
+      "baseline_targets": 5826,
+      "after_diagnosis_targets": 4200,
+      "baseline_targets_removed_as_diagnosis_known": 1648,
+      "newly_level_eligible_future_targets": 22,
+      "prerequisite_blocked_remaining_targets": 1890,
+      "caution": "Target membership changes after recognition; no NDCG improvement is computed or causally compared."
+    }
+  ],
+  "checks": {
+    "baseline_reproduced": true,
+    "displayed_capacity_matches_real_selection_100_users": true,
+    "max_recognised_units_at_most_17": true,
+    "no_ndcg_reinterpretation": true
+  },
+  "elapsed_seconds": 10.334631171000183
+}

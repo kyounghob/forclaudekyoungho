@@ -83,7 +83,7 @@ def test_quiz_is_not_gameable_and_regulation_item_does_not_skip_risk_unit():
 
 
 def test_domain_rules_lessons_and_templates():
-    for k in ("1,000만원", "3,000만원", "2026-07-31", "모의거래", "2026-08-19", "2026-05-22"):
+    for k in ("1,000만원", "3,000만원", "2026-07-31", "모의거래", "8월 19일", "사전교육 총 3시간"):
         assert k in LEVERAGE_RULES, k
     assert "70%" in PENSION_OK and "1,500만원" in PENSION_OK
     for (tp, lv) in LESSONS:
@@ -198,7 +198,7 @@ def test_core_compounding_unit_types_and_classification():
     assert "leverage_inverse" in types_for_goal("trading", 2) and not learn_only_types("trading", 2)
     k = lambda nm: classify_row(NS(name=nm, asset_class="", market_class="", multiplier=""))
     assert k("TIGER 200 금융") != "commodity_fx" and k("KODEX 금융지주") != "commodity_fx" and k("ACE KRX금현물") == "commodity_fx"
-    assert "2026-08-19부터 사전교육 총 3시간" in LEVERAGE_RULES
+    assert "8월 19일부터 신규 개인 일반투자자에게 사전교육 총 3시간" in LEVERAGE_RULES
 
 
 def test_catalog_csv_rejects_bad_prereqs_and_cycles(tmp_path):

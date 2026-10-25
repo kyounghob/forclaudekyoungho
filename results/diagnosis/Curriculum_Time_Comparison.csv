@@ -1,0 +1,4 @@
+﻿persona,full_fixed_curriculum_units,full_fixed_curriculum_minutes,full_curriculum_after_diagnosis_minutes,purpose_roadmap_units,purpose_roadmap_total_minutes,purpose_scope_difference_minutes,diagnosis_recognised_units_all,diagnosis_recognised_minutes_all,diagnosis_recognised_units_within_roadmap,diagnosis_recognised_minutes_within_roadmap,purpose_roadmap_minutes_remaining,interpretation
+A,66,794,718,25,284,510,6,76,6,76,208,"Minutes are catalogue assumptions (8 or 15 per unit); differences are scope and recognition arithmetic, not measured learning-time savings."
+B,66,794,641,23,268,526,13,153,10,115,153,"Minutes are catalogue assumptions (8 or 15 per unit); differences are scope and recognition arithmetic, not measured learning-time savings."
+C,66,794,733,24,276,518,5,61,4,46,230,"Minutes are catalogue assumptions (8 or 15 per unit); differences are scope and recognition arithmetic, not measured learning-time savings."

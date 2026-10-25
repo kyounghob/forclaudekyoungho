@@ -251,12 +251,31 @@ class Catalog:
         need = {"item", "title", "topic", "level"}
         if not need <= set(df.columns):
             raise ValueError(f"카탈로그 CSV에 {sorted(need - set(df.columns))} 열이 없습니다")
+        if len(df) == 0:
+            raise ValueError("카탈로그 CSV에는 단원이 1개 이상 있어야 합니다")
+        for column in ("title", "topic"):
+            if df[column].isna().any() or df[column].astype(str).str.strip().eq("").any():
+                raise ValueError(f"카탈로그 {column}에는 빈 값을 쓸 수 없습니다")
+        levels = pd.to_numeric(df["level"], errors="coerce").to_numpy(dtype=float)
+        if not np.isfinite(levels).all() or not np.isin(levels, [1, 2, 3]).all():
+            raise ValueError("카탈로그 level은 1, 2, 3 중 하나인 정수여야 합니다")
         df = df.sort_values("item").reset_index(drop=True)
         if not np.array_equal(df.item.values, np.arange(len(df))):
             raise ValueError("item 번호는 0부터 연속이어야 합니다")
         topics = list(pd.unique(df.topic))
         ti = {t: i for i, t in enumerate(topics)}
-        short = df["short"].astype(bool).values if "short" in df else np.zeros(len(df), bool)
+        if "short" in df:
+            # astype(bool)는 혼합 문자열의 'False'와 '0'도 True로 바꾼다.
+            # 빈 선택 플래그는 False, 알 수 없는 표현은 명시적으로 거절한다.
+            flags = df["short"].fillna(False).astype(str).str.strip().str.lower()
+            boolean_values = {"true": True, "1": True, "1.0": True, "yes": True,
+                              "false": False, "0": False, "0.0": False, "no": False, "": False}
+            bad = ~flags.isin(boolean_values)
+            if bad.any():
+                raise ValueError(f"카탈로그 short는 true/false 또는 1/0이어야 합니다: {flags[bad].tolist()}")
+            short = flags.map(boolean_values).to_numpy(dtype=bool)
+        else:
+            short = np.zeros(len(df), bool)
         prereqs = None
         if "prereqs" in df.columns:
             n, prereqs = len(df), {}

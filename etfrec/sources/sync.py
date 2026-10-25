@@ -55,8 +55,11 @@ def default_dir() -> str:
 
 def parse_day(v, what: str = "기준일") -> str:
     """'20261013'·'2026-10-13' → '20261013'. 숫자 8자리의 실제 날짜가 아니면 ValueError(다른 날짜로 조용히 바꾸지 않는다)."""
-    digits = re.sub(r"\D", "", str(v))
-    ok = len(digits) == 8
+    text = str(v).strip()
+    # 임의 문자를 지우면 '2026oops1013'·날짜 뒤 메모도 정상 날짜로 오인한다.
+    # 공개 입력에서는 문서에 명시한 두 형식만 받고, provenance 호환 파서는 _iso_day로 구분한다.
+    ok = bool(re.fullmatch(r"(?:[0-9]{8}|[0-9]{4}-[0-9]{2}-[0-9]{2})", text))
+    digits = text.replace("-", "")
     if ok:
         try:
             datetime.strptime(digits, "%Y%m%d")

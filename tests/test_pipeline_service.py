@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from etfrec.api import create_app
 from etfrec.config import GuardrailConfig, TrainConfig
+from etfrec.neural import HAS_TORCH
 from etfrec.service import LearnerInput, RecommendationService
 from etfrec.zoo import algo_uses
 
@@ -14,7 +15,10 @@ from etfrec.zoo import algo_uses
 def test_pipeline_outputs(small_bundle):
     b = small_bundle
     assert all(q["passed"] for q in b.qa) and len(b.qa) > 50
-    assert set(b.results.method) >= {"Global", "RouterNoGender", "RouterFull", "POP", "RULE", "CONTENT", "UCF", "ICF", "Random", "MF_BPR", "MLP_BPR", "MLP_BPRU", "MLP_NEXT"}
+    expected = {"Global", "RouterNoGender", "RouterFull", "POP", "RULE", "CONTENT", "UCF", "ICF", "Random"}
+    if HAS_TORCH:                                                # MF·MLP는 torch가 있을 때만 학습한다
+        expected |= {"MF_BPR", "MLP_BPR", "MLP_BPRU", "MLP_NEXT"}
+    assert set(b.results.method) >= expected
     assert np.isfinite(b.results[["ndcg", "ndcg_active", "diversity"]].values).all()
     r = b.results.set_index("method")
     assert (r.ndcg_active >= r.ndcg).all() and r.active_users.min() > 0 and b.privacy["router_leaves"]["RouterNoGender"]["leaves"] > 0     # 활성 사용자 기준은 항상 크거나 같다
@@ -27,7 +31,8 @@ def test_pipeline_outputs(small_bundle):
     assert "ABControl" in set(b.results.method) and "ABControl" not in b.selection["families"]
     assert b.algos[ab].family == "SEGPOP" and "gender" not in algo_uses(b.algos[ab], b.signal_meta)
     assert len(b.algos) > 1000 and len(b.signal_meta) >= 140
-    assert b.models.audit and all(len(a.get("state_sha256", "")) == 64 for a in b.models.audit)    # 모든 학습 모델에 상태 해시
+    if HAS_TORCH:
+        assert b.models.audit and all(len(a.get("state_sha256", "")) == 64 for a in b.models.audit)    # 모든 학습 모델에 상태 해시
 
 
 def test_offline_online_parity(small_bundle):
@@ -48,7 +53,7 @@ def test_adhoc_learner_and_guardrails(small_bundle):
     svc = RecommendationService(small_bundle)
     li = LearnerInput(age=25, interests=[2, 10], placement=1, mobile=1, events=[dict(item=0, quiz_pass=True), dict(item=6, complete=True)])
     r = svc.recommend(li, k=5)
-    assert len(r["items"]) == 5 and all(c["passed"] for c in r["checks"])
+    assert 0 < len(r["items"]) <= 5 and all(c["passed"] for c in r["checks"])
     assert all(it["level"] - r["level"] < 2 for it in r["items"]) and sum(it["level"] - r["level"] == 1 for it in r["items"]) <= 1
     assert 0 not in [it["item"] for it in r["items"]]
     r2 = svc.recommend(li, k=5, guard=GuardrailConfig(plus_one_max=0))
@@ -96,7 +101,9 @@ def test_all_families_serve_adhoc(small_bundle):
 
 def test_recommend_new_and_errors(small_bundle):
     svc = RecommendationService(small_bundle)
-    assert len(svc.recommend_new([0, 3], 1, 5)["items"]) == 5
+    initial = svc.recommend_new([0, 3], 1, 5)
+    assert 0 < len(initial["items"]) <= 5 and initial["shortfall"] == 5 - len(initial["items"])
+    assert initial["guardrail"]["prereq_block"] is True
     with pytest.raises(ValueError):
         svc.recommend(-1)
     with pytest.raises(ValueError):
@@ -135,7 +142,9 @@ def test_api_endpoints(small_bundle, tmp_path):
     assert c.post("/api/types", json={"goal": "trading", "risk": 2, "assume_passed": [0]}).status_code == 200
     meta = c.get("/api/meta").json()
     assert meta["learners_enabled"] is True and meta["dataset"]["source"] == "synthetic"
-    assert meta["guardrail"]["prereq_block"] is True and meta["evaluation_guardrail"]["prereq_block"] is False   # 생략 시 기본 ≠ 평가 기본
+    assert meta["guardrail"]["prereq_block"] is True and meta["evaluation_guardrail"]["prereq_block"] is True
+    assert meta["prerequisite_policy_required"] is True
+    assert c.post("/api/recommend", json={"learner_id": 1, "guardrail": {"prereq_block": False}}).status_code == 422
     for path, req in (("/api/recommend", {"learner_id": 1}), ("/api/compare", {"learner_id": 1, "methods": ["RULE"]}), ("/api/roadmap", {"learner_id": 1}),
                       ("/api/types", {"goal": "pension"}), ("/api/recommend-new", {"topics": [1]})):
         assert "권유하지 않" in c.post(path, json=req).json()["notice"], path           # 추천을 담은 응답마다 비권유 고지
@@ -151,7 +160,7 @@ def test_full_regression_matches_notebook():
     from etfrec.config import TrainConfig
     from etfrec.data import Dataset
     from etfrec.pipeline import train
-    cfg = TrainConfig(catalog_version=1, generator_version=1)
+    cfg = TrainConfig(catalog_version=1, generator_version=1, guardrail=GuardrailConfig(prereq_block=False))
     b = train(Dataset.synthetic(cfg), cfg, out_dir=None, log=lambda *a, **k: None)
     got = b.results.set_index("method").ndcg
     for k, v in NOTEBOOK_V1.items():
@@ -239,6 +248,7 @@ def test_event_stream_with_session_id_is_grouped_into_attempts():
         events_to_attempts(ev.assign(item=[3, np.nan, 3, 3]))                                  # 빈 단원 번호를 조용히 버리지 않는다
 
 
+@pytest.mark.skipif(not HAS_TORCH, reason="torch 없음: 신경망 모델을 학습하지 않음")
 def test_pairwise_models_cover_only_pair_users(small_bundle):
     obs = small_bundle.models.observed
     for (snap, kind), w in obs.items():
@@ -275,6 +285,7 @@ def test_leakage_probe_detects_future_reads(monkeypatch):
         assert not ok3 and field_name in detail3, leaky.__name__
 
 
+@pytest.mark.skipif(not HAS_TORCH, reason="torch 없음: 신경망 모델을 학습하지 않음")
 def test_pair_pools_use_full_rows_when_training_rows_are_subsampled():
     from etfrec import neural
     from etfrec.config import TrainConfig

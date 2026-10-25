@@ -70,6 +70,7 @@
   }
   function buildRequest(extra = {}) {
     const S = state.settings;
+    if (META && META.prerequisite_policy_required !== false) S.prereq_block = true;
     return { k: S.k, algorithm: S.algorithm || null, guardrail: { block_gap: S.block_gap, plus_one_max: S.plus_one_max, exclude_passed: S.exclude_passed, prereq_block: S.prereq_block }, topic_cap: S.topic_cap ? +S.topic_cap : null, ...learnerRef(), ...extra };
   }
 
@@ -330,11 +331,16 @@
   // ---------- 6단계 ----------
   function renderSettings() {
     const S = state.settings; const sel = $("#s-algorithm");
-    sel.innerHTML = `<option value="">운영 라우터 (${META.operational_router === "RouterNoGender" ? "성별 제외" : META.operational_router}) · 기본</option>` +
+    const prerequisiteRequired = META.prerequisite_policy_required !== false;
+    // 일반 서버는 수준·통과·선수 가드레일을 서버 기본값으로 고정하므로(service._service_guard) 화면 값도 그 값으로 맞추고 잠근다
+    if (prerequisiteRequired) Object.assign(S, { prereq_block: true, block_gap: META.guardrail.block_gap, plus_one_max: META.guardrail.plus_one_max, exclude_passed: META.guardrail.exclude_passed });
+    sel.innerHTML = `<option value="">운영 정책 · ${esc(META.operational_algorithm.name)} · 기본</option>` +
       META.methods.map(m => `<option value="${esc(m.key)}">${esc(m.label)}${META.test_ndcg[m.key] != null ? ` · 테스트 NDCG ${fmt(META.test_ndcg[m.key], 3)}` : ""}</option>`).join("");
     sel.value = S.algorithm; $("#s-k").value = S.k; $("#s-block").value = S.block_gap; $("#s-plus").value = S.plus_one_max; $("#s-exclude").value = S.exclude_passed ? "1" : "0"; $("#s-cap").value = S.topic_cap; $("#s-prereq").value = S.prereq_block ? "1" : "0";
+    for (const id of ["#s-prereq", "#s-block", "#s-plus", "#s-exclude"]) $(id).disabled = prerequisiteRequired;
+    $('#s-prereq option[value="0"]').hidden = prerequisiteRequired;
     const op = META.operational_algorithm;
-    $("#algo-note").innerHTML = `<b>운영 설정</b> #${op.aid} ${esc(op.name)}<br><span class="muted small">${esc(op.formula)}</span><br><span class="small">검증 ${(META.configurations || 0).toLocaleString()}개 설정 중 1위(세그먼트 라우터 λ 교차 선택). 선수 단원 차단·두 단계 위 차단·한 단계 위 1개 상한은 수업의 교육 처방이 아니라 이 프로젝트의 시연용 정책입니다. 두 단계 위 차단과 한 단계 위 1개 상한은 모든 오프라인 평가 행에 적용되어 있고, 선수 단원 차단의 효과만 '운영 라우터+prereq' 행으로 따로 기록했습니다.</span>`;
+    $("#algo-note").innerHTML = `<b>운영 정책</b> ${esc(op.name)}<br><span class="muted small">${esc(op.formula)}</span><br><span class="small">목적과 로드맵 단계 항은 고정 반영합니다. 연령·소득·성별은 운영 순위에 사용하지 않습니다. 필요한 선수 학습을 마친 단원부터 추천하며 후보가 적으면 가능한 만큼 보여 드립니다.</span>`;
   }
   function bindSettings() {
     const S = state.settings;
@@ -597,7 +603,7 @@
     load();
     [META, CATALOG, EXAMPLES] = await Promise.all([api("/api/meta"), api("/api/catalog"), api("/api/examples")]);
     META.type_names = META.type_names || {};
-    $("#bundle-info").textContent = `번들 ${META.created_at} · 학습자 ${META.n_users.toLocaleString()}명 · 단원 ${META.n_items}개(카탈로그 v${META.catalog_version}) · 운영 설정 #${META.operational_algorithm.aid}`;
+    $("#bundle-info").textContent = `번들 ${META.created_at} · 학습자 ${META.n_users.toLocaleString()}명 · 단원 ${META.n_items}개(카탈로그 v${META.catalog_version}) · 운영 정책 ${META.operational_algorithm.name}`;
     $("#notice").textContent = META.notice + " 모의 데이터로 실행한 수업용 추천이며 실서비스 효과 검증이 아닙니다.";
     const exRadio = document.querySelector("input[name=source][value=existing]"), synth = (META.dataset || {}).source === "synthetic";
     $("#existing-label").textContent = META.learners_enabled === false ? "기존 학습자 불러오기 (이 서버에서는 꺼짐)"

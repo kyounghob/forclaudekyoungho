@@ -1,14 +1,15 @@
 """명령줄 인터페이스.
 
     python -m etfrec generate --out data/synthetic [--n 15000] [--seed 42] [--effect 1.0]
-    python -m etfrec train --out artifacts/bundle_v2 [--data data/synthetic] [--n 15000] [--no-neural]
-    python -m etfrec train --out artifacts/bundle_v1 --catalog-version 1 --generator-version 1   # 노트북 v1 세계 재현
-    python -m etfrec recommend --bundle artifacts/bundle_v2 --user 1 [--k 5] [--algorithm RULE]
-    python -m etfrec serve --bundle artifacts/bundle_v2 [--host 127.0.0.1] [--port 8000] [--sources-dir data/sources] [--expose-learners]
+    python -m etfrec train --out runs/seed42 [--data data/synthetic] [--n 15000] [--no-neural] [--prereq-policy required]
+    python -m etfrec train --out runs/v1 --catalog-version 1 --generator-version 1 --prereq-policy off   # 노트북 v1 세계 재현
+    python -m etfrec train --out runs/historical_v2 --prereq-policy off   # 기존 v2의 선수 미적용 비교 재현
+    python -m etfrec recommend --bundle runs/seed42 --user 1 [--k 5] [--algorithm RULE]
+    python -m etfrec serve --bundle runs/seed42 [--host 127.0.0.1] [--port 8000] [--sources-dir data/sources] [--expose-learners]
     python -m etfrec demo [--n 3000]      # 작은 규모로 학습한 뒤 바로 서버를 띄운다
     read -rs ETFREC_PSEUDO_KEY && export ETFREC_PSEUDO_KEY     # 키는 화면에 보이지 않게 입력(명령줄에 쓰면 셸 기록에 남는다)
     python -m etfrec pseudonymize --profiles A.csv --log B.csv --id-col member_id --out DIR --mapping-out PATH
-    python -m etfrec export-deid --bundle artifacts/bundle_v2 --k 5 --out FILE.csv [--report FILE.json]
+    python -m etfrec export-deid --bundle runs/seed42 --k 5 --out FILE.csv [--report FILE.json]
     read -rs KRX_OPEN_API_KEY && export KRX_OPEN_API_KEY      # (선택) 공공데이터포털은 DATA_GO_KR_KEY를 같은 방식으로
     python -m etfrec sources list|check|sync|stats [--out data/sources] [--krx-csv 내려받은.csv|.xlsx]
         [--krx-csv-date YYYYMMDD] [--date YYYYMMDD] [--no-cross-check]
@@ -21,7 +22,7 @@ import json
 import os
 import sys
 
-from .config import TrainConfig
+from .config import GuardrailConfig, TrainConfig
 from .data import Dataset
 from .util import get_logger, json_safe
 
@@ -68,12 +69,16 @@ def cmd_generate(a):
 
 def cmd_train(a):
     from .pipeline import train
-    cfg = TrainConfig(n_learners=a.n, seed=a.seed, effect_scale=a.effect, catalog_version=a.catalog_version, generator_version=a.generator_version)
+    cfg = TrainConfig(n_learners=a.n, seed=a.seed, effect_scale=a.effect, catalog_version=a.catalog_version, generator_version=a.generator_version,
+                      guardrail=GuardrailConfig(prereq_block=a.prereq_policy == "required"), operational_policy=a.operational_policy)
     ds = Dataset.from_csv(a.data) if a.data else Dataset.synthetic(cfg)
     if a.data:
         print("학습 데이터:", os.path.abspath(a.data), "(경로는 터미널에만 표시하고 번들에는 'csv'로 기록)")
     bundle = train(ds, cfg, out_dir=a.out, enable_neural=not a.no_neural)
-    print("운영 설정:", bundle.algos[bundle.selection["operational_algorithm"]].name)
+    if bundle.selection.get("operational_policy") == "PurposeStageRule":
+        print("운영 정책: 목적 단계 규칙(선언된 고정식; 역사적 설정 탐색과 별도)")
+    else:
+        print("운영 설정:", bundle.algos[bundle.selection["operational_algorithm"]].name)
 
 
 def cmd_recommend(a):
@@ -105,8 +110,15 @@ def cmd_demo(a):
     from .pipeline import train
     out = a.out
     if not os.path.exists(os.path.join(out, "bundle.pkl")):
-        cfg = TrainConfig(n_learners=a.n)
+        cfg = TrainConfig(n_learners=a.n, guardrail=GuardrailConfig(prereq_block=a.prereq_policy == "required"), operational_policy=a.operational_policy)
         train(Dataset.synthetic(cfg), cfg, out_dir=out, enable_neural=not a.no_neural)
+    else:
+        from .pipeline import Bundle
+        existing = Bundle.load(out)
+        if bool(existing.config.guardrail.prereq_block) != (a.prereq_policy == "required"):
+            sys.exit("기존 demo 번들의 선수 정책이 --prereq-policy와 다릅니다. 다른 --out 폴더를 지정하거나 train으로 다시 학습하세요")
+        if getattr(existing.config, "operational_policy", "PurposeStageRule") != a.operational_policy:
+            sys.exit("기존 demo 번들의 운영 정책이 --operational-policy와 다릅니다. 다른 --out 폴더를 지정하거나 train으로 다시 학습하세요")
     a.bundle = out; a.designs = None; a.sources_dir = None; a.expose_learners = False
     cmd_serve(a)
 
@@ -196,6 +208,10 @@ def main(argv=None):
     t.add_argument("--data", default=None, help="profiles.csv·study_log.csv·catalog.csv가 있는 폴더(없으면 모의 데이터)")
     t.add_argument("--n", type=int, default=TrainConfig().n_learners); t.add_argument("--seed", type=int, default=TrainConfig().seed)
     t.add_argument("--effect", type=float, default=TrainConfig().effect_scale); t.add_argument("--no-neural", action="store_true")
+    t.add_argument("--prereq-policy", choices=("required", "off"), default="required",
+                   help="선수 정책: required(기본)는 선택·평가에도 선수 조건 적용, off는 기존 v1/v2의 미적용 비교 재현용")
+    t.add_argument("--operational-policy", choices=("PurposeStageRule", "legacy"), default="PurposeStageRule",
+                   help="기본은 목적·로드맵 고정 운영 규칙. legacy는 과거 라우터 선정 재현용")
     versions(t); t.set_defaults(fn=cmd_train)
     so = sub.add_parser("sources", help="공개 데이터 출처 목록·접근 점검·스냅샷 동기화·유형 통계")
     so.add_argument("action", choices=["list", "check", "sync", "stats"])
@@ -216,6 +232,9 @@ def main(argv=None):
     d = sub.add_parser("demo", help="작은 규모 학습 후 바로 서버 실행"); d.add_argument("--n", type=int, default=3000)
     d.add_argument("--out", default="artifacts/demo_bundle"); d.add_argument("--host", default="127.0.0.1"); d.add_argument("--port", type=int, default=8000)
     d.add_argument("--no-neural", action="store_true"); d.set_defaults(fn=cmd_demo)
+    d.add_argument("--prereq-policy", choices=("required", "off"), default="required",
+                   help="선수 정책: required(기본), off(역사적 미적용 비교 재현용); 기존 번들의 정책이 다르면 재학습 필요")
+    d.add_argument("--operational-policy", choices=("PurposeStageRule", "legacy"), default="PurposeStageRule")
     ps = sub.add_parser("pseudonymize", help="운영 원본(외부 회원 ID) → 가명 학습 입력 + 별도 매핑표 (키: 환경변수 ETFREC_PSEUDO_KEY)")
     ps.add_argument("--profiles", required=True, help="외부 ID 열이 있는 프로필 CSV"); ps.add_argument("--log", required=True, help="외부 ID 열이 있는 학습 로그 CSV")
     ps.add_argument("--id-col", required=True, help="외부 회원 ID 열 이름"); ps.add_argument("--out", required=True, help="학습 입력 폴더(profiles.csv·study_log.csv)")

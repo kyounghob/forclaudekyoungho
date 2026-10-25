@@ -509,7 +509,8 @@ def scrub_design(payload, income_edges):
 def hydrate_design(payload, income_rep):
     """불러오기용: state.learner의 구간 코드에서 대표값(연령 25·35·45·55·65세, 소득 분위 대표값)을 다시 채운다. 원값 복원이 아니다."""
     p = copy.deepcopy(payload)
-    learner = (p.get("state") or {}).get("learner") if isinstance(p, dict) else None
+    state = p.get("state") if isinstance(p, dict) else None
+    learner = state.get("learner") if isinstance(state, dict) else None
     if not isinstance(learner, dict):
         return p
     ok = lambda c: isinstance(c, int) and not isinstance(c, bool) and 0 <= c < 5
@@ -544,6 +545,11 @@ def build_pseudonymized_inputs(raw_profiles: pd.DataFrame, raw_log: pd.DataFrame
     for name, df in (("profiles", raw_profiles), ("log", raw_log)):
         if id_col not in df.columns:
             raise ValueError(f"{name}에 외부 ID 열 '{id_col}'이 없습니다")
+        # astype(str) 이전에 검사한다. 결측 ID를 'None'·'nan'이라는 정상 ID처럼
+        # 가명처리하면 서로 다른 미식별 학습자의 로그가 한 사람에게 결합될 수 있다.
+        missing_id = df[id_col].isna() | df[id_col].astype(str).str.strip().eq("")
+        if missing_id.any():
+            raise ValueError(f"{name}의 외부 ID 열 '{id_col}'에 빈 값이 {int(missing_id.sum())}건 있습니다")
     need = [c for c in PROFILE_COLUMNS if c != "user" and c not in raw_profiles.columns]
     need_log = [c for c in ("item", "week", "complete", "quiz", "quiz_pass", "save", "drop", "replay") if c not in raw_log.columns]
     if need or need_log:

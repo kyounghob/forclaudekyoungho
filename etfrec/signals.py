@@ -180,6 +180,34 @@ def snapshot_key(F: FeatureStore, prefix: str = "B", seed: int = SEED) -> str:
     return f"{prefix}:{seed}:{R.shape}:{F.week}:{h.hexdigest()[:20]}"
 
 
+def supervised_key(supervised: dict) -> str:
+    """같은 반응 점수라도 저장/통과 라벨이 다르면 관측 모델 캐시를 공유하지 않는다.
+
+    실제 학습 입력의 형상·자료형·내용을 한 번 해시한다. 라벨 설명 같은 비학습
+    메타데이터는 제외하며, 원천 데이터나 라벨을 감사 기록에 그대로 노출하지 않는다.
+    """
+    h = hashlib.sha256()
+
+    def update(values, fields):
+        if values is None:
+            h.update(b"none")
+            return
+        for name in fields:
+            h.update(name.encode("ascii"))
+            value = values.get(name)
+            if value is None:
+                h.update(b"none")
+                continue
+            array = np.ascontiguousarray(value)
+            h.update(str((array.shape, array.dtype.str)).encode("ascii"))
+            h.update(array.tobytes())
+
+    update(supervised, ("u", "i", "y", "score"))
+    update(supervised.get("next_pairs"), ("u", "i", "j", "w"))
+    update(supervised.get("pair_rows"), ("u", "i", "y"))
+    return h.hexdigest()[:20]
+
+
 def next_week_pairs(log_before, n_items: int, seed: int = SEED, neg: int = 3, cap: int = 400000) -> dict:
     """목표 정렬 학습 쌍(확장): 학습 주 w마다 (사용자 u, w에 처음 통과한 단원 i, w가 끝날 때까지 통과하지 않은 단원 j).
     평가 정답(다음 주에 고르고 통과한 미통과 단원)과 같은 정의를 학습 주들에 적용한다. 평가 주의 기록은 쓰지 않는다."""
@@ -251,9 +279,12 @@ class Reference:
 
     @classmethod
     def from_store(cls, F: FeatureStore, catalog: Catalog, radix, supervised: dict = None, key: str = None) -> "Reference":
+        cache_key = key or snapshot_key(F)
+        if supervised is not None:
+            cache_key += ":labels:" + supervised_key(supervised)
         return cls(Rw=F.Rw, Rw_conf=F.Rw_conf, codes=F.codes, radix=np.asarray(radix), ev_user=F.ev_user, ev_item=F.ev_item,
                    ev_w=np.ones(len(F.ev_user)), demo=F.demo, n_u=F.nu, item_cat=catalog.item_topic, n_cat=catalog.n_topics,
-                   X_cat=catalog.X_cat, X_txt=catalog.X_txt, snapshot_key=key or snapshot_key(F), supervised=supervised)
+                   X_cat=catalog.X_cat, X_txt=catalog.X_txt, snapshot_key=cache_key, supervised=supervised)
 
     @property
     def n_users(self):
@@ -280,18 +311,23 @@ def _factor_hash(P: np.ndarray, Q: np.ndarray) -> str:
 class ModelStore:
     """스냅샷별 학습 모델 캐시(MF 요인, 관측 MF·MLP 가중치). 서빙 번들에 그대로 저장된다."""
 
-    def __init__(self, enable_neural: bool = True):
+    def __init__(self, enable_neural: bool = True, seed: int = SEED):
         self.mf = {}
         self.mf_bpr = {}
         self.observed = {}
         self.audit = []
-        self.enable_neural = enable_neural and neural.HAS_TORCH
+        self.seed = int(seed)
+        if enable_neural and not neural.HAS_TORCH:
+            raise RuntimeError("신경망 포함 전체 비교에는 torch가 필요합니다. torch를 설치한 뒤 다시 실행하거나, "
+                               "MF·MLP를 제외한 비교는 --no-neural을 명시하세요.")
+        self.enable_neural = bool(enable_neural)
 
     def get_mf(self, ref: Reference, f: int, reg: float):
         key = (ref.snapshot_key, f, reg)
         if key not in self.mf:
             coo = ref.Rw.tocoo()
-            P, Q, _, audit = neural.train_mf(coo.row, coo.col, coo.data, ref.n_users, ref.n_items, k=f, reg=reg)
+            P, Q, _, audit = neural.train_mf(coo.row, coo.col, coo.data, ref.n_users, ref.n_items, k=f, reg=reg,
+                                             seed=getattr(self, "seed", SEED))
             unseen = ref.item_support == 0
             Q[unseen] = 0.0                                        # 학습에 한 번도 안 나온 단원은 0점
             audit.update(snapshot=ref.snapshot_key, state_sha256=_factor_hash(P, Q))
@@ -304,7 +340,8 @@ class ModelStore:
         key = (ref.snapshot_key, f, reg)
         if key not in self.mf_bpr:
             coo = ref.Rw.tocoo()
-            P, Q, _, audit = neural.train_mf_bpr(coo.row, coo.col, ref.n_users, ref.n_items, k=f, reg=reg)
+            P, Q, _, audit = neural.train_mf_bpr(coo.row, coo.col, ref.n_users, ref.n_items, k=f, reg=reg,
+                                                 seed=getattr(self, "seed", SEED))
             Q[ref.item_support == 0] = 0.0
             audit.update(snapshot=ref.snapshot_key, state_sha256=_factor_hash(P, Q))
             self.audit.append(audit)
@@ -317,7 +354,8 @@ class ModelStore:
             sup = ref.supervised
             if sup is None or len(sup["u"]) == 0:
                 raise ValueError("관측 학습 라벨이 필요합니다")
-            w = neural.fit_observed_model(sup["u"], sup["i"], sup["y"], sup["score"], ref.n_users, ref.n_items, kind, seed=SEED,
+            w = neural.fit_observed_model(sup["u"], sup["i"], sup["y"], sup["score"], ref.n_users, ref.n_items, kind,
+                                          seed=getattr(self, "seed", SEED),
                                           pairs=sup.get("next_pairs") if kind == "mlp9_next" else None,
                                           pair_rows=sup.get("pair_rows") if kind in ("mlp9_bpr", "mlp9_bpru") else None)
             w.audit.update(snapshot=ref.snapshot_key)
@@ -557,6 +595,14 @@ def add_plan_signals(bank: SignalBank, lb: LearnerBatch, catalog: Catalog, need)
     for nm, (M, lab, uses) in parts.items():
         if need(nm):
             bank.add(nm, M.astype(float), lab, "3-2", uses=uses, raw=True)
+    if need("r:policy_pref"):
+        # A zero preference row has arbitrary argsort top-two ids. They are not observed interests.
+        # Preserve historical r:pref for old comparisons, but never treat these ids as operational evidence.
+        observed = np.asarray(lb.Rw.getnnz(axis=1)).ravel() > 0
+        declared = (tp == lb.interests[:, :1]) | (tp == lb.interests[:, 1:2])
+        learned = ((tp == lb.top2[:, :1]) | (tp == lb.top2[:, 1:2])) & observed[:, None]
+        bank.add("r:policy_pref", (declared | learned).astype(float), "관심 주제", "3-2(고정 정책)",
+                 uses=("interests", "pref"), raw=True)
     if need("ctx:next"):
         done_lv = np.zeros((lb.R, catalog.n_topics))
         for item in range(catalog.n_items):

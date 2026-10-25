@@ -9,6 +9,18 @@
 from __future__ import annotations
 
 SOURCES = {
+    "fsc_single_stock_deposit": dict(
+        name="금융위원회 단일종목 레버리지 기본예탁금 강화 안내", publisher="금융위원회",
+        url="https://www.fsc.go.kr/no010101/87403", menu="보도자료 2026-07-24",
+        kind="공식 발표", access="웹(무료)", topics=["레버리지·인버스"],
+        use="국내·해외 단일종목 현금 예탁금과 기존 투자자 추가 매수 적용 범위의 근거",
+        license="기관 저작물. 출처 링크 제공", verified="page(2026-10-23 본문 확인; 개별 적용·면제는 거래사 확인)"),
+    "fsc_single_stock_simulation": dict(
+        name="금융위원회 단일종목 모의거래 의무화 안내", publisher="금융위원회",
+        url="https://www.fsc.go.kr/no010101/87512", menu="보도자료 2026-08-12",
+        kind="공식 발표", access="웹(무료)", topics=["레버리지·인버스"],
+        use="사전교육과 신규 개인 일반투자자 모의거래 기간·시간의 발표 근거",
+        license="기관 저작물. 출처 링크 제공", verified="page(2026-10-23 본문 확인; 당시 해외 규정 개정중 표기도 확인)"),
     "kcie_etf_school": dict(
         name="전국투자자교육협의회 ETF스쿨", publisher="전국투자자교육협의회(KCIE)", url="https://www.kcie.or.kr", menu="온라인 스쿨 › ETF스쿨",
         kind="온라인 교육(영상·가이드북)", access="웹(무료, 최초 1회 정보 등록)", topics=["ETF 구조", "지수", "비용", "분배금", "해외 ETF", "채권 ETF", "커버드콜 ETF"],

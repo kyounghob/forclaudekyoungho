@@ -88,7 +88,7 @@
   <!-- 2 -->
   <section class="step" data-step="2" hidden>
     <h2>2. 기본 정보와 투자 목적</h2>
-    <p class="muted">투자 목적·투자 기간·위험성향은 로드맵의 단계 구성과 ETF 유형 연결에 쓰입니다. 연령대·소득분위는 세그먼트 변수로 쓰고, 성별은 수집하되 운영 라우터에서 제외합니다. 비워 두면 기본값을 씁니다.</p>
+    <p class="muted">투자 목적·투자 기간·위험성향은 로드맵 구성에 쓰이며 목적과 단계는 운영 추천 점수에 고정 반영합니다. 연령·소득·성별은 운영 순위와 라우팅에 사용하지 않습니다. 소득은 선택 입력이며 세제 설명의 참고와 개발 비교에만 남깁니다.</p>
     <div id="existing-profile" class="panel" hidden></div>
     <div id="basic-form">
       <div class="panel">
@@ -102,10 +102,10 @@
       </div>
       <div class="form-grid">
         <label>학습자 이름(표시용) <input type="text" id="f-label" placeholder="새 학습자"></label>
-        <label>연령 <span class="help" title="연령대 세그먼트(29세 이하·30대·40대·50대·60세 이상)와 생애주기 규칙에 쓰입니다">?</span><input type="number" id="f-age" min="10" max="100" placeholder="기본 35"></label>
-        <label>성별 <span class="help" title="수집은 하지만 운영 라우터와 운영 설정은 성별을 쓰지 않습니다. 8단계의 성별 뒤집기 검사로 확인할 수 있습니다">?</span>
+        <label>연령 <span class="help" title="운영 추천 순위에는 쓰지 않습니다. 연령대(29세 이하·30대·40대·50대·60세 이상)는 개발 비교 방법의 세그먼트와 생애주기 규칙에만 쓰입니다">?</span><input type="number" id="f-age" min="10" max="100" placeholder="기본 35"></label>
+        <label>성별 <span class="help" title="운영 추천은 성별을 쓰지 않습니다. 개발 비교·입력 의존성 점검용입니다">?</span>
           <select id="f-gender"><option value="0">남성</option><option value="1">여성</option></select></label>
-        <label>연소득(만원) <span class="help" title="모의 데이터의 5분위 경계로 소득분위를 정합니다. 비우면 중앙값">?</span><input type="number" id="f-income" min="0" step="100" placeholder="기본 중앙값"></label>
+        <label>연소득(만원 선택) <span class="help" title="운영 순위에 사용하지 않습니다. 세제 설명의 참고·개발 비교용이며 입력하지 않아도 추천됩니다">?</span><input type="number" id="f-income" min="0" step="100" placeholder="선택 입력"></label>
         <label>투자 경험 <select id="f-exp"><option value="0">없음</option><option value="1">1~3년</option><option value="2">3년 이상</option></select></label>
         <label>기기 <select id="f-mobile"><option value="1">모바일</option><option value="0">PC</option></select></label>
         <label>학습 시간대 <select id="f-hour"><option value="4">미상</option><option value="0">출근</option><option value="1">점심</option><option value="2">저녁</option><option value="3">심야</option></select></label>
@@ -189,9 +189,9 @@
     <p class="muted">기본값은 검증에서 고른 운영 설정과 시연용 가드레일입니다. 비교 목적이면 다른 기법을 강제로 고를 수 있습니다.</p>
     <div class="form-grid">
       <label>추천 개수 k <span class="help" title="1~20. 평가는 k=5 기준입니다">?</span><input type="number" id="s-k" min="1" max="20" value="5"></label>
-      <label>설정 선택 <span class="help" title="운영 라우터(성별 제외)가 기본입니다. 기법군을 고르면 검증에서 고른 그 기법군의 최적 설정을 씁니다">?</span><select id="s-algorithm"></select></label>
-      <label>선수 단원 미이수 차단 <span class="help" title="로드맵 선수 관계를 가드레일로 씁니다. 끄면 선수 단원을 건너뛴 추천이 섞이고 검사 결과에 참고용으로 표시됩니다">?</span>
-        <select id="s-prereq"><option value="1" selected>차단 (기본)</option><option value="0">차단 없음</option></select></label>
+      <label>정책 및 비교 방법 <span class="help" title="목적·단계 고정 규칙이 운영 기본입니다. 다른 기법은 동일 제약의 연구 비교이며 운영 정책의 자동 교체를 뜻하지 않습니다">?</span><select id="s-algorithm"></select></label>
+      <label>선수 학습 조건 <span class="help" title="필요한 선수 학습을 마친 단원부터 추천합니다. 후보가 적으면 가능한 만큼만 보여 드립니다.">?</span>
+        <select id="s-prereq"><option value="1" selected>선수 학습을 마친 단원 추천</option><option value="0">선수 조건 없이 비교</option></select></label>
       <label>두 단계 위 차단 <span class="help" title="추정 수준보다 이만큼 이상 높은 단원은 후보에서 제외합니다 (기본 2)">?</span>
         <select id="s-block"><option value="1">한 단계 위부터 차단</option><option value="2" selected>두 단계 위 차단 (기본)</option><option value="3">차단 없음</option></select></label>
       <label>한 단계 위 단원 최대 <span class="help" title="목록에 들어갈 수 있는 한 단계 위 단원 수 (기본 1)">?</span><input type="number" id="s-plus" min="0" max="5" value="1"></label>

@@ -8,6 +8,9 @@
 """
 from __future__ import annotations
 
+import math
+from numbers import Integral, Real
+
 from .catalog import Catalog
 
 QUESTIONS = [
@@ -92,6 +95,23 @@ def score_quiz(answers: dict, catalog: Catalog) -> dict:
     수준3 문항 2개 이상 정답, 수준3 정답률 60% 이상. 최소 응답 수를 못 채운 수준은 판정을 보류한다(그 아래 수준으로 시작).
     단원은 그 단원의 통과 판정 문항(marks_pass)을 모두 답하고 모두 맞혀야 '진단 통과'로 기록한다. 하나라도 답하지 않으면 판정 보류.
     """
+    if not isinstance(answers, dict):
+        raise ValueError("진단 답안은 문항 번호와 보기 번호의 사전이어야 합니다")
+    # True·1.8을 int로 절삭해 정답 1로 인정하지 않는다. API와 직접 서비스 호출이 같은 검증을 쓴다.
+    normalized = {}
+    for q in QUESTIONS:
+        value = answers.get(q["id"])
+        if value is None:
+            continue
+        if isinstance(value, bool):
+            raise ValueError(f"{q['id']} 보기 번호는 0~{len(q['options']) - 1} 정수여야 합니다")
+        if isinstance(value, str) and value.strip().isdigit():
+            value = int(value.strip())
+        valid = isinstance(value, Integral) or (isinstance(value, Real) and math.isfinite(value) and float(value).is_integer())
+        if not valid or not 0 <= int(value) < len(q["options"]):
+            raise ValueError(f"{q['id']} 보기 번호는 0~{len(q['options']) - 1} 정수여야 합니다")
+        normalized[q["id"]] = int(value)
+    answers = normalized
     by_level = {1: [0, 0], 2: [0, 0], 3: [0, 0]}
     results, unit_ok, l3_topics = [], {}, set()
     for q in QUESTIONS:

@@ -1,0 +1,279 @@
+{
+  "seed": 42,
+  "evaluation_users": 6544,
+  "selected": {
+    "MF_ALS": {
+      "params": {
+        "k": 2,
+        "lam": 10.0,
+        "alpha": 5.0
+      },
+      "validation_ndcg": 0.10792019815734717
+    },
+    "MF_BPR": {
+      "params": {
+        "k": 4,
+        "weight_decay": 0.0001
+      },
+      "validation_ndcg": 0.10697984454490193
+    },
+    "MLP": {
+      "params": {
+        "epochs": 24,
+        "weight_decay": 0.0001
+      },
+      "validation_ndcg": 0.11004111978033017
+    }
+  },
+  "grids": {
+    "MF_ALS": 36,
+    "MF_BPR": 12,
+    "MLP": 12
+  },
+  "implementation": "NumPy (etfrec.factor_models); torch not used",
+  "protocol": "same candidates, level/prerequisite post-filter, fixed targets and IDCG as Table 9; settings chosen on week-2 validation NDCG@5; refit on weeks 0-2; tested on week 3",
+  "no_history_users": 928,
+  "no_history_note": "users without training interactions get zero factors (MF) or zero user embedding (MLP); like the basic CF comparators they fall back to the fixed tie order or item-only scores",
+  "methods": [
+    {
+      "method": "PurposeStageRule",
+      "label": "목적 단계 규칙 운영안",
+      "selected_params": "기존 비교군(검증 선택) 또는 고정 운영안",
+      "validation_ndcg": null,
+      "ndcg": 0.10306987677173311,
+      "ndcg_positive_target_users": 0.1904261077341111,
+      "stage_alignment_common_core": 0.6340216794731065,
+      "short_list_rate": 0.5200183374083129,
+      "prerequisite_violation_rate": 0.0,
+      "stage_alignment_after_common_core": 0.5332212713936431
+    },
+    {
+      "method": "GlobalPopularity",
+      "label": "전체 인기",
+      "selected_params": "기존 비교군(검증 선택) 또는 고정 운영안",
+      "validation_ndcg": null,
+      "ndcg": 0.1006424466260259,
+      "ndcg_positive_target_users": 0.18594132431414834,
+      "stage_alignment_common_core": 0.637692096597146,
+      "short_list_rate": 0.5200183374083129,
+      "prerequisite_violation_rate": 0.0,
+      "stage_alignment_after_common_core": 0.38957823960880195
+    },
+    {
+      "method": "BehaviourGroupPopularity",
+      "label": "행동 집단 인기",
+      "selected_params": "기존 비교군(검증 선택) 또는 고정 운영안",
+      "validation_ndcg": null,
+      "ndcg": 0.1007966802581344,
+      "ndcg_positive_target_users": 0.18622627769882313,
+      "stage_alignment_common_core": 0.637726399560922,
+      "short_list_rate": 0.5200183374083129,
+      "prerequisite_violation_rate": 0.0,
+      "stage_alignment_after_common_core": 0.38383251833740833
+    },
+    {
+      "method": "Content",
+      "label": "콘텐츠 기반",
+      "selected_params": "기존 비교군(검증 선택) 또는 고정 운영안",
+      "validation_ndcg": null,
+      "ndcg": 0.09427982621331119,
+      "ndcg_positive_target_users": 0.1741861046696523,
+      "stage_alignment_common_core": 0.5667878704720087,
+      "short_list_rate": 0.5200183374083129,
+      "prerequisite_violation_rate": 0.0,
+      "stage_alignment_after_common_core": 0.22860635696821516
+    },
+    {
+      "method": "UserCFPure",
+      "label": "사용자 CF 행동만",
+      "selected_params": "기존 비교군(검증 선택) 또는 고정 운영안",
+      "validation_ndcg": null,
+      "ndcg": 0.0987579711421034,
+      "ndcg_positive_target_users": 0.18245967339184774,
+      "stage_alignment_common_core": 0.6281558726673985,
+      "short_list_rate": 0.5200183374083129,
+      "prerequisite_violation_rate": 0.0,
+      "stage_alignment_after_common_core": 0.30430929095354525
+    },
+    {
+      "method": "ItemCF",
+      "label": "아이템 CF",
+      "selected_params": "기존 비교군(검증 선택) 또는 고정 운영안",
+      "validation_ndcg": null,
+      "ndcg": 0.09893109525050488,
+      "ndcg_positive_target_users": 0.18277952775813214,
+      "stage_alignment_common_core": 0.6380694291986828,
+      "short_list_rate": 0.5200183374083129,
+      "prerequisite_violation_rate": 0.0,
+      "stage_alignment_after_common_core": 0.34070904645476774
+    },
+    {
+      "method": "LegacyValidatedRule",
+      "label": "검증 선택 규칙",
+      "selected_params": "기존 비교군(검증 선택) 또는 고정 운영안",
+      "validation_ndcg": null,
+      "ndcg": 0.10879385967205071,
+      "ndcg_positive_target_users": 0.20100141662730092,
+      "stage_alignment_common_core": 0.615257958287596,
+      "short_list_rate": 0.5200183374083129,
+      "prerequisite_violation_rate": 0.0,
+      "stage_alignment_after_common_core": 0.28150977995110027
+    },
+    {
+      "method": "MF_ALS",
+      "label": "MF(ALS)",
+      "selected_params": "{\"k\": 2, \"lam\": 10.0, \"alpha\": 5.0}",
+      "validation_ndcg": 0.10792019815734717,
+      "ndcg": 0.09929064803409447,
+      "ndcg_positive_target_users": 0.18344381726005485,
+      "stage_alignment_common_core": 0.629905323819978,
+      "short_list_rate": 0.5200183374083129,
+      "prerequisite_violation_rate": 0.0,
+      "stage_alignment_after_common_core": 0.3104828850855746
+    },
+    {
+      "method": "MF_BPR",
+      "label": "MF(BPR)",
+      "selected_params": "{\"k\": 4, \"weight_decay\": 0.0001}",
+      "validation_ndcg": 0.10697984454490193,
+      "ndcg": 0.09923108753535186,
+      "ndcg_positive_target_users": 0.18333377663222541,
+      "stage_alignment_common_core": 0.6254459385290889,
+      "short_list_rate": 0.5200183374083129,
+      "prerequisite_violation_rate": 0.0,
+      "stage_alignment_after_common_core": 0.27964547677261614
+    },
+    {
+      "method": "MLP",
+      "label": "MLP(목표 정렬 BPR)",
+      "selected_params": "{\"epochs\": 24, \"weight_decay\": 0.0001}",
+      "validation_ndcg": 0.11004111978033017,
+      "ndcg": 0.09881428237305286,
+      "ndcg_positive_target_users": 0.18256371085523934,
+      "stage_alignment_common_core": 0.6312774423710209,
+      "short_list_rate": 0.5200183374083129,
+      "prerequisite_violation_rate": 0.0,
+      "stage_alignment_after_common_core": 0.3005195599022005
+    }
+  ],
+  "paired_comparisons": [
+    {
+      "reference": "GlobalPopularity",
+      "ndcg_difference": 0.0024274301457072184,
+      "ndcg_ci_low": 0.00039896635071924304,
+      "ndcg_ci_high": 0.004248531233955749,
+      "alignment_core_difference": -0.0036704171240394823,
+      "alignment_core_ci_low": -0.004991089500096487,
+      "alignment_core_ci_high": -0.002401495266698041,
+      "alignment_after_core_difference": 0.1436430317848411,
+      "alignment_after_core_ci_low": 0.14056922371638145,
+      "alignment_after_core_ci_high": 0.14670079462102686,
+      "bootstrap_resamples": 500
+    },
+    {
+      "reference": "BehaviourGroupPopularity",
+      "ndcg_difference": 0.0022731965135987103,
+      "ndcg_ci_low": 0.000448347122542624,
+      "ndcg_ci_high": 0.004015788570130115,
+      "alignment_core_difference": -0.0037047200878155273,
+      "alignment_core_ci_low": -0.005039493549072707,
+      "alignment_core_ci_high": -0.0024539100848222036,
+      "alignment_after_core_difference": 0.14938875305623472,
+      "alignment_after_core_ci_low": 0.14559902200489,
+      "alignment_after_core_ci_high": 0.1529500305623472,
+      "bootstrap_resamples": 500
+    },
+    {
+      "reference": "Content",
+      "ndcg_difference": 0.008790050558421927,
+      "ndcg_ci_low": 0.005844538822497139,
+      "ndcg_ci_high": 0.012216879616995318,
+      "alignment_core_difference": 0.06723380900109777,
+      "alignment_core_ci_low": 0.06431641507508234,
+      "alignment_core_ci_high": 0.07045747038598506,
+      "alignment_after_core_difference": 0.3046149144254279,
+      "alignment_after_core_ci_low": 0.29952551955990225,
+      "alignment_after_core_ci_high": 0.30958664425427873,
+      "bootstrap_resamples": 500
+    },
+    {
+      "reference": "UserCFPure",
+      "ndcg_difference": 0.004311905629629714,
+      "ndcg_ci_low": 0.0018947864280599717,
+      "ndcg_ci_high": 0.007095230578482206,
+      "alignment_core_difference": 0.005865806805708029,
+      "alignment_core_ci_low": 0.004394763033473348,
+      "alignment_core_ci_high": 0.00735082725275192,
+      "alignment_after_core_difference": 0.2289119804400978,
+      "alignment_after_core_ci_low": 0.224458282396088,
+      "alignment_after_core_ci_high": 0.2333129584352078,
+      "bootstrap_resamples": 500
+    },
+    {
+      "reference": "ItemCF",
+      "ndcg_difference": 0.004138781521228235,
+      "ndcg_ci_low": 0.0017219794585368456,
+      "ndcg_ci_high": 0.006555879122434053,
+      "alignment_core_difference": -0.004047749725576311,
+      "alignment_core_ci_low": -0.005355539194592085,
+      "alignment_core_ci_high": -0.002918700872585753,
+      "alignment_after_core_difference": 0.19251222493887532,
+      "alignment_after_core_ci_low": 0.18823349633251835,
+      "alignment_after_core_ci_high": 0.19662362469437653,
+      "bootstrap_resamples": 500
+    },
+    {
+      "reference": "LegacyValidatedRule",
+      "ndcg_difference": -0.005723982900317601,
+      "ndcg_ci_low": -0.007789663128657253,
+      "ndcg_ci_high": -0.0034824026540252965,
+      "alignment_core_difference": 0.018763721185510507,
+      "alignment_core_ci_low": 0.017014430939835172,
+      "alignment_core_ci_high": 0.020554356456949245,
+      "alignment_after_core_difference": 0.2517114914425428,
+      "alignment_after_core_ci_low": 0.24700336185819075,
+      "alignment_after_core_ci_high": 0.2564967909535453,
+      "bootstrap_resamples": 500
+    },
+    {
+      "reference": "MF_ALS",
+      "ndcg_difference": 0.00377922873763864,
+      "ndcg_ci_low": 0.0013356797949400942,
+      "ndcg_ci_high": 0.006016721205797389,
+      "alignment_core_difference": 0.004116355653128512,
+      "alignment_core_ci_low": 0.002588915850313217,
+      "alignment_core_ci_high": 0.0054857514600786346,
+      "alignment_after_core_difference": 0.22273838630806847,
+      "alignment_after_core_ci_low": 0.21793245721271393,
+      "alignment_after_core_ci_high": 0.22732273838630807,
+      "bootstrap_resamples": 500
+    },
+    {
+      "reference": "MF_BPR",
+      "ndcg_difference": 0.003838789236381257,
+      "ndcg_ci_low": 0.0014353402963068864,
+      "ndcg_ci_high": 0.006793142831895952,
+      "alignment_core_difference": 0.008575740944017585,
+      "alignment_core_ci_low": 0.006589552472144533,
+      "alignment_core_ci_high": 0.010449693813928176,
+      "alignment_after_core_difference": 0.2535757946210269,
+      "alignment_after_core_ci_low": 0.24842527506112472,
+      "alignment_after_core_ci_high": 0.2589708129584352,
+      "bootstrap_resamples": 500
+    },
+    {
+      "reference": "MLP",
+      "ndcg_difference": 0.004255594398680257,
+      "ndcg_ci_low": 0.0020758953147255008,
+      "ndcg_ci_high": 0.006972030239484783,
+      "alignment_core_difference": 0.0027442371020856005,
+      "alignment_core_ci_low": 0.0012539032075084028,
+      "alignment_core_ci_high": 0.004121778166588155,
+      "alignment_after_core_difference": 0.2327017114914426,
+      "alignment_after_core_ci_low": 0.22847952322738393,
+      "alignment_after_core_ci_high": 0.2375015281173594,
+      "bootstrap_resamples": 500
+    }
+  ],
+  "seconds": 88.8
+}

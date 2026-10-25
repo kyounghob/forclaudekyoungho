@@ -19,7 +19,7 @@ for pen in [0.8, 2.0, 4.0]:
     b = train(Dataset.synthetic(cfg), cfg, out_dir=None, log=lambda *a, **k: None)
     res = b.results.set_index("method")
     row = dict(prereq_penalty=pen, users=int(res.loc["RULE", "users"]), validation_best=float(b.selection["validation_best_ndcg"]),
-               operational=b.algos[b.selection["operational_algorithm"]].name, seconds=round(time.time() - t0, 1),
+               operational=b.algos[b.selection.get("legacy_operational_algorithm", b.selection["operational_algorithm"])].name,   # 고정 정책 번들은 operational_algorithm=-1 seconds=round(time.time() - t0, 1),
                quiz_pass=int(b.dataset_summary["quiz_pass"]), attempts=int(b.dataset_summary["study_attempts"]))
     for m in ["Global", "RouterNoGender", "RouterNoGender+prereq", "POP", "UCF"]:
         if m in res.index:

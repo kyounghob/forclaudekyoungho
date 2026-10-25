@@ -18,6 +18,7 @@ import hashlib
 from dataclasses import dataclass
 
 import numpy as np
+from scipy.special import expit
 
 try:  # torch는 선택 의존성
     import torch
@@ -86,7 +87,9 @@ def train_mf(rows, cols, vals, n_users, n_items, k=16, lr=0.05, reg=0.01, epochs
     Q[np.bincount(cols, minlength=n_items) == 0] = 0
     audit = dict(model="MF_sampled", factors=k, reg=reg, seed=seed, positive_rows=len(rows), negative_rows=len(nu),
                  initial_negative_collisions=initially, final_negative_collisions=0,
-                 loss_first=losses[0], loss_last=losses[-1])
+                 loss_first=losses[0], loss_last=losses[-1], learning_rate=float(min(lr, 0.02)),
+                 target="observed user-item pair=1; sampled unobserved pair=0",
+                 confidence="1 + conf_alpha * log1p(aggregated action score)")
     return P, Q, losses, audit
 
 
@@ -130,6 +133,8 @@ def train_mf_bpr(rows, cols, n_users, n_items, k=16, lr=0.02, reg=0.01, epochs=1
         return nj, keep, first
 
     nj0, keep0, initially = sample_negatives()
+    if not keep0.any():
+        raise ValueError("BPR 학습용 미관측 음성 쌍이 없습니다. 관측 아이템 풀을 확인하세요.")
     with torch.random.fork_rng():
         torch.manual_seed(seed + 11)
         Pe, Qe = nn.Embedding(n_users, k), nn.Embedding(n_items, k)
@@ -156,7 +161,8 @@ def train_mf_bpr(rows, cols, n_users, n_items, k=16, lr=0.02, reg=0.01, epochs=1
     Q[np.bincount(cols, minlength=n_items) == 0] = 0
     audit = dict(model="MF_BPR", factors=k, reg=reg, seed=seed + 11, positive_rows=int(len(rows)), pairs=n_pairs, epochs=epochs,
                  negative_resampling="per-epoch", initial_negative_collisions=initially, final_negative_collisions=0,
-                 loss_first=losses[0], loss_last=losses[-1])
+                 loss_first=losses[0], loss_last=losses[-1], learning_rate=float(lr),
+                 positive_definition="observed user-item pair, not quiz-pass only")
     return P, Q, losses, audit
 
 
@@ -175,13 +181,14 @@ class ObservedWeights:
     audit: dict = None
 
     def score(self, uid: np.ndarray, iid: np.ndarray) -> np.ndarray:
-        """uid·iid는 +1 이동된 번호(0 = 미학습). MLP는 sigmoid 확률, 관측 MF는 내적."""
+        """uid·iid는 +1 이동된 번호(0 = 미학습). MLP는 sigmoid 점수, 관측 MF는 내적.
+        쌍별 MLP의 sigmoid는 순서를 보존하는 변환이며 보정된 퀴즈 통과확률이 아니다."""
         eu, ei = self.user_emb[uid], self.item_emb[iid]
         if self.kind in MLP_KINDS:
             x = np.concatenate([eu, ei], axis=1)
             h = np.maximum(x @ self.W1.T + self.b1, 0)
             logit = (h @ self.W2.T + self.b2).ravel()
-            return 1 / (1 + np.exp(-logit))          # 쌍별 모델도 단조 변환이라 순위는 같다
+            return expit(logit)                     # 안정적 sigmoid: 큰 음수에서도 exp 오버플로 없음
         return (eu * ei).sum(1)
 
 
@@ -266,7 +273,8 @@ def fit_observed_model(u, i, y, score, n_users, n_items, kind: str, seed: int = 
     blob = b"".join(a.tobytes() for a in [ue, ie] + ([W1, b1, W2, b2] if kind in MLP_KINDS else []))
     audit = dict(model=kind, training_rows=int(len(u)), positive=int(np.count_nonzero(y > 0)), zero=int(np.count_nonzero(y == 0)),
                  seed=seed + 71, epochs=epochs, loss_first=losses[0], loss_last=losses[-1],
-                 state_sha256=hashlib.sha256(blob).hexdigest())
+                 state_sha256=hashlib.sha256(blob).hexdigest(), learning_rate=0.01,
+                 prediction=("sigmoid score, not calibrated probability" if kind in MLP_KINDS else "normalized action-score estimate"))
     if pairs is not None:
         neg_desc = {"mlp9_bpr": "같은 사용자의 미통과 시도 단원(없으면 미시도 단원)", "mlp9_bpru": "같은 사용자가 시도하지 않은 단원",
                     "mlp9_next": "학습 주 w 이전에 통과하지 않았고 w에도 통과하지 않은 단원(양성 = w의 통과 단원)"}[kind]

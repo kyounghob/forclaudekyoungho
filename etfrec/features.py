@@ -40,11 +40,20 @@ AGE_BAND_REP = (25, 35, 45, 55, 65)     # 연령대 대표값(화면 입력란 �
 
 
 def income_quintile(income: np.ndarray, edges: np.ndarray = None):
-    """소득 5분위. 기준 집단에서는 pd.qcut, 임의 학습자는 저장된 경계(오른쪽 닫힘)로 계산한다."""
+    """소득 분위 경계(20·40·60·80%)와 오른쪽 닫힌 구간 코드를 반환한다.
+
+    연속 소득에서는 기존 qcut과 같다. 같은 소득이 많은 작은 집단에서도 네 경계를
+    유지하고 같은 값은 같은 구간에 둔다. 동률을 임의 분할하지 않으므로 빈 분위가 가능하다.
+    """
+    values = np.asarray(income, dtype=float)
+    if values.ndim != 1 or len(values) == 0 or not np.isfinite(values).all():
+        raise ValueError("소득은 비어 있지 않은 유한한 1차원 배열이어야 합니다")
     if edges is None:
-        q, bins = pd.qcut(income, 5, labels=False, retbins=True)
-        return np.asarray(q).astype(int), bins[1:-1]
-    return np.searchsorted(edges, income, side="left").astype(int), edges
+        edges = np.quantile(values, [.2, .4, .6, .8])
+    bounds = np.asarray(edges, dtype=float)
+    if bounds.shape != (4,) or not np.isfinite(bounds).all() or np.any(np.diff(bounds) < 0):
+        raise ValueError("소득 분위 경계는 오름차순의 유한한 값 4개여야 합니다")
+    return np.searchsorted(bounds, values, side="left").astype(int), bounds
 
 
 def income_representatives(income, edges) -> np.ndarray:

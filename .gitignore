@@ -5,6 +5,7 @@ artifacts/**/bundle.pkl
 artifacts/**/learner_profiles.csv
 artifacts/designs/
 artifacts/demo_bundle/
+runs/
 /data/
 venv/
 .venv/

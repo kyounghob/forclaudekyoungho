@@ -16,6 +16,7 @@ CSV 스키마(운영 로그를 연결할 때 그대로 맞추면 된다)
 from __future__ import annotations
 
 import json
+import io
 import os
 from dataclasses import dataclass
 
@@ -34,7 +35,7 @@ def score_attempts(log: pd.DataFrame) -> pd.DataFrame:
     """[교안 1-3] 행동 점수: 조회 1, 완료 2, 퀴즈 통과·저장 3의 최댓값. 이해 여부는 퀴즈 통과의 대리 라벨."""
     log = log.copy()
     for c in BOOL_COLUMNS:
-        log[c] = log[c].astype(bool)
+        log[c] = _as_bool(log[c], c)
     log["score"] = np.maximum.reduce([np.ones(len(log)), 2 * log.complete.values, 3 * log.quiz_pass.values, 3 * log.save.values])
     log["understood"] = log.quiz_pass
     return log
@@ -47,7 +48,7 @@ def normalize_event_flags(log: pd.DataFrame, return_mask: bool = False) -> tuple
     return_mask=True면 바뀐 행의 불리언 배열도 돌려준다(그 행만 다시 채점할 때 쓴다)."""
     log = log.copy()
     for c in BOOL_COLUMNS:
-        log[c] = log[c].astype(bool)
+        log[c] = _as_bool(log[c], c)
     before = log[["quiz", "complete", "drop"]].values.copy()
     rep = dict(quiz_from_pass=int((log.quiz_pass & ~log.quiz).sum()))
     log["quiz"] = log.quiz | log.quiz_pass
@@ -86,6 +87,60 @@ def _as_bool(col: pd.Series, name: str) -> pd.Series:
     if out.isna().any():
         raise ValueError(f"{name} 열은 0/1 또는 True/False여야 합니다: {sorted(map(str, col[out.isna()].unique()))[:5]}")
     return out.astype(bool)
+
+
+def _event_integer(value, name: str, minimum: int = 0, maximum: int = None) -> int:
+    """CSV의 1·1.0은 같은 정수로 읽되 소수·결측·불리언·음수는 조용히 절삭하지 않는다."""
+    if isinstance(value, (bool, np.bool_)):
+        raise ValueError(f"{name} 값은 정수여야 합니다")
+    try:
+        num = float(value)
+    except (TypeError, ValueError, OverflowError) as e:
+        raise ValueError(f"{name} 값은 정수여야 합니다") from e
+    if not np.isfinite(num) or num != np.floor(num) or num < minimum or (maximum is not None and num > maximum):
+        bound = f"{minimum}~{maximum}" if maximum is not None else f"{minimum} 이상"
+        raise ValueError(f"{name} 값은 {bound} 정수여야 합니다")
+    return int(num)
+
+
+def parse_history_csv(csv_text: str, catalog: Catalog) -> dict:
+    """화면 입력 학습 CSV를 시도 목록으로 읽는다. 잘못된 행은 경고하고 제외하며 통과로 추측하지 않는다.
+
+    불리언은 Dataset과 같은 0/1·true/false 규칙이다. 분은 시각의 '분'이 아니라 주 안의 정렬용 분(0~10079)이다.
+    이 함수는 네트워크·API 프레임워크 없이 같은 입력 변환을 검증할 수 있도록 데이터 계층에 둔다.
+    """
+    try:
+        df = pd.read_csv(io.StringIO(csv_text))
+    except (pd.errors.ParserError, pd.errors.EmptyDataError, ValueError) as e:
+        raise ValueError(f"CSV를 읽지 못했습니다: {e}") from e
+    if not {"item", "title"} & set(df.columns):
+        raise ValueError("CSV에 item 또는 title 열이 있어야 합니다")
+    titles = {str(t).strip(): i for i, t in enumerate(catalog.item_title)}
+    events, warnings = [], []
+    bounds = {"week": None, "day": 6, "hour": 3, "minute": 10079}
+    for idx, row in df.iterrows():
+        try:
+            item = None
+            if "item" in df.columns and pd.notna(row.get("item")):
+                v = row["item"]
+                if isinstance(v, str) and v.strip()[:1].lower() == "e":
+                    v = v.strip()[1:]
+                item = _event_integer(v, "item", maximum=catalog.n_items - 1)
+            if item is None and "title" in df.columns:
+                item = titles.get(str(row["title"]).strip())
+            if item is None:
+                raise ValueError("단원을 찾지 못했습니다")
+            event = dict(item=item)
+            for c in BOOL_COLUMNS:
+                if c in df.columns and pd.notna(row[c]):
+                    event[c] = bool(_as_bool(pd.Series([row[c]]), c).iloc[0])
+            for c, maximum in bounds.items():
+                if c in df.columns and pd.notna(row[c]):
+                    event[c] = _event_integer(row[c], c, maximum=maximum)
+            events.append(event)
+        except ValueError as e:
+            warnings.append(f"{idx + 2}행: {e}")
+    return dict(events=events, warnings=warnings, rows=int(len(df)))
 
 
 SESSION_COLUMN = "session_id"

@@ -1,0 +1,150 @@
+{
+  "seed": 42,
+  "users": 6544,
+  "common_core_units": [
+    0,
+    1,
+    3,
+    9,
+    24,
+    27,
+    28,
+    36,
+    39
+  ],
+  "assumption": "all evaluation-week users have passed the common-core units; behaviour log, preferences and popularity unchanged",
+  "current_stage_counts": {
+    "goal": 6544
+  },
+  "attainable_alignment_same_display_count": {
+    "users": 6544,
+    "displayed_items": 32720,
+    "aligned_items": 20595,
+    "alignment_rate": 0.6294315403422983,
+    "macro_alignment_zero_request_as_zero": 0.6294315403422983,
+    "zero_display_requests": 0
+  },
+  "methods": [
+    {
+      "method": "PurposeStageRule",
+      "algorithm_name": "목적 단계 규칙",
+      "users": 6544,
+      "displayed_items": 32720,
+      "aligned_items": 17447,
+      "stage_alignment": 0.5332212713936431,
+      "in_roadmap_share": 0.7468826405867971,
+      "short_list_rate": 0.0
+    },
+    {
+      "method": "GlobalPopularity",
+      "algorithm_name": "인기",
+      "users": 6544,
+      "displayed_items": 32720,
+      "aligned_items": 12747,
+      "stage_alignment": 0.38957823960880195,
+      "in_roadmap_share": 0.4863691931540342,
+      "short_list_rate": 0.0
+    },
+    {
+      "method": "BehaviourGroupPopularity",
+      "algorithm_name": "세그먼트 인기[학습활동](λ=5)",
+      "users": 6544,
+      "displayed_items": 32720,
+      "aligned_items": 12559,
+      "stage_alignment": 0.38383251833740833,
+      "in_roadmap_share": 0.47197432762836183,
+      "short_list_rate": 0.0
+    },
+    {
+      "method": "Content",
+      "algorithm_name": "콘텐츠[주제·수준+TF-IDF](가중)",
+      "users": 6544,
+      "displayed_items": 32720,
+      "aligned_items": 7480,
+      "stage_alignment": 0.22860635696821516,
+      "in_roadmap_share": 0.35751833740831296,
+      "short_list_rate": 0.0
+    },
+    {
+      "method": "UserCFPure",
+      "algorithm_name": "사용자 CF(k=100)",
+      "users": 6544,
+      "displayed_items": 32720,
+      "aligned_items": 9957,
+      "stage_alignment": 0.30430929095354525,
+      "in_roadmap_share": 0.42842298288508557,
+      "short_list_rate": 0.0
+    },
+    {
+      "method": "ItemCF",
+      "algorithm_name": "아이템 CF(λ=30, confidence)",
+      "users": 6544,
+      "displayed_items": 32720,
+      "aligned_items": 11148,
+      "stage_alignment": 0.34070904645476774,
+      "in_roadmap_share": 0.4513447432762836,
+      "short_list_rate": 0.0
+    },
+    {
+      "method": "LegacyValidatedRule",
+      "algorithm_name": "규칙[관심 주제+수준 일치+모바일·짧은 콘텐츠](base=연령대+소득분위)",
+      "users": 6544,
+      "displayed_items": 32720,
+      "aligned_items": 9211,
+      "stage_alignment": 0.28150977995110027,
+      "in_roadmap_share": 0.43092909535452323,
+      "short_list_rate": 0.0
+    }
+  ],
+  "paired_comparisons": [
+    {
+      "reference": "GlobalPopularity",
+      "alignment_difference": 0.1436430317848411,
+      "ci_low": 0.14056922371638145,
+      "ci_high": 0.14670079462102686,
+      "bootstrap_resamples": 500,
+      "unit": "paired evaluation-week users"
+    },
+    {
+      "reference": "BehaviourGroupPopularity",
+      "alignment_difference": 0.14938875305623472,
+      "ci_low": 0.14559902200489,
+      "ci_high": 0.1529500305623472,
+      "bootstrap_resamples": 500,
+      "unit": "paired evaluation-week users"
+    },
+    {
+      "reference": "Content",
+      "alignment_difference": 0.3046149144254279,
+      "ci_low": 0.29952551955990225,
+      "ci_high": 0.30958664425427873,
+      "bootstrap_resamples": 500,
+      "unit": "paired evaluation-week users"
+    },
+    {
+      "reference": "UserCFPure",
+      "alignment_difference": 0.2289119804400978,
+      "ci_low": 0.224458282396088,
+      "ci_high": 0.2333129584352078,
+      "bootstrap_resamples": 500,
+      "unit": "paired evaluation-week users"
+    },
+    {
+      "reference": "ItemCF",
+      "alignment_difference": 0.19251222493887532,
+      "ci_low": 0.18823349633251835,
+      "ci_high": 0.19662362469437653,
+      "bootstrap_resamples": 500,
+      "unit": "paired evaluation-week users"
+    },
+    {
+      "reference": "LegacyValidatedRule",
+      "alignment_difference": 0.2517114914425428,
+      "ci_low": 0.24700336185819075,
+      "ci_high": 0.2564967909535453,
+      "bootstrap_resamples": 500,
+      "unit": "paired evaluation-week users"
+    }
+  ],
+  "scope": "conformance to the authored roadmap that is also a scoring signal; not a learning-effect estimate"
+}

@@ -28,7 +28,7 @@ class Algo:
         return [s for s, _ in self.terms]
 
 
-FAMILY_KO = {"POP": "인기", "SEGPOP": "세그먼트 인기", "PERS": "개인화 인기", "RULE": "규칙 점수", "CONTENT": "콘텐츠",
+FAMILY_KO = {"PURPOSE_STAGE": "목적 단계 규칙", "POP": "인기", "SEGPOP": "세그먼트 인기", "PERS": "개인화 인기", "RULE": "규칙 점수", "CONTENT": "콘텐츠",
              "UCF": "사용자 CF", "ICF": "아이템 CF", "MF": "행렬분해", "HYB2": "CF+세그먼트", "HYB3": "CF+콘텐츠+세그먼트",
              "HYBR": "CF+규칙", "CTX": "맥락 보정", "MLP": "MLP (9주차)", "MF_OBS": "관측 점수 MF",
              "MF_BPR": "행렬분해(BPR 쌍별 손실)", "MLP_BPR": "MLP (쌍별·관측 음성)", "MLP_BPRU": "MLP (쌍별·미관측 음성)",

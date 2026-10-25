@@ -1,18 +1,16 @@
 """FastAPI 애플리케이션: REST API + 정적 UI.
 
-실행: ``python -m etfrec serve --bundle artifacts/bundle_v2 --port 8000`` 후 http://localhost:8000
+실행: ``python -m etfrec serve --bundle runs/seed42 --port 8000`` 후 http://localhost:8000
 모든 추천은 미리 학습된 번들로 계산하며 요청 중 재학습은 없다.
 """
 from __future__ import annotations
 
-import io
 import json
 import os
 import re
 import time
 from typing import Optional, Union
 
-import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -20,10 +18,11 @@ from pydantic import BaseModel, Field
 
 from . import __version__
 from .config import GuardrailConfig
+from .data import parse_history_csv
 from .nlparse import EXAMPLES, parse_onboarding
 from .pipeline import Bundle
 from .privacy import strip_outputs
-from .service import EVENT_FIELDS, LearnerInput, RecommendationService
+from .service import LearnerInput, RecommendationService
 from .util import json_safe
 
 UI_DIR = os.path.join(os.path.dirname(__file__), "ui")
@@ -37,18 +36,18 @@ class Guardrail(BaseModel):
 
 
 class Event(BaseModel):
-    item: int
-    week: int = 0
-    day: int = 0
-    hour: int = 0
-    minute: int = 0
+    item: int = Field(ge=0)
+    week: int = Field(0, ge=0)
+    day: int = Field(0, ge=0, le=6)
+    hour: int = Field(0, ge=0, le=3)
+    minute: int = Field(0, ge=0, le=10079)
     complete: bool = False
     quiz: bool = False
     quiz_pass: bool = False
     save: bool = False
     drop: bool = False
     replay: bool = False
-    source: Optional[str] = None     # "diagnosis": 진단 퀴즈에서 온 통과(수준 갱신에는 쓰지 않음)
+    source: Optional[str] = None     # "diagnosis": 이수 인정만 반영; 행동·관심·조회 통계에는 쓰지 않음
 
 
 class Learner(BaseModel):
@@ -111,6 +110,9 @@ class NewUserRequest(BaseModel):
     level: int = Field(1, ge=1, le=3)
     k: int = Field(5, ge=1, le=20)
     mobile: int = Field(1, ge=0, le=1)
+    goal: str = "long_term"
+    horizon: str = "mid"
+    risk: int = Field(1, ge=0, le=2)
 
 
 class LogText(BaseModel):
@@ -150,7 +152,10 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
 
     def guard(g: Optional[Guardrail]) -> GuardrailConfig:
         """요청의 가드레일. 생략하면 스키마 기본값(화면 기본: 선수 단원 차단 켬)과 같게 처리한다."""
-        return GuardrailConfig(**(g or Guardrail()).model_dump())
+        chosen = g or Guardrail()
+        if not chosen.prereq_block and not allow_any_config:
+            raise HTTPException(422, "선수 학습을 마친 단원만 추천합니다. 선수 조건을 해제한 비교는 개발 모드에서만 가능합니다")
+        return GuardrailConfig(**chosen.model_dump())
 
     def wrap(fn):
         try:
@@ -167,7 +172,8 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
     def meta():
         return {**svc.meta(), "learners_enabled": bool(expose_learners),
                 "guardrail": Guardrail().model_dump(),                         # 요청에서 생략할 때 쓰는 값(화면 기본)
-                "evaluation_guardrail": dict(bundle.config.guardrail.__dict__)}   # 오프라인 평가의 주 행에 쓴 값(선수 차단 끔)
+                "prerequisite_policy_required": not bool(allow_any_config),
+                "evaluation_guardrail": dict(bundle.config.guardrail.__dict__)}   # 번들 평가에 실제 사용한 조건
 
     @app.get("/api/catalog")
     def catalog():
@@ -215,7 +221,7 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
 
     @app.post("/api/recommend-new")
     def recommend_new(req: NewUserRequest):
-        return wrap(lambda: svc.recommend_new(req.topics, req.level, req.k, req.mobile))
+        return wrap(lambda: svc.recommend_new(req.topics, req.level, req.k, req.mobile, req.goal, req.horizon, req.risk))
 
     @app.post("/api/roadmap")
     def roadmap(req: RoadmapRequest):
@@ -231,7 +237,7 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
 
     @app.post("/api/quiz/score")
     def quiz_score(req: QuizAnswers):
-        return wrap(lambda: svc.quiz_score({str(k): int(v) for k, v in req.answers.items() if v is not None}))
+        return wrap(lambda: svc.quiz_score({str(k): v for k, v in req.answers.items() if v is not None}))
 
     @app.get("/api/sources")
     def sources():
@@ -246,32 +252,7 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
     @app.post("/api/parse-log")
     def parse_log(req: LogText):
         """학습 로그 CSV 텍스트 → 이벤트 목록. item 번호 또는 title 열을 받는다."""
-        try:
-            df = pd.read_csv(io.StringIO(req.csv_text))
-        except Exception as e:
-            raise HTTPException(422, f"CSV를 읽지 못했습니다: {e}")
-        cat = bundle.catalog
-        title_to_item = {t: i for i, t in enumerate(cat.item_title)}
-        events, warnings = [], []
-        for idx, row in df.iterrows():
-            item = None
-            if "item" in df.columns and pd.notna(row.get("item")):
-                try:
-                    item = int(str(row["item"]).lstrip("Ee"))
-                except ValueError:
-                    item = None
-            if item is None and "title" in df.columns:
-                item = title_to_item.get(str(row["title"]).strip())
-            if item is None or not 0 <= item < cat.n_items:
-                warnings.append(f"{idx + 2}행: 단원을 찾지 못했습니다"); continue
-            e = dict(item=item)
-            for f in EVENT_FIELDS[1:]:
-                if f in df.columns and pd.notna(row[f]):
-                    v = row[f]
-                    e[f] = bool(int(v)) if f in ("complete", "quiz", "quiz_pass", "save", "drop", "replay") and str(v).strip() in ("0", "1", "True", "False", "true", "false") \
-                        else (bool(v) if isinstance(v, (bool,)) else (int(v) if f in ("week", "day", "hour", "minute") else bool(v)))
-            events.append(e)
-        return json_safe(dict(events=events, warnings=warnings, rows=int(len(df))))
+        return wrap(lambda: json_safe(parse_history_csv(req.csv_text, bundle.catalog)))
 
     @app.get("/api/evaluation")
     def evaluation():

@@ -68,16 +68,29 @@ class TrainConfig:
     val_week: int = VAL_WEEK
     test_week: int = TEST_WEEK
     operational_router: str = "RouterNoGender"
+    operational_policy: str = "PurposeStageRule"  # fixed operational design; legacy routers remain explicit comparisons
     router_lams: tuple = (0, 20, 100, 500, 3000, 1e9)
     router_reps: int = 2
     bootstrap_n: int = 500
     train_max_rows: int = int(os.environ.get("REC_TRAIN_MAX", "200000"))
     n_workers: int = N_CPU
-    guardrail: GuardrailConfig = field(default_factory=GuardrailConfig)
+    guardrail: GuardrailConfig = field(default_factory=lambda: GuardrailConfig(prereq_block=True))
     catalog_version: int = CATALOG_VERSION
     generator_version: int = GENERATOR_VERSION
     goal_effect: float = 0.8        # 생성기 v2: 목적 친화도가 주제 선호 로짓에 더해지는 크기
     prereq_penalty: float = 0.8     # 생성기 v2: 미이수 선수 단원 1개당 완료·통과 로짓 감소(최대 2개)
+
+    def __post_init__(self):
+        if not 0 <= self.val_week < self.test_week:
+            raise ValueError("val_week는 0 이상이며 test_week보다 앞서야 합니다")
+        if self.n_learners < 1 or self.n_workers < 1:
+            raise ValueError("학습자 수와 worker 수는 양수여야 합니다")
+        if self.bootstrap_n < 1 or self.router_reps < 1:
+            raise ValueError("부트스트랩 횟수와 라우터 반복 수는 양수여야 합니다")
+        if self.operational_router not in ("RouterFull", "RouterNoGender", "RouterNoGenderIncome"):
+            raise ValueError("알 수 없는 운영 라우터입니다")
+        if self.operational_policy not in ("PurposeStageRule", "legacy"):
+            raise ValueError("운영 정책은 PurposeStageRule 또는 legacy여야 합니다")
 
     @property
     def rule_parts(self):

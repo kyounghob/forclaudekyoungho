@@ -1,0 +1,3028 @@
+{
+  "version": "1.0.0",
+  "created_at": "2026-10-25T21:01:36",
+  "config": {
+    "n_learners": 15000,
+    "seed": 20261023,
+    "effect_scale": 1.0,
+    "gender_effect": 0.3,
+    "val_week": 2,
+    "test_week": 3,
+    "operational_router": "RouterNoGender",
+    "operational_policy": "PurposeStageRule",
+    "router_lams": [
+      0,
+      20,
+      100,
+      500,
+      3000,
+      1000000000.0
+    ],
+    "router_reps": 2,
+    "bootstrap_n": 500,
+    "train_max_rows": 200000,
+    "n_workers": 2,
+    "guardrail": {
+      "block_gap": 2,
+      "plus_one_max": 1,
+      "exclude_passed": true,
+      "prereq_block": true
+    },
+    "catalog_version": 2,
+    "generator_version": 2,
+    "goal_effect": 0.8,
+    "prereq_penalty": 0.8
+  },
+  "dataset": {
+    "users": 15000,
+    "items": 66,
+    "weeks": 4,
+    "study_attempts": 109191,
+    "complete": 51966,
+    "quiz_attempted": 36379,
+    "quiz_pass": 25352,
+    "save": 12400,
+    "drop": 45744,
+    "replay": 2961,
+    "not_complete": 57225,
+    "drop_and_complete": 0,
+    "pass_without_quiz": 0,
+    "quiz_without_complete": 0,
+    "event_repairs": {
+      "quiz_from_pass": 0,
+      "complete_from_quiz": 0,
+      "drop_cleared_by_complete": 0,
+      "flag_fixes": 0,
+      "rows_changed": 0
+    },
+    "dropped_columns": {
+      "profiles": [],
+      "log": []
+    },
+    "attempt_grouping": null,
+    "attempts_by_week": {
+      "0": 28675,
+      "1": 27620,
+      "2": 26879,
+      "3": 26017
+    },
+    "mastery_label_equals_quiz": true,
+    "distinct_pairs": 96749,
+    "density": 0.09772626262626262,
+    "goals": {
+      "long_term": 3395,
+      "income": 3311,
+      "pension": 3072,
+      "trading": 3069,
+      "diversify": 2153
+    },
+    "horizons": {
+      "mid": 6055,
+      "long": 5894,
+      "short": 3051
+    },
+    "catalog_version": 2,
+    "source": "synthetic"
+  },
+  "dataset_meta": {
+    "seed": 20261023,
+    "effect_scale": 1.0,
+    "gender_effect": 0.3,
+    "generator_version": 2,
+    "catalog_version": 2,
+    "gender_effect_by_topic": {
+      "ETF 구조": 0.15,
+      "지수": 0.582,
+      "추적오차": -0.278,
+      "비용": 0.165,
+      "분배금": 0.326,
+      "섹터 ETF": -0.009,
+      "채권 ETF": 0.133,
+      "금 ETF": 0.109,
+      "환헤지": 0.09,
+      "레버리지·인버스": 0.255,
+      "리밸런싱": -0.309,
+      "자산배분": -0.576,
+      "해외 ETF": -0.146,
+      "유동성": -0.085,
+      "테마 ETF": 0.469,
+      "원자재 ETF": 0.063,
+      "리츠 ETF": -0.039,
+      "연금계좌 ETF": 0.561,
+      "액티브 ETF": -0.198,
+      "ESG ETF": 0.419,
+      "커버드콜 ETF": 0.059,
+      "절세 계좌": 0.458
+    }
+  },
+  "validation": {
+    "mode": "next-week observed quiz-pass; targets fixed before prerequisite filtering",
+    "week": 2,
+    "rows": 6680,
+    "population": "users with at least one attempt in the evaluation week",
+    "dataset_users": 15000,
+    "zero_observed_target": 2947,
+    "zero_selectable_target": 5000,
+    "raw_positive_items": 6442,
+    "eligible_positive_items": 6337,
+    "selectable_positive_items": 2004,
+    "prerequisite_blocked_positive_items": 4333,
+    "raw_positive_users": 3748,
+    "eligible_positive_users": 3733,
+    "selectable_positive_users": 1680,
+    "eligible_min": 3,
+    "eligible_max": 19,
+    "guardrail": {
+      "block_gap": 2,
+      "plus_one_max": 1,
+      "exclude_passed": true,
+      "prereq_block": true
+    },
+    "target_policy": "unique evaluation-week quiz passes, unpassed and level-eligible at snapshot; prerequisite filter excluded from target definition",
+    "idcg_policy": "sum of 1/log2(rank+1) through min(full_relevant_count, k); unchanged by prerequisite filtering",
+    "repeat_pass_policy": "deduplicate within evaluation week; previously passed units excluded when exclude_passed=True",
+    "zero_target_policy": "retain as NDCG=0; also report positive-target-user mean",
+    "short_list_policy": "pad with -1; padded ranks have zero gain; fixed k IDCG",
+    "aggregation": "one request per evaluation-week active user; arithmetic user mean"
+  },
+  "test": {
+    "mode": "next-week observed quiz-pass; targets fixed before prerequisite filtering",
+    "week": 3,
+    "rows": 6487,
+    "population": "users with at least one attempt in the evaluation week",
+    "dataset_users": 15000,
+    "zero_observed_target": 2975,
+    "zero_selectable_target": 4900,
+    "raw_positive_items": 6079,
+    "eligible_positive_items": 5929,
+    "selectable_positive_items": 1876,
+    "prerequisite_blocked_positive_items": 4053,
+    "raw_positive_users": 3555,
+    "eligible_positive_users": 3512,
+    "selectable_positive_users": 1587,
+    "eligible_min": 3,
+    "eligible_max": 20,
+    "guardrail": {
+      "block_gap": 2,
+      "plus_one_max": 1,
+      "exclude_passed": true,
+      "prereq_block": true
+    },
+    "target_policy": "unique evaluation-week quiz passes, unpassed and level-eligible at snapshot; prerequisite filter excluded from target definition",
+    "idcg_policy": "sum of 1/log2(rank+1) through min(full_relevant_count, k); unchanged by prerequisite filtering",
+    "repeat_pass_policy": "deduplicate within evaluation week; previously passed units excluded when exclude_passed=True",
+    "zero_target_policy": "retain as NDCG=0; also report positive-target-user mean",
+    "short_list_policy": "pad with -1; padded ranks have zero gain; fixed k IDCG",
+    "aggregation": "one request per evaluation-week active user; arithmetic user mean"
+  },
+  "configurations": 1747,
+  "family_counts": {
+    "RULE": 512,
+    "HYBR": 512,
+    "HYB2": 320,
+    "CTX": 108,
+    "HYB3": 96,
+    "SEGPOP": 93,
+    "PERS": 64,
+    "UCF": 27,
+    "ICF": 8,
+    "CONTENT": 6,
+    "POP": 1
+  },
+  "signal_count": 147,
+  "selection": {
+    "families": {
+      "POP": 0,
+      "RULE": 519,
+      "CONTENT": 671,
+      "UCF": 700,
+      "ICF": 704,
+      "Global": 519,
+      "NoDemographics": 1334
+    },
+    "router_lambdas": {
+      "RouterFull": 3000.0,
+      "RouterNoGender": 500.0,
+      "RouterNoGenderIncome": 1000000000.0
+    },
+    "operational": "PurposeStageRule",
+    "ab_control_algorithm": 39,
+    "operational_algorithm": -1,
+    "no_gender_configs": 1319,
+    "no_gender_income_configs": 545,
+    "min_leaf_users": 20,
+    "validation_best_ndcg": 0.13557258238593248,
+    "operational_champion_counts": {
+      "-1": 6680
+    },
+    "legacy_operational_algorithm": 454,
+    "legacy_operational_router": "RouterNoGender",
+    "operational_policy": "PurposeStageRule",
+    "declared_policy_count": 1,
+    "exploration_configuration_count": 1747,
+    "operational_algorithm_name": "목적 단계 규칙",
+    "policy_validation_ndcg": 0.13123770319681663,
+    "policy_definition": {
+      "key": "PurposeStageRule",
+      "name": "목적 단계 규칙",
+      "version": "2026-10-23-purpose-stage-v1",
+      "weights": {
+        "pop": 5.0,
+        "r:policy_pref": 3.0,
+        "r:lvl": 2.0,
+        "r:dev": 1.0,
+        "r:goal": 2.0,
+        "r:roadmap": 2.0
+      },
+      "declared_policy": true,
+      "historical_zoo_id": null,
+      "selected_by_validation": false,
+      "design_context": "declared in this revision after prior synthetic results were available; not retrospective preregistration",
+      "normalization": {
+        "pop": "candidate-row min-max; constant row -> 0",
+        "rules": "raw: binary pref/level/device; goal affinity in [0,1]; roadmap 1/.7/.4/0",
+        "preference": "declared interests plus historical top-two topics only when actual behaviour Rw has nonzero entries; diagnostic admission is not behaviour"
+      },
+      "protected_inputs_used": [],
+      "inputs": [
+        "global historical pass popularity",
+        "interests",
+        "learning preferences",
+        "level",
+        "device",
+        "goal",
+        "risk",
+        "horizon",
+        "passed units"
+      ],
+      "goal_affinity_limitation": "Goal affinity is declared domain knowledge also used by the synthetic generator; synthetic superiority is not independent evidence.",
+      "replacement_rule": {
+        "applies_to": "future policy changes from this revision; not retroactive pre-registration",
+        "min_ndcg_gain": 0.005,
+        "goal_and_roadmap_terms_required": true,
+        "purpose_stage_noninferiority": true,
+        "prerequisite_violation_rate": 0.0,
+        "confirmation": "new data after policy freeze; synthetic checks do not establish learner effect"
+      }
+    },
+    "locked_before_test": true,
+    "selection_guardrail": {
+      "block_gap": 2,
+      "plus_one_max": 1,
+      "exclude_passed": true,
+      "prereq_block": true
+    },
+    "no_gender_best_algorithm": 519,
+    "no_gender_best_validation_ndcg": 0.13557258248329163,
+    "selection_configs_evaluated": 1747,
+    "selection_configs_excluded_gender": 428,
+    "neural_requested": false,
+    "neural_enabled": false,
+    "skipped_configurations": 0,
+    "test_champion_counts_diagnostic": {
+      "-1": 6487
+    }
+  },
+  "router_tuning": {
+    "RouterFull": [
+      {
+        "lam": 0.0,
+        "mean": 0.13048189505934715,
+        "std": 0.00273375035231401
+      },
+      {
+        "lam": 20.0,
+        "mean": 0.13146564364433289,
+        "std": 0.0018811912091785993
+      },
+      {
+        "lam": 100.0,
+        "mean": 0.1321798376739025,
+        "std": 0.001762498764126925
+      },
+      {
+        "lam": 500.0,
+        "mean": 0.13472001999616623,
+        "std": 0.002363746391537482
+      },
+      {
+        "lam": 3000.0,
+        "mean": 0.13482220843434334,
+        "std": 0.0016113656548312643
+      },
+      {
+        "lam": 1000000000.0,
+        "mean": 0.13317175209522247,
+        "std": 0.0007574027598619488
+      }
+    ],
+    "RouterNoGender": [
+      {
+        "lam": 0.0,
+        "mean": 0.13056161254644394,
+        "std": 0.0023824095041148495
+      },
+      {
+        "lam": 20.0,
+        "mean": 0.13198374211788177,
+        "std": 0.0016777078855795234
+      },
+      {
+        "lam": 100.0,
+        "mean": 0.13321753591299057,
+        "std": 0.0018976353404869107
+      },
+      {
+        "lam": 500.0,
+        "mean": 0.1346670687198639,
+        "std": 0.0032903594090114086
+      },
+      {
+        "lam": 3000.0,
+        "mean": 0.13451055064797401,
+        "std": 0.0015813965269986506
+      },
+      {
+        "lam": 1000000000.0,
+        "mean": 0.134192805737257,
+        "std": 0.0022125462212001165
+      }
+    ],
+    "RouterNoGenderIncome": [
+      {
+        "lam": 0.0,
+        "mean": 0.1279871053993702,
+        "std": 0.001658825549576921
+      },
+      {
+        "lam": 20.0,
+        "mean": 0.12825288251042366,
+        "std": 0.002268086517615194
+      },
+      {
+        "lam": 100.0,
+        "mean": 0.13009950518608093,
+        "std": 0.002683128827687672
+      },
+      {
+        "lam": 500.0,
+        "mean": 0.13161183521151543,
+        "std": 0.0028753188528757327
+      },
+      {
+        "lam": 3000.0,
+        "mean": 0.13268373534083366,
+        "std": 0.0016884862598867617
+      },
+      {
+        "lam": 1000000000.0,
+        "mean": 0.13291242346167564,
+        "std": 0.0020515250341228085
+      }
+    ]
+  },
+  "training": [],
+  "evaluation_protocol": {
+    "version": 2,
+    "selection_week": 2,
+    "test_week": 3,
+    "selection_guardrail": {
+      "block_gap": 2,
+      "plus_one_max": 1,
+      "exclude_passed": true,
+      "prereq_block": true
+    },
+    "test_guardrail": {
+      "block_gap": 2,
+      "plus_one_max": 1,
+      "exclude_passed": true,
+      "prereq_block": true
+    },
+    "selected_before_test": true,
+    "reported_extra_prerequisite_method_is_alias": true,
+    "operational_router": "PurposeStageRule",
+    "historical_comparison_router": "RouterNoGender",
+    "operational_policy": {
+      "key": "PurposeStageRule",
+      "name": "목적 단계 규칙",
+      "version": "2026-10-23-purpose-stage-v1",
+      "weights": {
+        "pop": 5.0,
+        "r:policy_pref": 3.0,
+        "r:lvl": 2.0,
+        "r:dev": 1.0,
+        "r:goal": 2.0,
+        "r:roadmap": 2.0
+      },
+      "declared_policy": true,
+      "historical_zoo_id": null,
+      "selected_by_validation": false,
+      "design_context": "declared in this revision after prior synthetic results were available; not retrospective preregistration",
+      "normalization": {
+        "pop": "candidate-row min-max; constant row -> 0",
+        "rules": "raw: binary pref/level/device; goal affinity in [0,1]; roadmap 1/.7/.4/0",
+        "preference": "declared interests plus historical top-two topics only when actual behaviour Rw has nonzero entries; diagnostic admission is not behaviour"
+      },
+      "protected_inputs_used": [],
+      "inputs": [
+        "global historical pass popularity",
+        "interests",
+        "learning preferences",
+        "level",
+        "device",
+        "goal",
+        "risk",
+        "horizon",
+        "passed units"
+      ],
+      "goal_affinity_limitation": "Goal affinity is declared domain knowledge also used by the synthetic generator; synthetic superiority is not independent evidence.",
+      "replacement_rule": {
+        "applies_to": "future policy changes from this revision; not retroactive pre-registration",
+        "min_ndcg_gain": 0.005,
+        "goal_and_roadmap_terms_required": true,
+        "purpose_stage_noninferiority": true,
+        "prerequisite_violation_rate": 0.0,
+        "confirmation": "new data after policy freeze; synthetic checks do not establish learner effect"
+      }
+    },
+    "declared_policy_count": 1,
+    "exploration_configuration_count": 1747,
+    "gender_in_operational_inputs": false,
+    "age_in_operational_inputs": false,
+    "income_in_operational_inputs": false,
+    "no_gender_configurations_evaluated": 1319,
+    "configurations_evaluated": 1747,
+    "neural_enabled": false,
+    "validation": {
+      "mode": "next-week observed quiz-pass; targets fixed before prerequisite filtering",
+      "week": 2,
+      "rows": 6680,
+      "population": "users with at least one attempt in the evaluation week",
+      "dataset_users": 15000,
+      "zero_observed_target": 2947,
+      "zero_selectable_target": 5000,
+      "raw_positive_items": 6442,
+      "eligible_positive_items": 6337,
+      "selectable_positive_items": 2004,
+      "prerequisite_blocked_positive_items": 4333,
+      "raw_positive_users": 3748,
+      "eligible_positive_users": 3733,
+      "selectable_positive_users": 1680,
+      "eligible_min": 3,
+      "eligible_max": 19,
+      "guardrail": {
+        "block_gap": 2,
+        "plus_one_max": 1,
+        "exclude_passed": true,
+        "prereq_block": true
+      },
+      "target_policy": "unique evaluation-week quiz passes, unpassed and level-eligible at snapshot; prerequisite filter excluded from target definition",
+      "idcg_policy": "sum of 1/log2(rank+1) through min(full_relevant_count, k); unchanged by prerequisite filtering",
+      "repeat_pass_policy": "deduplicate within evaluation week; previously passed units excluded when exclude_passed=True",
+      "zero_target_policy": "retain as NDCG=0; also report positive-target-user mean",
+      "short_list_policy": "pad with -1; padded ranks have zero gain; fixed k IDCG",
+      "aggregation": "one request per evaluation-week active user; arithmetic user mean"
+    },
+    "test": {
+      "mode": "next-week observed quiz-pass; targets fixed before prerequisite filtering",
+      "week": 3,
+      "rows": 6487,
+      "population": "users with at least one attempt in the evaluation week",
+      "dataset_users": 15000,
+      "zero_observed_target": 2975,
+      "zero_selectable_target": 4900,
+      "raw_positive_items": 6079,
+      "eligible_positive_items": 5929,
+      "selectable_positive_items": 1876,
+      "prerequisite_blocked_positive_items": 4053,
+      "raw_positive_users": 3555,
+      "eligible_positive_users": 3512,
+      "selectable_positive_users": 1587,
+      "eligible_min": 3,
+      "eligible_max": 20,
+      "guardrail": {
+        "block_gap": 2,
+        "plus_one_max": 1,
+        "exclude_passed": true,
+        "prereq_block": true
+      },
+      "target_policy": "unique evaluation-week quiz passes, unpassed and level-eligible at snapshot; prerequisite filter excluded from target definition",
+      "idcg_policy": "sum of 1/log2(rank+1) through min(full_relevant_count, k); unchanged by prerequisite filtering",
+      "repeat_pass_policy": "deduplicate within evaluation week; previously passed units excluded when exclude_passed=True",
+      "zero_target_policy": "retain as NDCG=0; also report positive-target-user mean",
+      "short_list_policy": "pad with -1; padded ranks have zero gain; fixed k IDCG",
+      "aggregation": "one request per evaluation-week active user; arithmetic user mean"
+    },
+    "filtered_test": {
+      "mode": "next-week observed quiz-pass; targets fixed before prerequisite filtering",
+      "week": 3,
+      "rows": 6487,
+      "population": "users with at least one attempt in the evaluation week",
+      "dataset_users": 15000,
+      "zero_observed_target": 2975,
+      "zero_selectable_target": 4900,
+      "raw_positive_items": 6079,
+      "eligible_positive_items": 5929,
+      "selectable_positive_items": 1876,
+      "prerequisite_blocked_positive_items": 4053,
+      "raw_positive_users": 3555,
+      "eligible_positive_users": 3512,
+      "selectable_positive_users": 1587,
+      "eligible_min": 3,
+      "eligible_max": 20,
+      "guardrail": {
+        "block_gap": 2,
+        "plus_one_max": 1,
+        "exclude_passed": true,
+        "prereq_block": true
+      },
+      "target_policy": "unique evaluation-week quiz passes, unpassed and level-eligible at snapshot; prerequisite filter excluded from target definition",
+      "idcg_policy": "sum of 1/log2(rank+1) through min(full_relevant_count, k); unchanged by prerequisite filtering",
+      "repeat_pass_policy": "deduplicate within evaluation week; previously passed units excluded when exclude_passed=True",
+      "zero_target_policy": "retain as NDCG=0; also report positive-target-user mean",
+      "short_list_policy": "pad with -1; padded ranks have zero gain; fixed k IDCG",
+      "aggregation": "one request per evaluation-week active user; arithmetic user mean"
+    },
+    "bootstrap": {
+      "unit": "evaluation user; paired per-method differences",
+      "replicates": 500,
+      "interval": "2.5/97.5 percentile",
+      "generator_uncertainty": false,
+      "model_selection_uncertainty": false,
+      "multiple_testing_adjusted": false
+    },
+    "causal_claim": false
+  },
+  "results": [
+    {
+      "method": "RouterFull",
+      "prerequisite_policy": "required",
+      "target_policy": "fixed_before_prerequisite_filter",
+      "zero_target_policy": "include_as_zero",
+      "ndcg": 0.12638909293435735,
+      "diversity": 0.996824418066903,
+      "hit_diagnostic": 0.22537382457222135,
+      "ndcg_active": 0.23345274654475404,
+      "hit_active": 0.4162870159453303,
+      "active_users": 3512,
+      "coverage_diagnostic": 0.9846153846153847,
+      "short_list_rate": 0.5134885154925235,
+      "prereq_violation_rate": 0.0,
+      "users": 6487,
+      "requests": 6487,
+      "difference_vs_global": 0.00021041053054536828,
+      "ci_low": -0.0013812286278974358,
+      "ci_high": 0.0017916329670046806,
+      "difference_vs_global_active": 0.0003886483803097393,
+      "ci_low_active": -0.0025353161391207814,
+      "ci_high_active": 0.003112211083414007
+    },
+    {
+      "method": "RULE",
+      "prerequisite_policy": "required",
+      "target_policy": "fixed_before_prerequisite_filter",
+      "zero_target_policy": "include_as_zero",
+      "ndcg": 0.12617868240381197,
+      "diversity": 0.9968860798520116,
+      "hit_diagnostic": 0.2236781254817327,
+      "ndcg_active": 0.2330640981644443,
+      "hit_active": 0.41315489749430523,
+      "active_users": 3512,
+      "coverage_diagnostic": 0.9692307692307692,
+      "short_list_rate": 0.5134885154925235,
+      "prereq_violation_rate": 0.0,
+      "users": 6487,
+      "requests": 6487,
+      "difference_vs_global": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0,
+      "difference_vs_global_active": 0.0,
+      "ci_low_active": 0.0,
+      "ci_high_active": 0.0
+    },
+    {
+      "method": "Global",
+      "prerequisite_policy": "required",
+      "target_policy": "fixed_before_prerequisite_filter",
+      "zero_target_policy": "include_as_zero",
+      "ndcg": 0.12617868240381197,
+      "diversity": 0.9968860798520116,
+      "hit_diagnostic": 0.2236781254817327,
+      "ndcg_active": 0.2330640981644443,
+      "hit_active": 0.41315489749430523,
+      "active_users": 3512,
+      "coverage_diagnostic": 0.9692307692307692,
+      "short_list_rate": 0.5134885154925235,
+      "prereq_violation_rate": 0.0,
+      "users": 6487,
+      "requests": 6487,
+      "difference_vs_global": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0,
+      "difference_vs_global_active": 0.0,
+      "ci_low_active": 0.0,
+      "ci_high_active": 0.0
+    },
+    {
+      "method": "RouterNoGender",
+      "prerequisite_policy": "required",
+      "target_policy": "fixed_before_prerequisite_filter",
+      "zero_target_policy": "include_as_zero",
+      "ndcg": 0.124954272744321,
+      "diversity": 0.9971173115461693,
+      "hit_diagnostic": 0.2238322799445044,
+      "ndcg_active": 0.2308024963816658,
+      "hit_active": 0.4134396355353075,
+      "active_users": 3512,
+      "coverage_diagnostic": 0.9692307692307692,
+      "short_list_rate": 0.5134885154925235,
+      "prereq_violation_rate": 0.0,
+      "users": 6487,
+      "requests": 6487,
+      "difference_vs_global": -0.0012244096594909927,
+      "ci_low": -0.003015701399943903,
+      "ci_high": 0.0006206159412003134,
+      "difference_vs_global_active": -0.0022616017827784937,
+      "ci_low_active": -0.005588037596374612,
+      "ci_high_active": 0.0009476581839319598
+    },
+    {
+      "method": "RouterNoGender+prereq",
+      "prerequisite_policy": "required",
+      "target_policy": "fixed_before_prerequisite_filter",
+      "zero_target_policy": "include_as_zero",
+      "ndcg": 0.124954272744321,
+      "diversity": 0.9971173115461693,
+      "hit_diagnostic": 0.2238322799445044,
+      "ndcg_active": 0.2308024963816658,
+      "hit_active": 0.4134396355353075,
+      "active_users": 3512,
+      "coverage_diagnostic": 0.9692307692307692,
+      "short_list_rate": 0.5134885154925235,
+      "prereq_violation_rate": 0.0,
+      "users": 6487,
+      "requests": 6487,
+      "difference_vs_global": -0.0012244096594909927,
+      "ci_low": -0.003015701399943903,
+      "ci_high": 0.0006206159412003134,
+      "difference_vs_global_active": -0.0022616017827784937,
+      "ci_low_active": -0.005588037596374612,
+      "ci_high_active": 0.0009476581839319598
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "prerequisite_policy": "required",
+      "target_policy": "fixed_before_prerequisite_filter",
+      "zero_target_policy": "include_as_zero",
+      "ndcg": 0.12368409713829563,
+      "diversity": 0.9978212835928267,
+      "hit_diagnostic": 0.22136580854015725,
+      "ndcg_active": 0.2284563605171195,
+      "hit_active": 0.40888382687927105,
+      "active_users": 3512,
+      "coverage_diagnostic": 0.9076923076923077,
+      "short_list_rate": 0.5134885154925235,
+      "prereq_violation_rate": 0.0,
+      "users": 6487,
+      "requests": 6487,
+      "difference_vs_global": -0.0024945852655163586,
+      "ci_low": -0.004951886760910414,
+      "ci_high": -0.00045935569113387376,
+      "difference_vs_global_active": -0.004607737647324779,
+      "ci_low_active": -0.008886900426784255,
+      "ci_high_active": -0.0007712273501948223
+    },
+    {
+      "method": "NoDemographics",
+      "prerequisite_policy": "required",
+      "target_policy": "fixed_before_prerequisite_filter",
+      "zero_target_policy": "include_as_zero",
+      "ndcg": 0.1231896349942192,
+      "diversity": 0.9976517136837778,
+      "hit_diagnostic": 0.22259904424233082,
+      "ndcg_active": 0.22754304163083716,
+      "hit_active": 0.41116173120728927,
+      "active_users": 3512,
+      "coverage_diagnostic": 0.9076923076923077,
+      "short_list_rate": 0.5134885154925235,
+      "prereq_violation_rate": 0.0,
+      "users": 6487,
+      "requests": 6487,
+      "difference_vs_global": -0.002989047409592765,
+      "ci_low": -0.00564747862800315,
+      "ci_high": -0.0008424638369577774,
+      "difference_vs_global_active": -0.0055210565336071375,
+      "ci_low_active": -0.009877527703921746,
+      "ci_high_active": -0.0013942371794999063
+    },
+    {
+      "method": "PurposeStageRule",
+      "prerequisite_policy": "required",
+      "target_policy": "fixed_before_prerequisite_filter",
+      "zero_target_policy": "include_as_zero",
+      "ndcg": 0.12227392048260743,
+      "diversity": 0.9975643594882072,
+      "hit_diagnostic": 0.22182827192847232,
+      "ndcg_active": 0.22585162931966807,
+      "hit_active": 0.4097380410022779,
+      "active_users": 3512,
+      "coverage_diagnostic": 0.9384615384615385,
+      "short_list_rate": 0.5134885154925235,
+      "prereq_violation_rate": 0.0,
+      "users": 6487,
+      "requests": 6487,
+      "difference_vs_global": -0.0039047619212045654,
+      "ci_low": -0.006160671861229843,
+      "ci_high": -0.002246876844219459,
+      "difference_vs_global_active": -0.0072124688447762,
+      "ci_low_active": -0.01123451792420326,
+      "ci_high_active": -0.0032531988457255023
+    },
+    {
+      "method": "UCF",
+      "prerequisite_policy": "required",
+      "target_policy": "fixed_before_prerequisite_filter",
+      "zero_target_policy": "include_as_zero",
+      "ndcg": 0.12190786031399958,
+      "diversity": 0.9978058681465495,
+      "hit_diagnostic": 0.21859102821026669,
+      "ndcg_active": 0.22517548116654768,
+      "hit_active": 0.4037585421412301,
+      "active_users": 3512,
+      "coverage_diagnostic": 0.9230769230769231,
+      "short_list_rate": 0.5134885154925235,
+      "prereq_violation_rate": 0.0,
+      "users": 6487,
+      "requests": 6487,
+      "difference_vs_global": -0.004270822089812378,
+      "ci_low": -0.006692587727348913,
+      "ci_high": -0.002040708746765414,
+      "difference_vs_global_active": -0.00788861699789661,
+      "ci_low_active": -0.012967475648540045,
+      "ci_high_active": -0.003638154518979862
+    },
+    {
+      "method": "ABControl",
+      "prerequisite_policy": "required",
+      "target_policy": "fixed_before_prerequisite_filter",
+      "zero_target_policy": "include_as_zero",
+      "ndcg": 0.12173532416907179,
+      "diversity": 0.9981450079646473,
+      "hit_diagnostic": 0.21704948358254972,
+      "ndcg_active": 0.22485679039999112,
+      "hit_active": 0.4009111617312073,
+      "active_users": 3512,
+      "coverage_diagnostic": 0.8923076923076924,
+      "short_list_rate": 0.5134885154925235,
+      "prereq_violation_rate": 0.0,
+      "users": 6487,
+      "requests": 6487,
+      "difference_vs_global": -0.0044433582347401844,
+      "ci_low": -0.00643458249577499,
+      "ci_high": -0.002308446279344274,
+      "difference_vs_global_active": -0.008207307764453182,
+      "ci_low_active": -0.012364070616487404,
+      "ci_high_active": -0.0040444763283335496
+    },
+    {
+      "method": "POP",
+      "prerequisite_policy": "required",
+      "target_policy": "fixed_before_prerequisite_filter",
+      "zero_target_policy": "include_as_zero",
+      "ndcg": 0.11722353056804752,
+      "diversity": 0.9982991624274189,
+      "hit_diagnostic": 0.21412054878988745,
+      "ndcg_active": 0.2165230759666641,
+      "hit_active": 0.395501138952164,
+      "active_users": 3512,
+      "coverage_diagnostic": 0.8769230769230769,
+      "short_list_rate": 0.5134885154925235,
+      "prereq_violation_rate": 0.0,
+      "users": 6487,
+      "requests": 6487,
+      "difference_vs_global": -0.008955151835764454,
+      "ci_low": -0.011733640486583449,
+      "ci_high": -0.006290466445736658,
+      "difference_vs_global_active": -0.016541022197780184,
+      "ci_low_active": -0.021640297490177447,
+      "ci_high_active": -0.011407013350513336
+    },
+    {
+      "method": "ICF",
+      "prerequisite_policy": "required",
+      "target_policy": "fixed_before_prerequisite_filter",
+      "zero_target_policy": "include_as_zero",
+      "ndcg": 0.11496596979753312,
+      "diversity": 0.9979857150197832,
+      "hit_diagnostic": 0.21581624788037615,
+      "ndcg_active": 0.21235314523821108,
+      "hit_active": 0.39863325740318906,
+      "active_users": 3512,
+      "coverage_diagnostic": 0.8769230769230769,
+      "short_list_rate": 0.5134885154925235,
+      "prereq_violation_rate": 0.0,
+      "users": 6487,
+      "requests": 6487,
+      "difference_vs_global": -0.011212712606278857,
+      "ci_low": -0.014423612565762198,
+      "ci_high": -0.008583841818409769,
+      "difference_vs_global_active": -0.020710952926233185,
+      "ci_low_active": -0.02655439485288845,
+      "ci_high_active": -0.015392549404712044
+    },
+    {
+      "method": "CONTENT",
+      "prerequisite_policy": "required",
+      "target_policy": "fixed_before_prerequisite_filter",
+      "zero_target_policy": "include_as_zero",
+      "ndcg": 0.10982146240015526,
+      "diversity": 0.9968655259236422,
+      "hit_diagnostic": 0.21720363804532142,
+      "ndcg_active": 0.20285074789003618,
+      "hit_active": 0.40119589977220954,
+      "active_users": 3512,
+      "coverage_diagnostic": 0.9846153846153847,
+      "short_list_rate": 0.5134885154925235,
+      "prereq_violation_rate": 0.0,
+      "users": 6487,
+      "requests": 6487,
+      "difference_vs_global": -0.016357220003656723,
+      "ci_low": -0.019646705512475198,
+      "ci_high": -0.01352339881280176,
+      "difference_vs_global_active": -0.030213350274408073,
+      "ci_low_active": -0.03612758512796493,
+      "ci_high_active": -0.02471332764228852
+    },
+    {
+      "method": "Random",
+      "prerequisite_policy": "required",
+      "target_policy": "fixed_before_prerequisite_filter",
+      "zero_target_policy": "include_as_zero",
+      "ndcg": 0.09907705557404815,
+      "diversity": 0.99731257386568,
+      "hit_diagnostic": 0.20548789887467242,
+      "ndcg_active": 0.1830048005435223,
+      "hit_active": 0.37955580865603644,
+      "active_users": 3512,
+      "coverage_diagnostic": 0.9692307692307692,
+      "short_list_rate": 0.5134885154925235,
+      "prereq_violation_rate": 0.0,
+      "users": 6487,
+      "requests": 6487,
+      "difference_vs_global": -0.027101626829763834,
+      "ci_low": -0.03133564072625096,
+      "ci_high": -0.02352477071049295,
+      "difference_vs_global_active": -0.050059297620921976,
+      "ci_low_active": -0.05778117130069828,
+      "ci_high_active": -0.04375512820638877
+    }
+  ],
+  "group_results": [
+    {
+      "method": "Global",
+      "variable": "gender",
+      "group": 0,
+      "users": 3203,
+      "ndcg": 0.1256759120769947,
+      "ci_low": 0.1167672595172335,
+      "ci_high": 0.13388287801841137,
+      "active_users": 1750,
+      "active_share": 0.5463627848891665,
+      "ndcg_active": 0.23002282650435085,
+      "ci_low_active": 0.21570177822771797,
+      "ci_high_active": 0.24416705727922297
+    },
+    {
+      "method": "Global",
+      "variable": "gender",
+      "group": 1,
+      "users": 3284,
+      "ndcg": 0.12666905187908475,
+      "ci_low": 0.11758977043341466,
+      "ci_high": 0.13552205970330544,
+      "active_users": 1762,
+      "active_share": 0.5365408038976858,
+      "ndcg_active": 0.2360846574182261,
+      "ci_low_active": 0.22172262114031951,
+      "ci_high_active": 0.2492388806080126
+    },
+    {
+      "method": "Global",
+      "variable": "age_band",
+      "group": 0,
+      "users": 1235,
+      "ndcg": 0.1468325510445664,
+      "ci_low": 0.12994658667718978,
+      "ci_high": 0.16258171913768218,
+      "active_users": 667,
+      "active_share": 0.540080971659919,
+      "ndcg_active": 0.2718713651274955,
+      "ci_low_active": 0.24310652804845936,
+      "ci_high_active": 0.30086900927517496
+    },
+    {
+      "method": "Global",
+      "variable": "age_band",
+      "group": 1,
+      "users": 1890,
+      "ndcg": 0.14906453469997366,
+      "ci_low": 0.13556971035545057,
+      "ci_high": 0.16074975071108177,
+      "active_users": 1088,
+      "active_share": 0.5756613756613757,
+      "ndcg_active": 0.2589448259034469,
+      "ci_low_active": 0.2405943068073889,
+      "ci_high_active": 0.2785775741895587
+    },
+    {
+      "method": "Global",
+      "variable": "age_band",
+      "group": 2,
+      "users": 1987,
+      "ndcg": 0.10268832200245684,
+      "ci_low": 0.09298154879982977,
+      "ci_high": 0.1121832753802888,
+      "active_users": 1057,
+      "active_share": 0.5319577252138903,
+      "ndcg_active": 0.19303850124775943,
+      "ci_low_active": 0.17448762363331202,
+      "ci_high_active": 0.209150825391039
+    },
+    {
+      "method": "Global",
+      "variable": "age_band",
+      "group": 3,
+      "users": 1055,
+      "ndcg": 0.11012300818943607,
+      "ci_low": 0.09690075371177086,
+      "ci_high": 0.12599795727676313,
+      "active_users": 540,
+      "active_share": 0.5118483412322274,
+      "ndcg_active": 0.21514772896269455,
+      "ci_low_active": 0.1915566118368017,
+      "ci_high_active": 0.24163084143901933
+    },
+    {
+      "method": "Global",
+      "variable": "age_band",
+      "group": 4,
+      "users": 320,
+      "ndcg": 0.11009210053688072,
+      "ci_low": 0.08519709440275003,
+      "ci_high": 0.1404733736378287,
+      "active_users": 160,
+      "active_share": 0.5,
+      "ndcg_active": 0.22018420107376144,
+      "ci_low_active": 0.17531987426692858,
+      "ci_high_active": 0.2802269420381738
+    },
+    {
+      "method": "Global",
+      "variable": "income_q",
+      "group": 0,
+      "users": 1256,
+      "ndcg": 0.14958355901549786,
+      "ci_low": 0.13640455472163018,
+      "ci_high": 0.16804712340046887,
+      "active_users": 716,
+      "active_share": 0.5700636942675159,
+      "ndcg_active": 0.26239797503277273,
+      "ci_low_active": 0.24113515756222342,
+      "ci_high_active": 0.2856376940783535
+    },
+    {
+      "method": "Global",
+      "variable": "income_q",
+      "group": 1,
+      "users": 1266,
+      "ndcg": 0.12888763559402086,
+      "ci_low": 0.11382073083862354,
+      "ci_high": 0.14130218592421545,
+      "active_users": 665,
+      "active_share": 0.5252764612954186,
+      "ndcg_active": 0.24537104761207576,
+      "ci_low_active": 0.2211436055316007,
+      "ci_high_active": 0.27085896245747276
+    },
+    {
+      "method": "Global",
+      "variable": "income_q",
+      "group": 2,
+      "users": 1339,
+      "ndcg": 0.13515356693574865,
+      "ci_low": 0.12080917156476956,
+      "ci_high": 0.15032687947705542,
+      "active_users": 712,
+      "active_share": 0.5317401045556386,
+      "ndcg_active": 0.2541722277064149,
+      "ci_low_active": 0.22796552470892875,
+      "ci_high_active": 0.2758073741809413
+    },
+    {
+      "method": "Global",
+      "variable": "income_q",
+      "group": 3,
+      "users": 1318,
+      "ndcg": 0.11271914836503891,
+      "ci_low": 0.10005955715553994,
+      "ci_high": 0.1248412128231231,
+      "active_users": 716,
+      "active_share": 0.543247344461305,
+      "ndcg_active": 0.20749139321944313,
+      "ci_low_active": 0.1838033738040347,
+      "ci_high_active": 0.23275605595878854
+    },
+    {
+      "method": "Global",
+      "variable": "income_q",
+      "group": 4,
+      "users": 1308,
+      "ndcg": 0.10545715007335164,
+      "ci_low": 0.09382014575679322,
+      "ci_high": 0.12216130821092684,
+      "active_users": 703,
+      "active_share": 0.5374617737003058,
+      "ndcg_active": 0.19621330340817061,
+      "ci_low_active": 0.174457009707214,
+      "ci_high_active": 0.22030443863277763
+    },
+    {
+      "method": "Global",
+      "variable": "click_tier",
+      "group": 0,
+      "users": 910,
+      "ndcg": 0.12040335674660335,
+      "ci_low": 0.102409718683716,
+      "ci_high": 0.1404590264575033,
+      "active_users": 384,
+      "active_share": 0.421978021978022,
+      "ndcg_active": 0.2853308714567944,
+      "ci_low_active": 0.250862132058804,
+      "ci_high_active": 0.32118812943649433
+    },
+    {
+      "method": "Global",
+      "variable": "click_tier",
+      "group": 1,
+      "users": 3431,
+      "ndcg": 0.12229530292192223,
+      "ci_low": 0.11393461142474821,
+      "ci_high": 0.1315752636859058,
+      "active_users": 1712,
+      "active_share": 0.49897988924511805,
+      "ndcg_active": 0.2450906450497168,
+      "ci_low_active": 0.22747626393693648,
+      "ci_high_active": 0.26024726095150064
+    },
+    {
+      "method": "Global",
+      "variable": "click_tier",
+      "group": 2,
+      "users": 2146,
+      "ndcg": 0.1348363810759572,
+      "ci_low": 0.12409197964257165,
+      "ci_high": 0.1444824196069977,
+      "active_users": 1416,
+      "active_share": 0.6598322460391426,
+      "ndcg_active": 0.2043494871391272,
+      "ci_low_active": 0.18847271155075107,
+      "ci_high_active": 0.2187891009614866
+    },
+    {
+      "method": "RouterFull",
+      "variable": "gender",
+      "group": 0,
+      "users": 3203,
+      "ndcg": 0.12491901069994595,
+      "ci_low": 0.11682843741002924,
+      "ci_high": 0.13291418606774802,
+      "active_users": 1750,
+      "active_share": 0.5463627848891665,
+      "ndcg_active": 0.22863748072681536,
+      "ci_low_active": 0.21375854319844362,
+      "ci_high_active": 0.24333290347198186
+    },
+    {
+      "method": "RouterFull",
+      "variable": "gender",
+      "group": 1,
+      "users": 3284,
+      "ndcg": 0.12782291552778602,
+      "ci_low": 0.1186806771201251,
+      "ci_high": 0.1361039531968062,
+      "active_users": 1762,
+      "active_share": 0.5365408038976858,
+      "ndcg_active": 0.23823521827085656,
+      "ci_low_active": 0.22350695328560197,
+      "ci_high_active": 0.25147045719028865
+    },
+    {
+      "method": "RouterFull",
+      "variable": "age_band",
+      "group": 0,
+      "users": 1235,
+      "ndcg": 0.14692781834681568,
+      "ci_low": 0.1294563284067317,
+      "ci_high": 0.16244896764335218,
+      "active_users": 667,
+      "active_share": 0.540080971659919,
+      "ndcg_active": 0.27204775960767225,
+      "ci_low_active": 0.24393143095594227,
+      "ci_high_active": 0.3015667769606702
+    },
+    {
+      "method": "RouterFull",
+      "variable": "age_band",
+      "group": 1,
+      "users": 1890,
+      "ndcg": 0.14981272403127874,
+      "ci_low": 0.13602612508974407,
+      "ci_high": 0.16150461667090119,
+      "active_users": 1088,
+      "active_share": 0.5756613756613757,
+      "ndcg_active": 0.26024452979698237,
+      "ci_low_active": 0.24061559735512328,
+      "ci_high_active": 0.27911322374346365
+    },
+    {
+      "method": "RouterFull",
+      "variable": "age_band",
+      "group": 2,
+      "users": 1987,
+      "ndcg": 0.10203301808007201,
+      "ci_low": 0.09304419060634915,
+      "ci_high": 0.11212726541012402,
+      "active_users": 1057,
+      "active_share": 0.5319577252138903,
+      "ndcg_active": 0.19180662906821486,
+      "ci_low_active": 0.17273808042411265,
+      "ci_high_active": 0.2086424090703391
+    },
+    {
+      "method": "RouterFull",
+      "variable": "age_band",
+      "group": 3,
+      "users": 1055,
+      "ndcg": 0.11073754835533134,
+      "ci_low": 0.09739300673266067,
+      "ci_high": 0.1266240254258848,
+      "active_users": 540,
+      "active_share": 0.5118483412322274,
+      "ndcg_active": 0.21634835836087882,
+      "ci_low_active": 0.19534325473472058,
+      "ci_high_active": 0.24243958478267263
+    },
+    {
+      "method": "RouterFull",
+      "variable": "age_band",
+      "group": 4,
+      "users": 320,
+      "ndcg": 0.1116138167117634,
+      "ci_low": 0.08544890556935435,
+      "ci_high": 0.14254061276085214,
+      "active_users": 160,
+      "active_share": 0.5,
+      "ndcg_active": 0.22322763342352686,
+      "ci_low_active": 0.1758760345096766,
+      "ci_high_active": 0.2847726454694179
+    },
+    {
+      "method": "RouterFull",
+      "variable": "income_q",
+      "group": 0,
+      "users": 1256,
+      "ndcg": 0.15000146155210858,
+      "ci_low": 0.13663555796698792,
+      "ci_high": 0.1673803213955277,
+      "active_users": 716,
+      "active_share": 0.5700636942675159,
+      "ndcg_active": 0.26313105546012344,
+      "ci_low_active": 0.23988415757045486,
+      "ci_high_active": 0.29030917887225965
+    },
+    {
+      "method": "RouterFull",
+      "variable": "income_q",
+      "group": 1,
+      "users": 1266,
+      "ndcg": 0.12859986392642692,
+      "ci_low": 0.11183314592507684,
+      "ci_high": 0.14267728486834785,
+      "active_users": 665,
+      "active_share": 0.5252764612954186,
+      "ndcg_active": 0.2448231995952729,
+      "ci_low_active": 0.21852062019839366,
+      "ci_high_active": 0.27085843397179066
+    },
+    {
+      "method": "RouterFull",
+      "variable": "income_q",
+      "group": 2,
+      "users": 1339,
+      "ndcg": 0.1358491146630468,
+      "ci_low": 0.12217172911407743,
+      "ci_high": 0.15133129691108002,
+      "active_users": 712,
+      "active_share": 0.5317401045556386,
+      "ndcg_active": 0.25548028726660066,
+      "ci_low_active": 0.2296448026594239,
+      "ci_high_active": 0.2789181379425603
+    },
+    {
+      "method": "RouterFull",
+      "variable": "income_q",
+      "group": 3,
+      "users": 1318,
+      "ndcg": 0.11512260174892947,
+      "ci_low": 0.10319322370301591,
+      "ci_high": 0.12779742255577634,
+      "active_users": 716,
+      "active_share": 0.543247344461305,
+      "ndcg_active": 0.21191562724174445,
+      "ci_low_active": 0.18666654115476203,
+      "ci_high_active": 0.23289069349983693
+    },
+    {
+      "method": "RouterFull",
+      "variable": "income_q",
+      "group": 4,
+      "users": 1308,
+      "ndcg": 0.10324405870486436,
+      "ci_low": 0.09261151362567263,
+      "ci_high": 0.11728546265409377,
+      "active_users": 703,
+      "active_share": 0.5374617737003058,
+      "ndcg_active": 0.19209563127448448,
+      "ci_low_active": 0.17089968969028327,
+      "ci_high_active": 0.21409785729036312
+    },
+    {
+      "method": "RouterFull",
+      "variable": "click_tier",
+      "group": 0,
+      "users": 910,
+      "ndcg": 0.12049625593169544,
+      "ci_low": 0.1020612365969775,
+      "ci_high": 0.13982890462486597,
+      "active_users": 384,
+      "active_share": 0.421978021978022,
+      "ndcg_active": 0.2855510231714657,
+      "ci_low_active": 0.2486897575985796,
+      "ci_high_active": 0.3207153722100958
+    },
+    {
+      "method": "RouterFull",
+      "variable": "click_tier",
+      "group": 1,
+      "users": 3431,
+      "ndcg": 0.12231254069350632,
+      "ci_low": 0.11368491158676083,
+      "ci_high": 0.13157842357145078,
+      "active_users": 1712,
+      "active_share": 0.49897988924511805,
+      "ndcg_active": 0.24512519107442765,
+      "ci_low_active": 0.2266395637656724,
+      "ci_high_active": 0.25942661741013817
+    },
+    {
+      "method": "RouterFull",
+      "variable": "click_tier",
+      "group": 2,
+      "users": 2146,
+      "ndcg": 0.13540546404842177,
+      "ci_low": 0.12368401281746896,
+      "ci_high": 0.1455312122060523,
+      "active_users": 1416,
+      "active_share": 0.6598322460391426,
+      "ndcg_active": 0.2052119532824245,
+      "ci_low_active": 0.1894960171496949,
+      "ci_high_active": 0.22136977437322652
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "gender",
+      "group": 0,
+      "users": 3203,
+      "ndcg": 0.12315376550823115,
+      "ci_low": 0.11523356951543622,
+      "ci_high": 0.13134098505993524,
+      "active_users": 1750,
+      "active_share": 0.5463627848891665,
+      "ndcg_active": 0.22540657767020822,
+      "ci_low_active": 0.2115483903202564,
+      "ci_high_active": 0.24053933289250004
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "gender",
+      "group": 1,
+      "users": 3284,
+      "ndcg": 0.12671037039267538,
+      "ci_low": 0.11738073180482216,
+      "ci_high": 0.13552986378065215,
+      "active_users": 1762,
+      "active_share": 0.5365408038976858,
+      "ndcg_active": 0.23616166649803966,
+      "ci_low_active": 0.22099193786904048,
+      "ci_high_active": 0.24928638254961977
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "age_band",
+      "group": 0,
+      "users": 1235,
+      "ndcg": 0.14401514189968515,
+      "ci_low": 0.12788079124708152,
+      "ci_high": 0.15918749087119893,
+      "active_users": 667,
+      "active_share": 0.540080971659919,
+      "ndcg_active": 0.26665472300766285,
+      "ci_low_active": 0.23836697947623953,
+      "ci_high_active": 0.29589762832515615
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "age_band",
+      "group": 1,
+      "users": 1890,
+      "ndcg": 0.14821040426858179,
+      "ci_low": 0.13517441836876185,
+      "ci_high": 0.15898620222104523,
+      "active_users": 1088,
+      "active_share": 0.5756613756613757,
+      "ndcg_active": 0.25746108829744446,
+      "ci_low_active": 0.23931247888783408,
+      "ci_high_active": 0.27668145082109397
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "age_band",
+      "group": 2,
+      "users": 1987,
+      "ndcg": 0.10224861986859655,
+      "ci_low": 0.09327422117378774,
+      "ci_high": 0.11232073513101733,
+      "active_users": 1057,
+      "active_share": 0.5319577252138903,
+      "ndcg_active": 0.19221192779460866,
+      "ci_low_active": 0.17204693804734278,
+      "ci_high_active": 0.20762228009070968
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "age_band",
+      "group": 3,
+      "users": 1055,
+      "ndcg": 0.10823663031635006,
+      "ci_low": 0.09532471182130135,
+      "ci_high": 0.12406616271531502,
+      "active_users": 540,
+      "active_share": 0.5118483412322274,
+      "ndcg_active": 0.2114623055254617,
+      "ci_low_active": 0.1913216068619708,
+      "ci_high_active": 0.24021827745598318
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "age_band",
+      "group": 4,
+      "users": 320,
+      "ndcg": 0.1101385947375902,
+      "ci_low": 0.08540459992578608,
+      "ci_high": 0.1397926095754961,
+      "active_users": 160,
+      "active_share": 0.5,
+      "ndcg_active": 0.2202771894751804,
+      "ci_low_active": 0.17577282813034512,
+      "ci_high_active": 0.2752347696550938
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "income_q",
+      "group": 0,
+      "users": 1256,
+      "ndcg": 0.14561339636186743,
+      "ci_low": 0.1320398859992689,
+      "ci_high": 0.16313469621059148,
+      "active_users": 716,
+      "active_share": 0.5700636942675159,
+      "ndcg_active": 0.2554335556291976,
+      "ci_low_active": 0.23467774391587026,
+      "ci_high_active": 0.2794834222314227
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "income_q",
+      "group": 1,
+      "users": 1266,
+      "ndcg": 0.1309728612927746,
+      "ci_low": 0.11558280179113772,
+      "ci_high": 0.14432866776923378,
+      "active_users": 665,
+      "active_share": 0.5252764612954186,
+      "ndcg_active": 0.24934081563406413,
+      "ci_low_active": 0.2241817567467441,
+      "ci_high_active": 0.27664388718427724
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "income_q",
+      "group": 2,
+      "users": 1339,
+      "ndcg": 0.13378962783857018,
+      "ci_low": 0.12003714155971601,
+      "ci_high": 0.14858249489071643,
+      "active_users": 712,
+      "active_share": 0.5317401045556386,
+      "ndcg_active": 0.2516071793200077,
+      "ci_low_active": 0.2272967246171936,
+      "ci_high_active": 0.2763556975435295
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "income_q",
+      "group": 3,
+      "users": 1318,
+      "ndcg": 0.11314657030904958,
+      "ci_low": 0.09997404247844283,
+      "ci_high": 0.12521048544680022,
+      "active_users": 716,
+      "active_share": 0.543247344461305,
+      "ndcg_active": 0.20827818389291528,
+      "ci_low_active": 0.18426843406843188,
+      "ci_high_active": 0.22883946285599957
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "income_q",
+      "group": 4,
+      "users": 1308,
+      "ndcg": 0.10214434841137561,
+      "ci_low": 0.09097317798121146,
+      "ci_high": 0.11736958725080071,
+      "active_users": 703,
+      "active_share": 0.5374617737003058,
+      "ndcg_active": 0.1900495131181782,
+      "ci_low_active": 0.17023772481119406,
+      "ci_high_active": 0.21119084431331778
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "click_tier",
+      "group": 0,
+      "users": 910,
+      "ndcg": 0.12043108730824245,
+      "ci_low": 0.10101539593293028,
+      "ci_high": 0.14021771092927232,
+      "active_users": 384,
+      "active_share": 0.421978021978022,
+      "ndcg_active": 0.2853965871106787,
+      "ci_low_active": 0.24819453495326696,
+      "ci_high_active": 0.31822079157689703
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "click_tier",
+      "group": 1,
+      "users": 3431,
+      "ndcg": 0.11992652285844922,
+      "ci_low": 0.11175924861925406,
+      "ci_high": 0.12930657572967497,
+      "active_users": 1712,
+      "active_share": 0.49897988924511805,
+      "ndcg_active": 0.24034339949026828,
+      "ci_low_active": 0.22245067774693808,
+      "ci_high_active": 0.25550631940719737
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "click_tier",
+      "group": 2,
+      "users": 2146,
+      "ndcg": 0.13491061412608124,
+      "ci_low": 0.12305819866800363,
+      "ci_high": 0.14512849476071896,
+      "active_users": 1416,
+      "active_share": 0.6598322460391426,
+      "ndcg_active": 0.20446199005266272,
+      "ci_low_active": 0.1891667845012392,
+      "ci_high_active": 0.22048788171744085
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "gender",
+      "group": 0,
+      "users": 3203,
+      "ndcg": 0.12348184591431527,
+      "ci_low": 0.1156058199609414,
+      "ci_high": 0.13154520266850012,
+      "active_users": 1750,
+      "active_share": 0.5463627848891665,
+      "ndcg_active": 0.22600705855060102,
+      "ci_low_active": 0.2101786903685938,
+      "ci_high_active": 0.24075893177952862
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "gender",
+      "group": 1,
+      "users": 3284,
+      "ndcg": 0.12388135982721436,
+      "ci_low": 0.11556824911392875,
+      "ci_high": 0.13286291251494065,
+      "active_users": 1762,
+      "active_share": 0.5365408038976858,
+      "ndcg_active": 0.23088898165299204,
+      "ci_low_active": 0.21672756180465674,
+      "ci_high_active": 0.24451676162030603
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "age_band",
+      "group": 0,
+      "users": 1235,
+      "ndcg": 0.1477701331622945,
+      "ci_low": 0.13082343853921363,
+      "ci_high": 0.16321514908249737,
+      "active_users": 667,
+      "active_share": 0.540080971659919,
+      "ndcg_active": 0.273607367999151,
+      "ci_low_active": 0.24552910815832565,
+      "ci_high_active": 0.3018443680067195
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "age_band",
+      "group": 1,
+      "users": 1890,
+      "ndcg": 0.15109599998222126,
+      "ci_low": 0.13810243753069482,
+      "ci_high": 0.1627895010958764,
+      "active_users": 1088,
+      "active_share": 0.5756613756613757,
+      "ndcg_active": 0.26247374996911604,
+      "ci_low_active": 0.24313715411735623,
+      "ci_high_active": 0.2801468008984659
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "age_band",
+      "group": 2,
+      "users": 1987,
+      "ndcg": 0.09609783682554517,
+      "ci_low": 0.08797333882004671,
+      "ci_high": 0.10545994807331757,
+      "active_users": 1057,
+      "active_share": 0.5319577252138903,
+      "ndcg_active": 0.18064938672881573,
+      "ci_low_active": 0.16171066340184923,
+      "ci_high_active": 0.1952785052248605
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "age_band",
+      "group": 3,
+      "users": 1055,
+      "ndcg": 0.10620082874608117,
+      "ci_low": 0.09328063015960407,
+      "ci_high": 0.12169965919332293,
+      "active_users": 540,
+      "active_share": 0.5118483412322274,
+      "ndcg_active": 0.20748495245762155,
+      "ci_low_active": 0.18694521581514595,
+      "ci_high_active": 0.23450132900131657
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "age_band",
+      "group": 4,
+      "users": 320,
+      "ndcg": 0.09775908629630599,
+      "ci_low": 0.07662755028582191,
+      "ci_high": 0.12575241477358268,
+      "active_users": 160,
+      "active_share": 0.5,
+      "ndcg_active": 0.19551817259261195,
+      "ci_low_active": 0.1570460097545825,
+      "ci_high_active": 0.24761390888529416
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "income_q",
+      "group": 0,
+      "users": 1256,
+      "ndcg": 0.14554635293539045,
+      "ci_low": 0.1323317567141056,
+      "ci_high": 0.16206710823615966,
+      "active_users": 716,
+      "active_share": 0.5700636942675159,
+      "ndcg_active": 0.2553159487246514,
+      "ci_low_active": 0.23316818233139977,
+      "ci_high_active": 0.2788289092772303
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "income_q",
+      "group": 1,
+      "users": 1266,
+      "ndcg": 0.12825249325909246,
+      "ci_low": 0.1116074420284334,
+      "ci_high": 0.14221707067557016,
+      "active_users": 665,
+      "active_share": 0.5252764612954186,
+      "ndcg_active": 0.24416188942257305,
+      "ci_low_active": 0.22098325920978412,
+      "ci_high_active": 0.2707036766890525
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "income_q",
+      "group": 2,
+      "users": 1339,
+      "ndcg": 0.1318370375160933,
+      "ci_low": 0.1179458587806815,
+      "ci_high": 0.1449015756488066,
+      "active_users": 712,
+      "active_share": 0.5317401045556386,
+      "ndcg_active": 0.24793510285681025,
+      "ci_low_active": 0.22301572893067875,
+      "ci_high_active": 0.2711522987987199
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "income_q",
+      "group": 3,
+      "users": 1318,
+      "ndcg": 0.10953965469494549,
+      "ci_low": 0.096172383799262,
+      "ci_high": 0.12213434399604897,
+      "active_users": 716,
+      "active_share": 0.543247344461305,
+      "ndcg_active": 0.20163863811164545,
+      "ci_low_active": 0.17635024022284293,
+      "ci_high_active": 0.22240009833215305
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "income_q",
+      "group": 4,
+      "users": 1308,
+      "ndcg": 0.10417569133125014,
+      "ci_low": 0.09314319745764162,
+      "ci_high": 0.11933939387943845,
+      "active_users": 703,
+      "active_share": 0.5374617737003058,
+      "ndcg_active": 0.19382902455373427,
+      "ci_low_active": 0.16972697958744545,
+      "ci_high_active": 0.21533686540675467
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "click_tier",
+      "group": 0,
+      "users": 910,
+      "ndcg": 0.11530731309852556,
+      "ci_low": 0.09799213887980689,
+      "ci_high": 0.13444799224528156,
+      "active_users": 384,
+      "active_share": 0.421978021978022,
+      "ndcg_active": 0.2732543096866101,
+      "ci_low_active": 0.23768315098767628,
+      "ci_high_active": 0.3089195011772066
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "click_tier",
+      "group": 1,
+      "users": 3431,
+      "ndcg": 0.12097374790622953,
+      "ci_low": 0.11260628287588842,
+      "ci_high": 0.13025245373682756,
+      "active_users": 1712,
+      "active_share": 0.49897988924511805,
+      "ndcg_active": 0.2424421314639448,
+      "ci_low_active": 0.2252396216940699,
+      "ci_high_active": 0.25754094463756516
+    },
+    {
+      "method": "RouterNoGenderIncome",
+      "variable": "click_tier",
+      "group": 2,
+      "users": 2146,
+      "ndcg": 0.1315695033318695,
+      "ci_low": 0.12156760226599292,
+      "ci_high": 0.14128545845475352,
+      "active_users": 1416,
+      "active_share": 0.6598322460391426,
+      "ndcg_active": 0.1993984139478757,
+      "ci_low_active": 0.18502037570746635,
+      "ci_high_active": 0.21423354718260665
+    },
+    {
+      "method": "Global",
+      "variable": "goal",
+      "group": "pension",
+      "users": 1318,
+      "ndcg": 0.11382861277387071,
+      "ci_low": 0.0999214468737133,
+      "ci_high": 0.12523710968417434,
+      "active_users": 685,
+      "active_share": 0.5197268588770865,
+      "ndcg_active": 0.21901622136636725,
+      "ci_low_active": 0.1986605398206081,
+      "ci_high_active": 0.2430105119445651
+    },
+    {
+      "method": "Global",
+      "variable": "goal",
+      "group": "income",
+      "users": 1455,
+      "ndcg": 0.12994504482728042,
+      "ci_low": 0.11644559710259428,
+      "ci_high": 0.14355684592403584,
+      "active_users": 790,
+      "active_share": 0.5429553264604811,
+      "ndcg_active": 0.23932916484011774,
+      "ci_low_active": 0.21798584331508064,
+      "ci_high_active": 0.26112312824477074
+    },
+    {
+      "method": "Global",
+      "variable": "goal",
+      "group": "long_term",
+      "users": 1447,
+      "ndcg": 0.14158707646517682,
+      "ci_low": 0.12793779302961375,
+      "ci_high": 0.15698700282007266,
+      "active_users": 773,
+      "active_share": 0.5342087076710436,
+      "ndcg_active": 0.26504074986430903,
+      "ci_low_active": 0.243102020771198,
+      "ci_high_active": 0.29292895136091734
+    },
+    {
+      "method": "Global",
+      "variable": "goal",
+      "group": "trading",
+      "users": 1365,
+      "ndcg": 0.12478230543583214,
+      "ci_low": 0.11262088760465516,
+      "ci_high": 0.13931421870479752,
+      "active_users": 780,
+      "active_share": 0.5714285714285714,
+      "ndcg_active": 0.21836903451270626,
+      "ci_low_active": 0.19540075722823086,
+      "ci_high_active": 0.24344289161566868
+    },
+    {
+      "method": "Global",
+      "variable": "goal",
+      "group": "diversify",
+      "users": 902,
+      "ndcg": 0.11554391832466963,
+      "ci_low": 0.10086337013367834,
+      "ci_high": 0.13427589144930774,
+      "active_users": 484,
+      "active_share": 0.5365853658536586,
+      "ndcg_active": 0.2153318477868843,
+      "ci_low_active": 0.19144197164929916,
+      "ci_high_active": 0.2450133513605523
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "goal",
+      "group": "pension",
+      "users": 1318,
+      "ndcg": 0.11285529242991624,
+      "ci_low": 0.09963971984293682,
+      "ci_high": 0.12423392653608498,
+      "active_users": 685,
+      "active_share": 0.5197268588770865,
+      "ndcg_active": 0.21714346777026217,
+      "ci_low_active": 0.19651673462427846,
+      "ci_high_active": 0.24203680141501124
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "goal",
+      "group": "income",
+      "users": 1455,
+      "ndcg": 0.12740830431986375,
+      "ci_low": 0.11314971644623786,
+      "ci_high": 0.14004974733019004,
+      "active_users": 790,
+      "active_share": 0.5429553264604811,
+      "ndcg_active": 0.23465706681696424,
+      "ci_low_active": 0.21309262404787524,
+      "ci_high_active": 0.2569363443696801
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "goal",
+      "group": "long_term",
+      "users": 1447,
+      "ndcg": 0.14133960168962353,
+      "ci_low": 0.12651215993468515,
+      "ci_high": 0.15750340048120898,
+      "active_users": 773,
+      "active_share": 0.5342087076710436,
+      "ndcg_active": 0.2645774950127882,
+      "ci_low_active": 0.24057352217963487,
+      "ci_high_active": 0.2913285358504437
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "goal",
+      "group": "trading",
+      "users": 1365,
+      "ndcg": 0.12293468479219079,
+      "ci_low": 0.11047244778925508,
+      "ci_high": 0.13740087905207535,
+      "active_users": 780,
+      "active_share": 0.5714285714285714,
+      "ndcg_active": 0.21513569838633387,
+      "ci_low_active": 0.19268233023393228,
+      "ci_high_active": 0.2377969324303462
+    },
+    {
+      "method": "RouterNoGender",
+      "variable": "goal",
+      "group": "diversify",
+      "users": 902,
+      "ndcg": 0.11544541097356238,
+      "ci_low": 0.10014178082220303,
+      "ci_high": 0.13442255055107782,
+      "active_users": 484,
+      "active_share": 0.5365853658536586,
+      "ndcg_active": 0.21514826590527536,
+      "ci_low_active": 0.19070541615754777,
+      "ci_high_active": 0.24415744257295577
+    }
+  ],
+  "qa": [
+    {
+      "test": "metric_ndcg_0",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "metric_hit_0",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "metric_diversity_0",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "metric_ndcg_1",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "metric_hit_1",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "metric_diversity_1",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "topk_fixed_shape",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "topk_padding",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "zero_positive_label_retained",
+      "passed": true,
+      "details": "정답 없는 사용자가 있으면 NDCG=0으로 포함하며, 없더라도 정상 데이터다"
+    },
+    {
+      "test": "no_income_alias_bypass",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "MF_negative_collision",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "finite_metric_table",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "metric_ranges",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "per_user_interest_broadcast",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "mastery_equals_quiz_pass",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "event_logic_drop_excludes_complete",
+      "passed": true,
+      "details": "이탈과 완료는 같은 시도에서 동시에 참일 수 없다"
+    },
+    {
+      "test": "event_logic_quiz_pass_requires_quiz_and_complete",
+      "passed": true,
+      "details": "퀴즈 통과 ⊆ 퀴즈 시도 ⊆ 완료"
+    },
+    {
+      "test": "ndcg_active_identity",
+      "passed": true,
+      "details": "활성 사용자 NDCG × 활성 수 = 전체 NDCG × 전체 수 (정답 없는 사용자는 모든 방법에서 0)"
+    },
+    {
+      "test": "active_users_identical_across_methods",
+      "passed": true,
+      "details": "모든 방법이 같은 활성 사용자 집합으로 평가되어야 두 기준의 순위가 같다"
+    },
+    {
+      "test": "active_rank_preserved",
+      "passed": true,
+      "details": "전체·활성 기준의 방법 순위가 같다"
+    },
+    {
+      "test": "ordered_study_times",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_POP",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_POP",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_POP",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_POP",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_RULE",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_RULE",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_RULE",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_RULE",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_CONTENT",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_CONTENT",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_CONTENT",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_CONTENT",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_UCF",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_UCF",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_UCF",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_UCF",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_ICF",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_ICF",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_ICF",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_ICF",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_Global",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_Global",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_Global",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_Global",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_NoDemographics",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_NoDemographics",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_NoDemographics",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_NoDemographics",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_PurposeStageRule",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_PurposeStageRule",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_PurposeStageRule",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_PurposeStageRule",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_RouterFull",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_RouterFull",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_RouterFull",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_RouterFull",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_RouterNoGender",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_RouterNoGender",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_RouterNoGender",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_RouterNoGender",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_RouterNoGenderIncome",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_RouterNoGenderIncome",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_RouterNoGenderIncome",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_RouterNoGenderIncome",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_Random",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_Random",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_Random",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_Random",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_RouterNoGender+prereq",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_RouterNoGender+prereq",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_RouterNoGender+prereq",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_RouterNoGender+prereq",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "unique_items_ABControl",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "level_guard_ABControl",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "plus_one_limit_ABControl",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_passed_unit_recommended_ABControl",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "selection_operational_is_locked",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "prerequisite_policy_used_for_selection_and_test",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "prerequisite_required_all_methods",
+      "passed": true,
+      "details": null
+    },
+    {
+      "test": "no_future_leakage_feature_store",
+      "passed": true,
+      "details": "기준 주 [2, 3]: 이후 행을 섞고 더한 로그·지운 로그로 만든 특징 저장소를 모든 필드에서 비교, 달라진 주 []"
+    },
+    {
+      "test": "bundle_profiles_no_raw_age_income",
+      "passed": true,
+      "details": "번들 프로필 열 ['age_band', 'exp', 'gender', 'goal', 'horizon', 'income_q', 'interest1', 'interest2', 'mobile', 'placement', 'risk', 'user']"
+    },
+    {
+      "test": "bundle_log_no_day_minute",
+      "passed": true,
+      "details": "번들 로그 열 ['complete', 'drop', 'hour', 'item', 'quiz', 'quiz_pass', 'replay', 'save', 'score', 'seq', 'understood', 'user', 'week'] ⊆ 허용 목록"
+    },
+    {
+      "test": "feature_store_no_raw_age_income",
+      "passed": true,
+      "details": "원값 필드 없음, 학습자 표 열에 원값 없음, 대체 소득은 집계 스칼라(4670.0)"
+    },
+    {
+      "test": "published_group_cells_ge_5",
+      "passed": true,
+      "details": "최소 셀 {'group_results': 320, 'group_results.active_users': 160, 'exposure': 320} (k=5), 하나만 숨긴 분할 {'group_results': 0, 'advanced_exposure': 0}(보완 억제 후 0이어야 함)"
+    },
+    {
+      "test": "privacy_audit_columns_complete",
+      "passed": true,
+      "details": "감사 열 ['age_band', 'income_q', 'gender', 'exp', 'risk', 'goal', 'horizon', 'mobile'], 누락 [], 미분류 [], 라우터 ['RouterFull', 'RouterNoGender', 'RouterNoGenderIncome']"
+    }
+  ],
+  "neural_enabled": false,
+  "zoo_skipped": 0,
+  "privacy": {
+    "recorded_in": "Bundle.privacy → manifest.json 'privacy', /api/evaluation 'privacy'. 검사(실패 시 학습 중단·번들 미저장)는 manifest 'qa'의 bundle_profiles_no_raw_age_income, bundle_log_no_day_minute, feature_store_no_raw_age_income, published_group_cells_ge_5, privacy_audit_columns_complete",
+    "k": 5,
+    "stored": {
+      "profile_columns": [
+        "user",
+        "age_band",
+        "income_q",
+        "gender",
+        "exp",
+        "risk",
+        "mobile",
+        "interest1",
+        "interest2",
+        "placement",
+        "goal",
+        "horizon"
+      ],
+      "column_roles": {
+        "user": "가명 번호(0부터 연속)",
+        "age_band": "준식별자(감사·반출 대상)",
+        "income_q": "준식별자(감사·반출 대상)",
+        "gender": "준식별자(감사·반출 대상)",
+        "exp": "준식별자(감사·반출 대상)",
+        "risk": "준식별자(감사·반출 대상)",
+        "mobile": "준식별자(감사·반출 대상)",
+        "interest1": "학습 속성(관심 주제, 반출 안 함)",
+        "interest2": "학습 속성(관심 주제, 반출 안 함)",
+        "placement": "학습 속성(진단 수준, 반출 안 함)",
+        "goal": "준식별자(감사·반출 대상)",
+        "horizon": "준식별자(감사·반출 대상)"
+      },
+      "log_columns": [
+        "user",
+        "item",
+        "week",
+        "seq",
+        "hour",
+        "complete",
+        "quiz",
+        "quiz_pass",
+        "save",
+        "drop",
+        "replay",
+        "score",
+        "understood"
+      ],
+      "log_column_roles": {
+        "user": "가명 번호",
+        "item": "학습 단원",
+        "week": "주차",
+        "seq": "주 안 순서(시각 아님)",
+        "hour": "4개 시간대",
+        "complete": "시도 플래그",
+        "quiz": "시도 플래그",
+        "quiz_pass": "시도 플래그",
+        "save": "시도 플래그",
+        "drop": "시도 플래그",
+        "replay": "시도 플래그",
+        "score": "행동 점수",
+        "understood": "이해(퀴즈 통과) 라벨"
+      },
+      "log_dropped_columns": [
+        "day",
+        "minute"
+      ],
+      "users_table_columns": [
+        "학습자",
+        "성별",
+        "연령대",
+        "소득분위",
+        "투자 목적",
+        "투자 기간",
+        "투자 경험",
+        "위험성향",
+        "기기",
+        "학습 시간대",
+        "관심 주제",
+        "조회 수",
+        "퀴즈 통과율",
+        "완료율",
+        "저장 수",
+        "이탈률",
+        "추정 수준",
+        "선호 1위 주제",
+        "통과 단원 수"
+      ],
+      "unclassified": [],
+      "raw_columns": [],
+      "quasi_in_profiles": [
+        "age_band",
+        "income_q",
+        "gender",
+        "exp",
+        "risk",
+        "goal",
+        "horizon",
+        "mobile"
+      ],
+      "quasi_in_store": [
+        "age_band",
+        "income_q",
+        "gender",
+        "exp",
+        "risk",
+        "goal",
+        "horizon",
+        "mobile"
+      ]
+    },
+    "users_table": {
+      "columns": [
+        "학습자",
+        "성별",
+        "연령대",
+        "소득분위",
+        "투자 목적",
+        "투자 기간",
+        "투자 경험",
+        "위험성향",
+        "기기",
+        "학습 시간대",
+        "관심 주제",
+        "조회 수",
+        "퀴즈 통과율",
+        "완료율",
+        "저장 수",
+        "이탈률",
+        "추정 수준",
+        "선호 1위 주제",
+        "통과 단원 수"
+      ],
+      "column_roles": {
+        "학습자": "가명 번호",
+        "성별": "준식별자",
+        "연령대": "준식별자",
+        "소득분위": "준식별자",
+        "투자 목적": "준식별자",
+        "투자 기간": "준식별자",
+        "투자 경험": "준식별자",
+        "위험성향": "준식별자",
+        "기기": "준식별자",
+        "학습 시간대": "준식별자로 쓰일 수 있는 학습 속성",
+        "관심 주제": "준식별자로 쓰일 수 있는 학습 속성",
+        "조회 수": "행동 요약",
+        "퀴즈 통과율": "행동 요약",
+        "완료율": "행동 요약",
+        "저장 수": "행동 요약",
+        "이탈률": "행동 요약",
+        "추정 수준": "행동 요약",
+        "선호 1위 주제": "행동 요약",
+        "통과 단원 수": "행동 요약"
+      },
+      "unclassified": [],
+      "quasi": {
+        "columns": [
+          "성별",
+          "연령대",
+          "소득분위",
+          "투자 목적",
+          "투자 기간",
+          "투자 경험",
+          "위험성향",
+          "기기"
+        ],
+        "requested": [
+          "성별",
+          "연령대",
+          "소득분위",
+          "투자 목적",
+          "투자 기간",
+          "투자 경험",
+          "위험성향",
+          "기기"
+        ],
+        "missing": [],
+        "k": 5,
+        "rows": 15000,
+        "groups": 5185,
+        "min_group": 1,
+        "median_group": 2.0,
+        "groups_below_k": 4279,
+        "users_below_k": 7363,
+        "share_below_k": 0.4908666666666667,
+        "satisfied": false
+      },
+      "quasi_extended": {
+        "columns": [
+          "성별",
+          "연령대",
+          "소득분위",
+          "투자 목적",
+          "투자 기간",
+          "투자 경험",
+          "위험성향",
+          "기기",
+          "학습 시간대",
+          "관심 주제"
+        ],
+        "requested": [
+          "성별",
+          "연령대",
+          "소득분위",
+          "투자 목적",
+          "투자 기간",
+          "투자 경험",
+          "위험성향",
+          "기기",
+          "학습 시간대",
+          "관심 주제"
+        ],
+        "missing": [],
+        "k": 5,
+        "rows": 15000,
+        "groups": 14948,
+        "min_group": 1,
+        "median_group": 1.0,
+        "groups_below_k": 14948,
+        "users_below_k": 15000,
+        "share_below_k": 1.0,
+        "satisfied": false
+      },
+      "note": "서빙 학습자 표는 가명 번호와 함께 학습자 단위로 나간다. 확장 조합은 대부분 한 명으로 좁혀지므로 학습자 조회 API는 학습 환경 안(로컬 실행)에서만 연다(cli serve는 다른 주소로 열면 --expose-learners 없이는 끈다)"
+    },
+    "quasi": {
+      "columns": [
+        "age_band",
+        "income_q",
+        "gender",
+        "exp",
+        "risk",
+        "goal",
+        "horizon",
+        "mobile"
+      ],
+      "requested": [
+        "age_band",
+        "income_q",
+        "gender",
+        "exp",
+        "risk",
+        "goal",
+        "horizon",
+        "mobile"
+      ],
+      "missing": [],
+      "k": 5,
+      "rows": 15000,
+      "groups": 5185,
+      "min_group": 1,
+      "median_group": 2.0,
+      "groups_below_k": 4279,
+      "users_below_k": 7363,
+      "share_below_k": 0.4908666666666667,
+      "satisfied": false
+    },
+    "generalization": [
+      {
+        "drop": "income_q",
+        "remaining": [
+          "age_band",
+          "gender",
+          "exp",
+          "risk",
+          "goal",
+          "horizon",
+          "mobile"
+        ],
+        "min_group": 1,
+        "users_below_k": 2126,
+        "satisfied": false
+      },
+      {
+        "drop": "goal",
+        "remaining": [
+          "age_band",
+          "gender",
+          "exp",
+          "risk",
+          "horizon",
+          "mobile"
+        ],
+        "min_group": 1,
+        "users_below_k": 267,
+        "satisfied": false
+      },
+      {
+        "drop": "age_band",
+        "remaining": [
+          "gender",
+          "exp",
+          "risk",
+          "horizon",
+          "mobile"
+        ],
+        "min_group": 5,
+        "users_below_k": 0,
+        "satisfied": true
+      }
+    ],
+    "generalization_status": {
+      "satisfied": true,
+      "impossible": false,
+      "kept": [
+        "gender",
+        "exp",
+        "risk",
+        "horizon",
+        "mobile"
+      ],
+      "missing": [],
+      "initial_satisfied": false,
+      "note": ""
+    },
+    "release": {
+      "rows_in": 15000,
+      "rows_out": 14996,
+      "steps": [
+        {
+          "step": 0,
+          "action": "원본",
+          "column": null,
+          "groups": 5185,
+          "min_group": 1,
+          "users_below_k": 7363,
+          "satisfied": false
+        },
+        {
+          "step": 1,
+          "action": "일반화 gender",
+          "column": "gender",
+          "groups": 3477,
+          "min_group": 1,
+          "users_below_k": 4672,
+          "satisfied": false
+        },
+        {
+          "step": 2,
+          "action": "일반화 mobile",
+          "column": "mobile",
+          "groups": 2391,
+          "min_group": 1,
+          "users_below_k": 2944,
+          "satisfied": false
+        },
+        {
+          "step": 3,
+          "action": "일반화 exp",
+          "column": "exp",
+          "groups": 1799,
+          "min_group": 1,
+          "users_below_k": 2011,
+          "satisfied": false
+        },
+        {
+          "step": 4,
+          "action": "일반화 risk",
+          "column": "risk",
+          "groups": 1245,
+          "min_group": 1,
+          "users_below_k": 1203,
+          "satisfied": false
+        },
+        {
+          "step": 5,
+          "action": "일반화 horizon",
+          "column": "horizon",
+          "groups": 892,
+          "min_group": 1,
+          "users_below_k": 642,
+          "satisfied": false
+        },
+        {
+          "step": 6,
+          "action": "일반화 goal",
+          "column": "goal",
+          "groups": 527,
+          "min_group": 1,
+          "users_below_k": 249,
+          "satisfied": false
+        },
+        {
+          "step": 7,
+          "action": "일반화 income_q",
+          "column": "income_q",
+          "groups": 321,
+          "min_group": 1,
+          "users_below_k": 101,
+          "satisfied": false
+        },
+        {
+          "step": 8,
+          "action": "일반화 age_band",
+          "column": "age_band",
+          "groups": 191,
+          "min_group": 1,
+          "users_below_k": 47,
+          "satisfied": false
+        }
+      ],
+      "generalized": [
+        "gender",
+        "mobile",
+        "exp",
+        "risk",
+        "horizon",
+        "goal",
+        "income_q",
+        "age_band"
+      ],
+      "suppressed_rows": 47,
+      "suppressed_values": 141,
+      "removed_rows": 4,
+      "final_groups": 181,
+      "final_min_group": 5,
+      "satisfied": true
+    },
+    "router_leaves": {
+      "RouterFull": {
+        "variables": [
+          "click_tier",
+          "pref_cluster",
+          "age_band",
+          "income_q",
+          "gender"
+        ],
+        "threshold": 20,
+        "min_users_param": 20,
+        "leaves": 553,
+        "leaves_below": 438,
+        "users_in_small_leaves": 3134,
+        "min_leaf": 1,
+        "users": 6680,
+        "decision_min_n": 20,
+        "levels": [
+          {
+            "level": 0,
+            "variable": null,
+            "nodes": 1,
+            "nodes_below": 0,
+            "users_in_nodes_below": 0,
+            "min_n": 6680,
+            "users": 6680
+          },
+          {
+            "level": 1,
+            "variable": "click_tier",
+            "nodes": 3,
+            "nodes_below": 0,
+            "users_in_nodes_below": 0,
+            "min_n": 1264,
+            "users": 6680
+          },
+          {
+            "level": 2,
+            "variable": "pref_cluster",
+            "nodes": 12,
+            "nodes_below": 0,
+            "users_in_nodes_below": 0,
+            "min_n": 90,
+            "users": 6680
+          },
+          {
+            "level": 3,
+            "variable": "age_band",
+            "nodes": 60,
+            "nodes_below": 10,
+            "users_in_nodes_below": 109,
+            "min_n": 1,
+            "users": 6680
+          },
+          {
+            "level": 4,
+            "variable": "income_q",
+            "nodes": 290,
+            "nodes_below": 170,
+            "users_in_nodes_below": 1411,
+            "min_n": 1,
+            "users": 6680
+          },
+          {
+            "level": 5,
+            "variable": "gender",
+            "nodes": 553,
+            "nodes_below": 438,
+            "users_in_nodes_below": 3134,
+            "min_n": 1,
+            "users": 6680
+          }
+        ]
+      },
+      "RouterNoGender": {
+        "variables": [
+          "click_tier",
+          "pref_cluster",
+          "age_band",
+          "income_q"
+        ],
+        "threshold": 20,
+        "min_users_param": 20,
+        "leaves": 290,
+        "leaves_below": 170,
+        "users_in_small_leaves": 1411,
+        "min_leaf": 1,
+        "users": 6680,
+        "decision_min_n": 20,
+        "levels": [
+          {
+            "level": 0,
+            "variable": null,
+            "nodes": 1,
+            "nodes_below": 0,
+            "users_in_nodes_below": 0,
+            "min_n": 6680,
+            "users": 6680
+          },
+          {
+            "level": 1,
+            "variable": "click_tier",
+            "nodes": 3,
+            "nodes_below": 0,
+            "users_in_nodes_below": 0,
+            "min_n": 1264,
+            "users": 6680
+          },
+          {
+            "level": 2,
+            "variable": "pref_cluster",
+            "nodes": 12,
+            "nodes_below": 0,
+            "users_in_nodes_below": 0,
+            "min_n": 90,
+            "users": 6680
+          },
+          {
+            "level": 3,
+            "variable": "age_band",
+            "nodes": 60,
+            "nodes_below": 10,
+            "users_in_nodes_below": 109,
+            "min_n": 1,
+            "users": 6680
+          },
+          {
+            "level": 4,
+            "variable": "income_q",
+            "nodes": 290,
+            "nodes_below": 170,
+            "users_in_nodes_below": 1411,
+            "min_n": 1,
+            "users": 6680
+          }
+        ]
+      },
+      "RouterNoGenderIncome": {
+        "variables": [
+          "click_tier",
+          "pref_cluster",
+          "age_band"
+        ],
+        "threshold": 20,
+        "min_users_param": 20,
+        "leaves": 60,
+        "leaves_below": 10,
+        "users_in_small_leaves": 109,
+        "min_leaf": 1,
+        "users": 6680,
+        "decision_min_n": 20,
+        "levels": [
+          {
+            "level": 0,
+            "variable": null,
+            "nodes": 1,
+            "nodes_below": 0,
+            "users_in_nodes_below": 0,
+            "min_n": 6680,
+            "users": 6680
+          },
+          {
+            "level": 1,
+            "variable": "click_tier",
+            "nodes": 3,
+            "nodes_below": 0,
+            "users_in_nodes_below": 0,
+            "min_n": 1264,
+            "users": 6680
+          },
+          {
+            "level": 2,
+            "variable": "pref_cluster",
+            "nodes": 12,
+            "nodes_below": 0,
+            "users_in_nodes_below": 0,
+            "min_n": 90,
+            "users": 6680
+          },
+          {
+            "level": 3,
+            "variable": "age_band",
+            "nodes": 60,
+            "nodes_below": 10,
+            "users_in_nodes_below": 109,
+            "min_n": 1,
+            "users": 6680
+          }
+        ]
+      }
+    },
+    "published": {
+      "group_results": {
+        "k": 5,
+        "rows": 70,
+        "rows_removed": 0,
+        "active_masked": 0,
+        "complementary_removed": 0,
+        "complementary_masked": 0,
+        "single_suppressed_partitions": 0,
+        "min_users": 320,
+        "min_active_users": 160
+      },
+      "advanced_exposure": {
+        "k": 5,
+        "rows": 24,
+        "rows_removed": 0,
+        "active_masked": 0,
+        "complementary_removed": 0,
+        "complementary_masked": 0,
+        "single_suppressed_partitions": 0,
+        "min_users": 320,
+        "min_active_users": null
+      }
+    },
+    "policy": {
+      "implemented": [
+        {
+          "item": "원시 연령·연소득 비저장: 학습 중 메모리에서 소득 5분위 경계 계산에만 쓰고, 번들 프로필·특징 저장소·learner_profiles.csv에는 연령대·소득분위 구간만 남긴다(모델은 원래 구간 코드만 쓰므로 학습 결과는 같다)",
+          "enforced_by": [
+            "privacy.generalize_profiles",
+            "features.FeatureStore(age·income 필드 없음)",
+            "QA bundle_profiles_no_raw_age_income",
+            "QA feature_store_no_raw_age_income"
+          ]
+        },
+        {
+          "item": "학습 이력 최소화: 번들 로그는 허용 열(가명 번호·단원·주차·4개 시간대·주 안 순서·시도 플래그·점수)만 남기고 일·분과 학습 스키마 밖 열(외부 회원 ID·분 단위 시각·IP 등)은 버린다. 학습 입력을 읽을 때도 스키마 밖 열은 버리고 이름을 데이터 요약에 남긴다",
+          "enforced_by": [
+            "privacy.minimize_log",
+            "data.Dataset.validate",
+            "QA bundle_log_no_day_minute(로그 열 ⊆ 허용 목록)"
+          ]
+        },
+        {
+          "item": "API 최소화: /api/learners·학습자 상세는 연령대·소득분위 코드와 이름만 반환하고, 소득 미입력 대체값은 학습 때 저장한 중앙값(집계)을 쓴다. 학습자 조회 API와 추천·비교·로드맵·유형 API의 learner_id(기준 학습자 번호) 입력은 로컬 주소(127.0.0.1)로 띄울 때만 기본으로 켜지고, 다른 주소로 열면 --expose-learners를 줄 때만 켜진다. API로 고를 수 있는 기법은 화면의 기법 목록(기법군 1위·라우터)뿐이고 임의 설정 번호는 개발 모드에서만 받는다",
+          "enforced_by": [
+            "service.RecommendationService.learners/learner",
+            "FeatureStore.income_median",
+            "api.create_app(expose_learners)",
+            "cli serve --expose-learners",
+            "service.resolve_algorithm(allow_any_config)",
+            "tests/test_privacy.py"
+          ]
+        },
+        {
+          "item": "저장 설계 최소화: /api/designs는 서버가 만든 추천·로드맵 결과(학습자 프로필·통과 단원·학습 카드)를 저장하지 않고, 연령·연소득 원값을 구간 코드로 바꾸며(숫자로 읽을 수 없으면 버림), 설계 이름과 모든 문자열의 연령 표현(45세, 만 45세, 1980년생)과 소득 키워드가 붙은 금액(연봉 5,000만원, 연소득은 7천만원, 연봉 1억 2000만원, 연봉 6천, 월급 450만원 → 연으로 환산)을 구간 이름으로, 키워드 없이 '원'을 붙여 쓴 금액(1억 2천만원, 1.5억원, 65,000,000원)은 통째로 중립 표기 [금액]으로 가린다. 이벤트의 일·분은 버리고 시각은 4개 시간대로 바꾼다. 학습자 조회를 켠 서버에서 저장한 설계는 꺼진 서버가 내려보내지 않는다. 그 밖의 표현(이름 등)은 가리지 못한다",
+          "enforced_by": [
+            "privacy.strip_outputs",
+            "privacy.scrub_design",
+            "privacy.scrub_text",
+            "api.save_design",
+            "api.get_design"
+          ]
+        },
+        {
+          "item": "작은 셀 비공개: 추천 경로 출력은 노드 크기를 구간('20명 미만'·'20~49명'…)으로만 내보내고 원시 평균을 내보내지 않는다(부모−형제 차분으로 숨긴 노드를 복원하지 못하게). 집단별 표(group_results·advanced_exposure)는 5명 미만 집단을 빼고 활성 5명 미만이면 활성 기준 값을 비우며, 한 변수에서 하나만 빠지면 가장 작은 집단을 하나 더 빼거나 비워(보완 억제) 합계 차분으로 복원되지 않게 한다",
+          "enforced_by": [
+            "router.ShrinkRouter.path",
+            "privacy.suppress_small_groups",
+            "QA published_group_cells_ge_5"
+          ]
+        },
+        {
+          "item": "감사 기록: 저장 준식별자 8개 조합의 k=5 결과·열 제거 일반화 계획·export-deid 일반화 요약·실제 라우터 잎 크기, 서빙 학습자 표의 확장 조합(준식별자 8개 + 학습 시간대 + 관심 주제) k 결과를 기록하고, 감사가 프로필·로그·학습자 표의 저장 열을 빠짐없이 분류하는지 확인한다",
+          "enforced_by": [
+            "privacy.privacy_audit",
+            "QA privacy_audit_columns_complete"
+          ]
+        },
+        {
+          "item": "가명처리 도구(운영 원본용, 모의 데이터 학습에는 쓰지 않음): 외부 회원 ID → HMAC-SHA256 가명(16자) → 가명 순서 연속 번호. 키는 환경변수 ETFREC_PSEUDO_KEY에서만 읽고 없거나 16자 미만이면 거부, 매핑표는 --mapping-out에만 쓰며 출력 폴더 안이면 거부, 학습 스키마 밖 열은 버린다. 매핑표 경로는 실제 경로(심볼릭 링크 해석)로 비교해 학습 입력 폴더와 겹치면 거부한다",
+          "enforced_by": [
+            "privacy.build_pseudonymized_inputs",
+            "cli pseudonymize"
+          ]
+        },
+        {
+          "item": "반출 k-익명화: export-deid는 저장 프로필의 준식별자 8개 열만 일반화 계층 → 국소 억제로 k 이상(기본 5)으로 만든 뒤에만 파일을 쓴다(가명 번호·관심 주제·진단 수준은 내보내지 않는다). 행은 반출 값으로 정렬해 원래 학습자 순서를 지운다. 모델 학습 입력은 일반화하지 않는다",
+          "enforced_by": [
+            "privacy.enforce_k_anonymity",
+            "privacy.export_deid",
+            "cli export-deid"
+          ]
+        },
+        {
+          "item": "성별의 운영 비사용: 운영 라우터(RouterNoGender)는 성별을 쓰지 않는 설정만 후보로 두고 성별을 세그먼트에서 뺀다(성별은 저장·진단에는 남는다)",
+          "enforced_by": [
+            "pipeline.train router_settings(allowed_ng)",
+            "tests/test_pipeline_service.py::test_gender_flip_invariance_operational"
+          ]
+        }
+      ],
+      "organizational": [
+        "권한·망 분리: 학습 환경과 운영·가명처리 환경의 권한과 네트워크를 분리한다",
+        "역할 분리: 가명처리 담당(키 ETFREC_PSEUDO_KEY·매핑표 보관)과 모델 학습 담당을 나누고, 학습 담당은 키·매핑표에 접근하지 않는다",
+        "반출 심사: export-deid 결과를 포함해 학습 환경 밖으로 나가는 자료는 반출 전에 적정성 심사를 거친다",
+        "접근 기록 감사: 학습 입력·번들·매핑표 접근 기록을 남기고 주기적으로 점검한다",
+        "외부 결합·공유: 다른 기관 자료와 결합하거나 공유할 때는 개인정보 이노베이션 존(또는 결합전문기관)에 준하는 통제 환경에서만 한다",
+        "보관·삭제: 학습 입력·번들·저장 설계의 보관 기간을 정해 문서화하고, 기간이 지나거나 탈퇴하면 삭제한다",
+        "재식별 금지: 가명정보를 특정 개인을 알아보는 목적으로 처리하지 않고, 재식별 가능성을 발견하면 처리를 멈추고 보고한다",
+        "서빙 API 접근 통제: 학습자 단위 정보를 주는 서빙 API(학습자 조회·추천·설계 저장)는 학습 환경 안에서만 띄우고, 밖에 열 때는 인증·접근 기록을 둔다",
+        "비밀 값 관리: 가명처리 키와 API 인증키는 명령줄에 쓰지 않고(셸 기록에 남음) 입력 프롬프트(read -rs)나 권한을 제한한 파일로 환경변수에 넣는다"
+      ]
+    },
+    "note": "가명 번호만으로는 충분하지 않다. 저장 준식별자 조합은 k=5를 만족하지 않을 수 있으므로(quasi) 학습자 단위 표는 export-deid로 일반화·억제한 것만 반출한다. 라우터 잎 크기는 보장되지 않는다(router_leaves)."
+  },
+  "environment": {
+    "python": "3.13.17",
+    "numpy": "2.5.3",
+    "pandas": "3.0.5",
+    "torch": null,
+    "os": "Linux-6.18.44-fc-v153-x86_64-with-glibc2.39"
+  },
+  "implementation_status": "executed prototype; synthetic data unless a real log directory was given"
+}

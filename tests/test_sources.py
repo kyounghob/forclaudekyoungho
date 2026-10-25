@@ -416,7 +416,7 @@ def test_dates_are_validated_and_keys_are_not_cli_arguments(tmp_path):
     from etfrec.cli import main
     from etfrec.sources.sync import parse_day
     assert parse_day("2026-10-13") == "20261013"
-    for bad in ("20261310", "2026-10-1", "abc"):
+    for bad in ("20261310", "2026-10-1", "abc", "2026oops1013", "2026-10-13junk", "2026/10/13", "20261013 0"):
         with pytest.raises(ValueError):
             parse_day(bad)
     with pytest.raises(ValueError):

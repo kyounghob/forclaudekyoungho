@@ -18,10 +18,11 @@ from .roadmap import build_roadmap
 from .sources import load_etf_universe, public_info, type_stats
 from .sources.registry import SOURCES, source_info, sources_for_items
 from .taxonomy import ETF_TYPES, ROADMAP_TEMPLATES, TYPE_BY_KEY, goal_label, horizon_label, learn_only_types, types_for_goal
-from .data import score_attempts
+from .data import _as_bool, _event_integer, score_attempts
 from .evaluation import candidate_items, choose_items
 from .features import AGE_BAND_REP, build_features, income_representatives
 from .pipeline import Bundle
+from .purpose_policy import POLICY_KEY, POLICY_LABEL, policy_metadata, purpose_stage_algorithm
 from .privacy import generalize_users_table, hydrate_design, scrub_design
 from .signals import CandidateBatch, LearnerBatch, SignalBank, build_signals
 from .synth import LOG_COLUMNS
@@ -67,7 +68,14 @@ class RecommendationService:
         self.info = bundle.signal_meta
         self.routers = bundle.routers
         self.selection = bundle.selection
-        self.operational_router = bundle.config.operational_router
+        self.operational_router = (POLICY_KEY if getattr(bundle.config, "operational_policy", POLICY_KEY) != "legacy"
+                                   else bundle.config.operational_router)
+        self.purpose_algorithm = purpose_stage_algorithm()
+        # Old saved bundles may not have built these signals at the test snapshot.
+        self.info = dict(self.info)
+        for key, label in [("pop", "전체 인기"), ("r:pref", "관심 주제"), ("r:policy_pref", "관심 주제"), ("r:lvl", "수준 일치"),
+                           ("r:dev", "모바일·짧은 콘텐츠"), ("r:goal", "투자 목적 일치"), ("r:roadmap", "로드맵 단계 우선순위")]:
+            self.info.setdefault(key, dict(label=label, lecture="3-2(고정 정책)", uses=()))
         self.serve_week = int(self.store.week)
         self.n_users = int(self.store.n)
         self._log_by_user = None
@@ -159,9 +167,14 @@ class RecommendationService:
                                       interest1=int(interests[0]), interest2=int(interests[1]), placement=int(li.placement),
                                       goal=li.goal, horizon=li.horizon)])
         log = self._adhoc_log(li)
-        diag = np.array([e.get("source") == "diagnosis" for e in li.events], bool)     # 진단 통과 행: 통과 단원 O, 수준 갱신 X
-        F1 = build_features(profiles, log, self.catalog, self.serve_week, income_edges=self.store.income_edges,
-                            level_log=log[~diag] if diag.any() else None)
+        diag = np.array([e.get("source") == "diagnosis" for e in li.events], bool)
+        # Diagnostic admission is not a study attempt, view, preference, or behavioural pass rate.
+        F1 = build_features(profiles, log[~diag], self.catalog, self.serve_week, income_edges=self.store.income_edges)
+        if diag.any():
+            accepted = log.loc[diag & log.quiz_pass.to_numpy(bool) & (log.week.to_numpy() < self.serve_week), "item"].to_numpy(int)
+            F1.und[0, accepted] = True
+            if "통과 단원 수" in F1.users:
+                F1.users.loc[0, "통과 단원 수"] = int(F1.und[0].sum())
         if li.hour < 4 and len(log) == 0:
             F1.blocks["hour"][0] = 0; F1.blocks["hour"][0, li.hour] = 1
         lb = LearnerBatch.from_store(F1, [0], as_reference_users=False)
@@ -171,13 +184,13 @@ class RecommendationService:
         """임의 학습자의 이벤트 → 학습 로그(한 이벤트 = 한 시도). 퀴즈 통과 ⇒ 퀴즈 ⇒ 완료, 이탈 ⇒ 미완료로 맞춘다."""
         rows = []
         for e in li.events:
-            item = int(e.get("item", -1))
-            if not 0 <= item < self.catalog.n_items:
-                raise ValueError(f"카탈로그에 없는 단원 번호 {item}")
-            row = dict(user=0, item=item, week=int(e.get("week", 0)), day=int(e.get("day", 0)), hour=int(e.get("hour", li.hour if li.hour < 4 else 0)),
-                       minute=int(e.get("minute", 0)))
+            item = _event_integer(e.get("item", -1), "item", maximum=self.catalog.n_items - 1)
+            row = dict(user=0, item=item, week=_event_integer(e.get("week", 0), "week"),
+                       day=_event_integer(e.get("day", 0), "day", maximum=6),
+                       hour=_event_integer(e.get("hour", li.hour if li.hour < 4 else 0), "hour", maximum=3),
+                       minute=_event_integer(e.get("minute", 0), "minute", maximum=10079))
             for c in ("complete", "quiz", "quiz_pass", "save", "drop", "replay"):
-                row[c] = bool(e.get(c, False))
+                row[c] = bool(_as_bool(pd.Series([e.get(c, False)]), c).iloc[0])
             row["quiz"] = row["quiz"] or row["quiz_pass"]
             row["complete"] = row["complete"] or row["quiz"]
             row["drop"] = row["drop"] and not row["complete"]          # 이탈 ⇒ 미완료(생성기·데이터 정규화와 같은 규칙)
@@ -210,7 +223,9 @@ class RecommendationService:
         codes = lb.codes.copy()
         for v, value in (overrides or {}).items():
             if v == "level":
-                lb.level = np.array([int(np.clip(value, 1, 3))])
+                if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or not 1 <= int(value) <= 3:
+                    raise ValueError("수준 what-if 값은 1~3 정수여야 합니다")
+                lb.level = np.array([int(value)])
                 continue
             if v not in ("gender", "income_q", "age_band"):
                 raise ValueError(f"지원하지 않는 what-if 항목 {v}")
@@ -229,6 +244,8 @@ class RecommendationService:
     def resolve_algorithm(self, algorithm, codes) -> tuple:
         """algorithm: None(운영 라우터) | 라우터 이름 | 기법군 이름 | 설정 번호(기법군 1위 번호, 또는 allow_any_config일 때 아무 번호)."""
         router_name = None; depth = 0; path = []
+        if algorithm == POLICY_KEY or (algorithm is None and self.operational_router == POLICY_KEY):
+            return self.purpose_algorithm, POLICY_KEY, 0, []
         if isinstance(algorithm, str) and algorithm.isdigit():
             algorithm = int(algorithm)
         if isinstance(algorithm, (int, np.integer)) and not isinstance(algorithm, bool) and not self.allow_any_config \
@@ -252,7 +269,16 @@ class RecommendationService:
                       aid=int(v)) for k, v in self.selection["families"].items()]
         names += [dict(key=k, label={"RouterFull": "라우터(전체 변수)", "RouterNoGender": "라우터(성별 제외)",
                                      "RouterNoGenderIncome": "라우터(성별·소득 제외)"}[k], aid=None) for k in self.routers]
-        return names
+        return [dict(key=POLICY_KEY, label=POLICY_LABEL + " · 고정 운영 정책", aid=None,
+                     declared_policy=True)] + names
+
+    def _service_guard(self, guard):
+        """Normal service always requires mastery/level/prerequisites; explicit dev comparison may disable them."""
+        explicit = guard is not None
+        guard = guard or self.b.config.guardrail
+        if not self.allow_any_config or (not explicit and self.operational_router == POLICY_KEY):
+            return GuardrailConfig(block_gap=2, plus_one_max=1, exclude_passed=True, prereq_block=True)
+        return guard
 
     # ---------- 추천 ----------
     def recommend(self, learner, k: int = K, algorithm=None, guard: GuardrailConfig = None, topic_cap: int = None,
@@ -260,7 +286,7 @@ class RecommendationService:
         t0 = time.perf_counter()
         if isinstance(k, bool) or not isinstance(k, (int, np.integer)) or not 1 <= k <= 20:
             raise ValueError("k는 1 이상 20 이하의 정수여야 합니다")
-        guard = guard or self.b.config.guardrail
+        guard = self._service_guard(guard)
         lb, ctx = self._batch_for(learner, assume_passed, overrides)
         algo, router_name, depth, path = self.resolve_algorithm(algorithm, lb.codes)
         level = int(lb.level[0])
@@ -276,7 +302,9 @@ class RecommendationService:
                     segment={v: dict(code=int(lb.codes[0, j]), label=_seg_label(v, lb.codes[0, j])) for j, v in enumerate(SEG_VARS)},
                     guardrail=guard.__dict__, topic_cap=topic_cap, notice=NOTICE, snapshot_week=self.serve_week)
         if len(ca) == 0:
-            base.update(items=[], shortfall=int(k), reason="가드레일을 통과하는 미통과 단원이 없습니다", checks=[], topic_map=self._topic_map(lb, [], ca, guard))
+            base.update(items=[], shortfall=int(k), candidates=0, reason="가드레일을 통과하는 미통과 단원이 없습니다",
+                        checks=self._checks([], lb, level, guard, k, ca), topic_map=self._topic_map(lb, [], ca, guard),
+                        latency_ms=round((time.perf_counter() - t0) * 1000, 1))
             return json_safe(base)
         cands = CandidateBatch(np.array([ctx["user"] if ctx["user"] is not None else -1]), ca[None, :])
         bank = SignalBank(cands)
@@ -305,7 +333,7 @@ class RecommendationService:
 
     def compare(self, learner, k: int = K, methods=None, guard: GuardrailConfig = None, topic_cap=None, overrides=None, assume_passed=()) -> dict:
         """같은 후보·후처리로 여러 설정의 Top-K를 나란히 본다."""
-        guard = guard or self.b.config.guardrail
+        guard = self._service_guard(guard)
         lb, ctx = self._batch_for(learner, assume_passed, overrides)
         level = int(lb.level[0])
         ca = candidate_items(lb.und[0], level, self.catalog, guard)
@@ -329,22 +357,23 @@ class RecommendationService:
                                        name=algo.name, router=router_name, test_ndcg=test_ndcg.get(m), items=its))
         return json_safe(out)
 
-    def recommend_new(self, topics=None, level: int = 1, k: int = K, mobile: int = 1) -> dict:
-        """이력이 전혀 없는 첫 방문자: 관심 주제·진단 수준만으로 중립적 초기 목록(존재하지 않는 행동을 만들지 않는다)."""
-        if not isinstance(k, (int, np.integer)) or not 1 <= k <= 20:
+    def recommend_new(self, topics=None, level: int = 1, k: int = K, mobile: int = 1,
+                      goal: str = "long_term", horizon: str = "mid", risk: int = 1) -> dict:
+        """First-visit shortcut uses the same declared policy and compulsory constraints."""
+        if isinstance(k, bool) or not isinstance(k, (int, np.integer)) or not 1 <= k <= 20:
             raise ValueError("k는 1 이상 20 이하의 정수여야 합니다")
-        if level not in (1, 2, 3):
+        if isinstance(level, bool) or not isinstance(level, (int, np.integer)) or level not in (1, 2, 3):
             raise ValueError("수준은 1, 2, 3 중 하나여야 합니다")
         topics = [int(t) for t in (topics or [])]
         if any(t < 0 or t >= self.catalog.n_topics for t in topics):
             raise ValueError("알 수 없는 주제 번호")
-        ca = np.flatnonzero(self.catalog.item_level <= level)
-        score = np.isin(self.catalog.item_topic[ca], topics) * 3 + (self.catalog.item_level[ca] == level) + 0.5 * (mobile * self.catalog.item_short[ca])
-        order = np.argsort(-score, kind="stable")[:k]
-        return json_safe(dict(user="NEW", level=level, items=[dict(self.catalog.item_info(int(ca[j])), score=float(score[j]), rank=r + 1)
-                                                               for r, j in enumerate(order)],
-                              shortfall=max(0, k - len(order)), notice=NOTICE,
-                              reason="선택한 관심 주제와 진단 수준 이하의 단원으로 만든 초기 목록입니다. 학습 기록이 쌓이면 개인화 설정으로 바뀝니다."))
+        li = LearnerInput(interests=topics, placement=int(level), mobile=int(mobile),
+                          goal=goal, horizon=horizon, risk=int(risk), events=[], label="첫 방문자")
+        out = self.recommend(li, k=k, algorithm=POLICY_KEY, guard=GuardrailConfig(prereq_block=True))
+        out.update(user="NEW", initial_assumptions=dict(goal=goal, horizon=horizon, risk=int(risk),
+                   diagnosis_admission=False, behaviour_history=False,
+                   note="목적을 생략하면 장기 자산형성·기간 1~5년·중립 위험성향을 가정합니다. 실제 진단 결과는 일반 추천 요청에 입력하세요."))
+        return out
 
     # ---------- 보조 ----------
     def _checks(self, items, lb, level, guard, k, ca) -> list:
@@ -393,6 +422,8 @@ class RecommendationService:
     def types(self, learner=None, goal: str = None, risk: int = None, assume_passed=()) -> dict:
         """목적·성향에 맞는 ETF 유형 안내 카드(교육용). 학습자를 주면 개념 통과 여부를 함께 표시한다."""
         self._check_assumed(assume_passed)                          # 학습자 없이 불러도 범위 밖 번호는 거절한다(통과 가정은 학습자가 있을 때만 쓰임)
+        if goal is not None and goal not in GOALS:
+            raise ValueError(f"goal은 {list(GOALS)} 중 하나여야 합니다")
         passed = None
         if learner is not None:
             lb, ctx = self._batch_for(learner, assume_passed)
@@ -440,12 +471,14 @@ class RecommendationService:
                               configurations=len(b.algos), signal_count=len(b.signal_meta)))
 
     def meta(self) -> dict:
-        op = self.algos[int(self.selection["operational_algorithm"])]
+        op = (self.purpose_algorithm if self.operational_router == POLICY_KEY
+              else self.algos[int(self.selection.get("legacy_operational_algorithm", self.selection["operational_algorithm"]))])
         return json_safe(dict(version=self.b.version, created_at=self.b.created_at, snapshot_week=self.serve_week, n_users=self.n_users,
                               n_items=self.catalog.n_items, topics=self.catalog.topics, groups=self.catalog.group_names,
                               operational_router=self.operational_router, operational_algorithm=dict(aid=op.aid, family=op.family,
                               family_label=FAMILY_KO.get(op.family, op.family), name=op.name, formula=explain(op, self.info)),
-                              methods=self.method_names(), neural_enabled=self.models.enable_neural, guardrail=self.b.config.guardrail.__dict__,
+                              operational_policy=(policy_metadata() if self.operational_router == POLICY_KEY else None),
+                              methods=self.method_names(), neural_enabled=self.models.enable_neural, guardrail=self._service_guard(None).__dict__,
                               configurations=len(self.algos), signal_count=len(self.b.signal_meta), quiz_questions=len(public_questions()),
                               goals=GOALS, horizons=HORIZONS, catalog_version=int(self.catalog.version), universe=self.universe_public,
                               templates={g: dict(types=t["types"]) for g, t in ROADMAP_TEMPLATES.items()}, type_names={t["key"]: t["name"] for t in ETF_TYPES},

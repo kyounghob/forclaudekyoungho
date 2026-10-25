@@ -1,0 +1,31 @@
+﻿persona,snapshot,rank,item,title,topic,level,score,current_stage,in_current_stage,candidate_count,shortfall,stage_progress,prerequisite_missing
+A,after_diagnosis,1,33,분산투자의 기초,자산배분,1,11.807917594909668,core,False,18,0,0.24,0
+A,after_diagnosis,2,51,연금계좌에서 ETF 투자하기,연금계좌 ETF,1,10.262068748474121,core,False,18,0,0.24,0
+A,after_diagnosis,3,39,ETF 거래량과 유동성,유동성,1,10.0,core,True,18,0,0.24,0
+A,after_diagnosis,4,36,국내 상장 해외 ETF와 해외 상장 ETF,해외 ETF,1,8.756321907043457,core,True,18,0,0.24,0
+A,after_diagnosis,5,18,채권 ETF 기초,채권 ETF,1,8.128735542297363,core,False,18,0,0.24,0
+A,after_common_core,1,33,분산투자의 기초,자산배분,1,11.800000190734863,goal,True,19,0,0.44,0
+A,after_common_core,2,51,연금계좌에서 ETF 투자하기,연금계좌 ETF,1,9.318492889404297,goal,True,19,0,0.44,0
+A,after_common_core,3,18,채권 ETF 기초,채권 ETF,1,7.753082275390625,goal,True,19,0,0.44,0
+A,after_common_core,4,25,환헤지형과 환노출형 ETF 비교,환헤지,2,7.621232986450195,goal,True,19,0,0.44,0
+A,after_common_core,5,64,ISA 유형·납입 한도·의무가입 기간,절세 계좌,2,6.867123126983643,goal,True,19,0,0.44,0
+B,after_diagnosis,1,61,옵션 프리미엄과 분배금의 원천,커버드콜 ETF,2,10.648157119750977,core,False,23,0,0.43478260869565216,0
+B,after_diagnosis,2,13,분배금 지급 구조와 재투자,분배금,2,9.1923828125,core,False,23,0,0.43478260869565216,0
+B,after_diagnosis,3,39,ETF 거래량과 유동성,유동성,1,8.0,core,True,23,0,0.43478260869565216,0
+B,after_diagnosis,4,18,채권 ETF 기초,채권 ETF,1,6.422850131988525,core,False,23,0,0.43478260869565216,0
+B,after_diagnosis,5,36,국내 상장 해외 ETF와 해외 상장 ETF,해외 ETF,1,6.257002353668213,core,True,23,0,0.43478260869565216,0
+B,after_common_core,1,61,옵션 프리미엄과 분배금의 원천,커버드콜 ETF,2,12.321233749389648,goal,True,22,0,0.5652173913043478,0
+B,after_common_core,2,13,분배금 지급 구조와 재투자,분배금,2,10.170598983764648,goal,True,22,0,0.5652173913043478,0
+B,after_common_core,3,37,해외 ETF 거래 방법과 환전,해외 ETF,2,9.760798454284668,goal,False,22,0,0.5652173913043478,0
+B,after_common_core,4,18,채권 ETF 기초,채권 ETF,1,8.274772644042969,goal,True,22,0,0.5652173913043478,0
+B,after_common_core,5,48,리츠 ETF 기초,리츠 ETF,1,7.129945755004883,goal,True,22,0,0.5652173913043478,0
+C,after_diagnosis,1,39,ETF 거래량과 유동성,유동성,1,15.0,core,True,18,0,0.16666666666666666,0
+C,after_diagnosis,2,15,섹터 ETF 기초,섹터 ETF,1,10.138952255249023,core,False,18,0,0.16666666666666666,0
+C,after_diagnosis,3,27,레버리지·인버스 ETF란,레버리지·인버스,1,8.053640365600586,core,True,18,0,0.16666666666666666,0
+C,after_diagnosis,4,36,국내 상장 해외 ETF와 해외 상장 ETF,해외 ETF,1,7.356321811676025,core,True,18,0,0.16666666666666666,0
+C,after_diagnosis,5,45,원자재 ETF 기초,원자재 ETF,1,6.734610557556152,core,False,18,0,0.16666666666666666,0
+C,after_common_core,1,40,호가 스프레드 읽기,유동성,2,12.764378547668457,goal,True,20,0,0.4166666666666667,0
+C,after_common_core,2,15,섹터 ETF 기초,섹터 ETF,1,9.611873626708984,goal,True,20,0,0.4166666666666667,0
+C,after_common_core,3,29,변동성 장세의 레버리지 위험과 거래 요건(사전교육·기본예탁금),레버리지·인버스,3,8.040074348449707,goal,False,20,0,0.4166666666666667,0
+C,after_common_core,4,57,ESG ETF란,ESG ETF,1,6.0,goal,False,20,0,0.4166666666666667,0
+C,after_common_core,5,37,해외 ETF 거래 방법과 환전,해외 ETF,2,5.884230136871338,goal,False,20,0,0.4166666666666667,0

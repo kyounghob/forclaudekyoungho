@@ -46,6 +46,17 @@ class ShrinkRouter:
 
     def fit(self, M, codes, allowed=None):
         M = np.asarray(M, np.float64)
+        codes = np.asarray(codes)
+        if M.ndim != 2 or M.shape[0] == 0 or M.shape[1] == 0 or not np.isfinite(M).all():
+            raise ValueError("라우터 학습 점수는 비어 있지 않은 유한한 2차원 배열이어야 합니다")
+        if codes.ndim != 2 or codes.shape != (len(M), len(SEG_VARS)):
+            raise ValueError("라우터 세그먼트 코드 모양이 학습 점수와 다릅니다")
+        if allowed is not None:
+            allowed = np.asarray(allowed, dtype=bool)
+            if allowed.shape != (M.shape[1],) or not allowed.any():
+                raise ValueError("라우터에 선택 가능한 설정이 하나 이상 있어야 합니다")
+        if self.lam < 0 or np.isnan(self.lam):
+            raise ValueError("라우터 수축 계수는 0 이상이어야 합니다")
         self.levels, prev_est, prev_keys = [], None, None
         for lv in range(len(self.cols) + 1):
             key = self._key(codes, lv)
@@ -104,10 +115,18 @@ class ShrinkRouter:
 
 def tune_router(M, codes, lams=(0, 20, 100, 500, 3000, 1e9), reps=2, order=tuple(SEG_VARS), allowed=None, seed=SEED):
     """λ 선택: 검증 사용자를 반으로 나눠 한쪽으로 챔피언을 고르고 다른 쪽에서 점수를 본다(교차, reps회)."""
+    M, codes = np.asarray(M), np.asarray(codes)
+    if M.ndim != 2 or len(M) < 2:
+        raise ValueError("라우터 교차검증에는 평가 사용자 2명 이상이 필요합니다")
+    if reps < 1 or not len(lams):
+        raise ValueError("라우터 반복 수와 수축 후보 목록은 비어 있을 수 없습니다")
     rng = np.random.default_rng(seed)
     rows = []
     for r in range(reps):
         half = rng.random(len(M)) < 0.5
+        if not half.any() or half.all():
+            half = np.zeros(len(M), dtype=bool)
+            half[rng.permutation(len(M))[:max(1, len(M) // 2)]] = True
         for lam in lams:
             for fit_mask in (half, ~half):
                 rt = ShrinkRouter(lam, order).fit(M[fit_mask], codes[fit_mask], allowed)

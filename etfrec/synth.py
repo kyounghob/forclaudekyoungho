@@ -67,6 +67,10 @@ def make_world(n: int, catalog: Catalog, seed: int = SEED, effect: float = EFFEC
                gender_effect: float = GENDER_EFFECT, n_weeks: int = N_WEEKS, version: int = GENERATOR_VERSION,
                goal_effect: float = GOAL_EFFECT, prereq_penalty: float = PREREQ_PENALTY) -> dict:
     """학습자 n명의 프로필과 n_weeks주 학습 로그를 만든다."""
+    if isinstance(n, (bool, np.bool_)) or not isinstance(n, (int, np.integer)) or n < 1:
+        raise ValueError("학습자 수 n은 1 이상의 정수여야 합니다")
+    if isinstance(n_weeks, (bool, np.bool_)) or not isinstance(n_weeks, (int, np.integer)) or n_weeks < 1:
+        raise ValueError("주차 수 n_weeks는 1 이상의 정수여야 합니다")
     r = np.random.default_rng(seed)
     v2 = int(version) >= 2
     I_TOPIC, I_LEVEL, I_SHORT, N_ITEMS, N_TOP, TI = (catalog.item_topic, catalog.item_level, catalog.item_short,
@@ -75,7 +79,8 @@ def make_world(n: int, catalog: Catalog, seed: int = SEED, effect: float = EFFEC
     age = np.clip(np.round(r.normal(40, 12, n)), 19, 75).astype(int)
     log_inc = np.log(3500) + 0.5 * np.exp(-((age - 47) / 14) ** 2) + r.normal(0, 0.5, n)
     income = np.round(np.exp(log_inc) / 10) * 10
-    z_inc = (log_inc - log_inc.mean()) / log_inc.std()
+    inc_std = log_inc.std()
+    z_inc = (log_inc - log_inc.mean()) / inc_std if inc_std > 0 else np.zeros_like(log_inc)
     exp_ = np.digitize(r.normal(0.4 * z_inc + 0.02 * (age - 40), 1.0, n), [-0.2, 0.9])        # 0 없음 1 1~3년 2 3년+
     risk = np.digitize(r.normal(0.5 * exp_ - 0.03 * (age - 40), 1.0, n), [-0.4, 0.6])
     mobile = (r.random(n) < 1 / (1 + np.exp(-(2.0 - 0.06 * (age - 35))))).astype(int)

@@ -1,0 +1,4 @@
+﻿scenario,baseline_targets,after_diagnosis_targets,baseline_targets_removed_as_diagnosis_known,newly_level_eligible_future_targets,prerequisite_blocked_remaining_targets,caution
+conservative,5826,4809,1028,11,2660,Target membership changes after recognition; no NDCG improvement is computed or causally compared.
+central,5826,4490,1352,16,2251,Target membership changes after recognition; no NDCG improvement is computed or causally compared.
+optimistic,5826,4200,1648,22,1890,Target membership changes after recognition; no NDCG improvement is computed or causally compared.

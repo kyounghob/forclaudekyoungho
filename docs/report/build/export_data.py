@@ -79,7 +79,7 @@ data = dict(
 from etfrec.evaluation import bootstrap_ci
 from etfrec.pipeline import Bundle
 b = Bundle.load(f"{ROOT}/artifacts/bundle_v2")
-data["operational_name"] = b.algos[b.selection["operational_algorithm"]].name
+data["operational_name"] = b.algos[b.selection.get("legacy_operational_algorithm", b.selection["operational_algorithm"])].name   # -1(고정 정책)을 마지막 설정으로 읽지 않는다
 data["global_name"] = b.algos[b.selection["families"]["Global"]].name
 data["family_best_names"] = {k: b.algos[v].name for k, v in b.selection["families"].items()}
 AB = b.selection.get("ab_control_algorithm")                     # A/B 대조군 A(평가 전용 행)의 설정 이름
