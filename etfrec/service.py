@@ -161,6 +161,10 @@ class RecommendationService:
         interests = list(li.interests)[:2] + [-1, -1]
         if li.goal not in GOALS or li.horizon not in HORIZONS:
             raise ValueError(f"goal은 {list(GOALS)}, horizon은 {list(HORIZONS)} 중 하나여야 합니다")
+        # API 모델과 같은 범위. 직접 호출에서 범위 밖 위험성향이 로드맵 표의 IndexError로 새지 않게 한다
+        for name, value, allowed in (("risk", li.risk, (0, 1, 2)), ("mobile", li.mobile, (0, 1))):
+            if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value not in allowed:
+                raise ValueError(f"{name}은 {list(allowed)} 중 하나여야 합니다")
         profiles = pd.DataFrame([dict(user=0, gender=int(li.gender), age=int(li.age),
                                       income=float(li.income) if li.income is not None else self.median_income,
                                       exp=int(li.exp), risk=int(li.risk), mobile=int(li.mobile),
