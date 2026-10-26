@@ -19,6 +19,11 @@
     python -m etfrec ops run-week --ops-dir runs/ops --data DIR [--week W]   # 주 1회(예: cron 매주 월요일)
     python -m etfrec ops status|history|rollback|freeze|unfreeze|prune --ops-dir runs/ops
     python -m etfrec serve --ops-dir runs/ops [--bundle runs/seed42]   # /api/serve·/api/feedback로 탐색·노출 기록
+    python -m etfrec serve --public --bundle runs/seed42 [--ops-dir runs/ops] [--db runs/web/etfrec.db] [--trust-proxy]
+        [--cookies auto|secure|insecure] [--service-start YYYY-MM-DD]   # 실사용자 웹 서비스(초대 코드: 환경변수 ETFREC_INVITE_CODE)
+    python -m etfrec web create-admin|reset-password|revoke-admin --username NAME [--db ...]   # 비밀번호: ETFREC_ADMIN_PASSWORD 또는 입력
+    python -m etfrec web export-dataset --out runs/web/export [--db ...] [--bundle runs/seed42]   # 주간 작업 입력(끝난 주까지)
+    python -m etfrec web backup --out runs/web/backup.db | stats [--db ...]
 """
 from __future__ import annotations
 
@@ -98,11 +103,21 @@ def cmd_recommend(a):
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
 
 
+def _web_config(a, local: bool):
+    """serve --public: 실사용자 계정·학습자 화면 설정. Secure 쿠키는 HTTPS 프록시 뒤(--trust-proxy)이거나 외부 주소로 열 때 기본으로 켠다."""
+    from .web.app import WebConfig
+    cookies = getattr(a, "cookies", "auto")
+    secure = cookies == "secure" or (cookies == "auto" and (a.trust_proxy or not local))
+    return WebConfig(db_path=a.db, public=True, invite_code=os.environ.get("ETFREC_INVITE_CODE") or None, secure_cookies=secure,
+                     trust_proxy=a.trust_proxy, service_start=a.service_start)
+
+
 def cmd_serve(a):
     import uvicorn
     from .api import create_app
     local = a.host in LOOPBACK
-    expose = local or getattr(a, "expose_learners", False)        # 학습자 단위 조회는 학습 환경 안(로컬)에서만 기본으로 켠다
+    public = getattr(a, "public", False)
+    expose = (local or getattr(a, "expose_learners", False)) and not public   # 학습자 단위 조회는 학습 환경 안(로컬)에서만 기본으로 켠다
     ops_dir = getattr(a, "ops_dir", None)
     if not a.bundle:
         if not ops_dir:
@@ -114,13 +129,25 @@ def cmd_serve(a):
             sys.exit("운영 등록부에 서빙 번들이 없습니다. --bundle을 주세요")
         if a.bundle.endswith(".pkl"):
             a.bundle = os.path.dirname(a.bundle) if os.path.basename(a.bundle) == "bundle.pkl" else a.bundle
-    app = create_app(a.bundle, designs_dir=a.designs, sources_dir=getattr(a, "sources_dir", None), expose_learners=expose,
-                     ops_dir=ops_dir)
-    if not local:
+    web = _web_config(a, local) if public else None
+    try:
+        app = create_app(a.bundle, designs_dir=a.designs, sources_dir=getattr(a, "sources_dir", None), expose_learners=expose,
+                         ops_dir=ops_dir, web=web)
+    except ValueError as e:                                        # 예: 이미 정해진 서비스 시작일과 다른 --service-start
+        sys.exit(f"서버를 시작하지 못했습니다: {e}")
+    if public:
+        st = app.state.web_store.stats()
+        print(f"공개 모드: 학습자 화면 /, 스튜디오 /studio(관리자만) · 계정 DB {a.db} · 가입 {'초대 코드 필요' if web.invite_code else '누구나'}"
+              f" · 쿠키 {'Secure(HTTPS 전용)' if web.secure_cookies else '일반(HTTP 시험용)'} · 운영 루프 {'켜짐' if ops_dir else '꺼짐'}")
+        if not st["admins"]:
+            print(f"관리자 계정이 없습니다. 만들기: python -m etfrec web create-admin --db {a.db} --username admin", file=sys.stderr)
+        if web.secure_cookies and not a.trust_proxy:
+            print("주의: Secure 쿠키는 HTTPS 주소에서만 저장됩니다. HTTPS 없이 평문 HTTP로 시험하려면 --cookies insecure", file=sys.stderr)
+    elif not local:
         print(f"주의: {a.host}로 열면 같은 망의 누구나 접근할 수 있습니다. 서빙 API에는 인증이 없습니다. "
               f"기준 학습자 조회는 {'켜짐(--expose-learners)' if expose else '꺼짐(--expose-learners로만 켬)'}.", file=sys.stderr)
     print(f"http://{a.host}:{a.port}  (번들 {a.bundle})")
-    uvicorn.run(app, host=a.host, port=a.port, log_level="info")
+    uvicorn.run(app, host=a.host, port=a.port, log_level="info", server_header=not public)     # 공개 모드는 서버 종류를 알리지 않는다
 
 
 def cmd_demo(a):
@@ -277,6 +304,76 @@ def _cmd_ops(a):
         print(f"삭제 {len(removed)}개: {removed}")
 
 
+def _admin_password() -> str:
+    """관리자 비밀번호: 환경변수 ETFREC_ADMIN_PASSWORD 또는 터미널 입력(명령줄 인자는 ps·셸 기록에 남아 받지 않는다)."""
+    pw = os.environ.get("ETFREC_ADMIN_PASSWORD")
+    if pw:
+        return pw
+    import getpass
+    if not sys.stdin.isatty():
+        raise ValueError("비밀번호는 환경변수 ETFREC_ADMIN_PASSWORD나 터미널 입력으로만 받습니다")
+    pw = getpass.getpass("비밀번호(8자 이상): ")
+    if pw != getpass.getpass("비밀번호 확인: "):
+        raise ValueError("비밀번호 확인이 다릅니다")
+    return pw
+
+
+def cmd_web(a):
+    try:
+        _cmd_web(a)
+    except (FileExistsError, KeyError, ValueError) as e:
+        sys.exit(f"웹 계정: {e.args[0] if e.args else e}")
+
+
+def _cmd_web(a):
+    from datetime import date
+    from .web.store import WebStore
+    store = WebStore(a.db)
+    act = a.web_cmd
+    if act == "create-admin":
+        if store.user_by_name(a.username):
+            store.set_admin(a.username, True)
+            print(f"기존 계정 {a.username}에 관리자 권한을 주었습니다(비밀번호는 그대로)")
+        else:
+            store.create_user(a.username, _admin_password(), consent_version="admin-cli", is_admin=True)
+            print(f"관리자 계정을 만들었습니다: {a.username} · 로그인: /?admin=1 → 스튜디오 /studio")
+    elif act == "reset-password":
+        store.set_password(a.username, _admin_password())
+        print(f"{a.username} 비밀번호를 바꾸고 기존 로그인을 모두 끊었습니다")
+    elif act == "revoke-admin":
+        store.set_admin(a.username, False)
+        print(f"{a.username}의 관리자 권한을 거두었습니다")
+    elif act == "backup":
+        store.backup(a.out)
+        print(f"백업: {os.path.abspath(a.out)} (계정·학습 기록 DB 사본. 운영 기록·번들은 --ops-dir 폴더를 따로 보관)")
+    elif act == "stats":
+        st = store.stats()
+        st.update(service_start=store.meta("service_start"))
+        print(json.dumps(json_safe(st), ensure_ascii=False, indent=2))
+    elif act == "export-dataset":
+        start = store.meta("service_start")
+        if start is None:
+            raise ValueError("서비스 시작일이 아직 없습니다(serve --public을 한 번 실행하면 정해집니다)")
+        start = date.fromisoformat(start)
+        profiles, log = store.export_dataset(start)
+        current = (date.today() - start).days // 7
+        if not a.include_current_week:                            # 진행 중인 주는 빼서 주간 작업이 끝난 주만 판정하게 한다
+            log = log[log.week < current]
+        if profiles.empty or log.empty:
+            raise ValueError(f"내보낼 학습 기록이 없습니다(현재 {current}주차, 끝난 주의 기록만 내보냄)")
+        from .catalog import Catalog
+        catalog = None
+        if a.bundle:
+            from .pipeline import Bundle
+            catalog = Bundle.load(a.bundle).catalog
+        ds = Dataset(profiles, log.reset_index(drop=True), catalog or Catalog.default(), source="web",
+                     meta=dict(service_start=start.isoformat(), current_week=current, included_current_week=bool(a.include_current_week)))
+        ds.save_csv(a.out)
+        diag = int((ds.log["source"] == "diagnosis").sum())
+        print(f"내보냄: 학습자 {len(profiles)}명 · 기록 {len(ds.log)}행(진단 인정 {diag}행) · {int(ds.log.week.min())}~{int(ds.log.week.max())}주 → "
+              f"{os.path.abspath(a.out)}\n다음: python -m etfrec ops run-week --ops-dir runs/ops --data {a.out}")
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="etfrec", description="ETF 교육 콘텐츠 개인화·세그먼트 추천 시스템")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -312,6 +409,14 @@ def main(argv=None):
     s.add_argument("--sources-dir", default=None, help="공개 데이터 스냅샷 폴더(기본: ETFREC_SOURCES_DIR, 없으면 data/sources)")
     s.add_argument("--expose-learners", action="store_true",
                    help="로컬 주소가 아닌 --host로 열 때도 기준 학습자 조회(/api/learners)를 켠다(학습 환경 안에서만 쓸 것)"); s.set_defaults(fn=cmd_serve)
+    web_db = os.environ.get("ETFREC_WEB_DB", "runs/web/etfrec.db")
+    s.add_argument("--public", action="store_true",
+                   help="실사용자 웹 서비스: 가입·로그인 학습자 화면이 첫 화면(/), 스튜디오(/studio)·운영·평가 API는 관리자만")
+    s.add_argument("--db", default=web_db, help=f"학습자 계정·기록 DB(SQLite, 기본 ETFREC_WEB_DB 또는 {web_db})")
+    s.add_argument("--cookies", choices=("auto", "secure", "insecure"), default="auto",
+                   help="로그인 쿠키 Secure 속성: auto는 --trust-proxy이거나 외부 주소일 때 Secure(HTTPS 전용)")
+    s.add_argument("--trust-proxy", action="store_true", help="HTTPS 리버스 프록시 뒤: X-Forwarded-For로 요청 IP를 판단(속도 제한)")
+    s.add_argument("--service-start", default=None, help="주차 기준일 YYYY-MM-DD(처음 한 번만 저장, 기본: 첫 실행 주의 월요일)")
     d = sub.add_parser("demo", help="작은 규모 학습 후 바로 서버 실행"); d.add_argument("--n", type=int, default=3000)
     d.add_argument("--out", default="artifacts/demo_bundle"); d.add_argument("--host", default="127.0.0.1"); d.add_argument("--port", type=int, default=8000)
     d.add_argument("--no-neural", action="store_true"); d.set_defaults(fn=cmd_demo)
@@ -356,6 +461,22 @@ def main(argv=None):
         if name == "prune":
             q.add_argument("--keep-weeks", type=int, required=True)
     o.set_defaults(fn=cmd_ops)
+    w = sub.add_parser("web", help="실사용자 웹 서비스 관리: 관리자 계정·비밀번호·학습 데이터 내보내기·통계")
+    wsub = w.add_subparsers(dest="web_cmd", required=True)
+    for name, hp in (("create-admin", "관리자 계정 만들기(있으면 권한만 부여)"), ("reset-password", "비밀번호 재설정(기존 로그인 끊김)"),
+                     ("revoke-admin", "관리자 권한 거두기"), ("export-dataset", "학습 데이터 내보내기(주간 작업 입력)"),
+                     ("backup", "계정·기록 DB 백업(실행 중에도 가능)"), ("stats", "가입·기록 통계")):
+        q = wsub.add_parser(name, help=hp)
+        q.add_argument("--db", default=web_db, help=f"학습자 계정·기록 DB(기본 {web_db})")
+        if name in ("create-admin", "reset-password", "revoke-admin"):
+            q.add_argument("--username", required=True)
+        if name == "export-dataset":
+            q.add_argument("--out", required=True, help="profiles.csv·study_log.csv·catalog.csv를 쓸 폴더")
+            q.add_argument("--bundle", default=None, help="카탈로그를 가져올 번들(기본: 기본 카탈로그 v2)")
+            q.add_argument("--include-current-week", action="store_true", help="진행 중인 주의 기록도 넣는다(기본: 끝난 주까지만)")
+        if name == "backup":
+            q.add_argument("--out", required=True, help="사본 경로(예: runs/web/backup-20261102.db, 있으면 거절)")
+    w.set_defaults(fn=cmd_web)
     a = p.parse_args(argv)
     get_logger()
     a.fn(a)

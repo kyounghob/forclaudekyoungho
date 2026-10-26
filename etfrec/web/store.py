@@ -1,0 +1,367 @@
+"""학습자 저장소(SQLite): 계정·세션·프로필·학습 기록.
+
+수집 최소화: 아이디, 비밀번호 해시(scrypt), 동의 시각·버전, 학습 목적·기간·위험성향·투자 경험·관심 주제·기기,
+진단 결과, 학습 기록만 저장한다. 연령·성별·소득은 묻지도 저장하지도 않는다(운영 추천은 이 값을 쓰지 않는다).
+ref는 가입 순서대로 한 번만 쓰는 가명 번호로, 학습 데이터 내보내기와 운영 루프 기록의 학습자 번호가 된다(탈퇴해도 재사용 안 함).
+"""
+from __future__ import annotations
+
+import base64
+import contextlib
+import hashlib
+import hmac
+import json
+import os
+import re
+import secrets
+import sqlite3
+import time
+from datetime import date, datetime, timedelta
+
+import numpy as np
+import pandas as pd
+
+from ..config import GOALS, HORIZONS
+
+CONSENT_VERSION = "2026-10-26-v1"
+USERNAME_RE = re.compile(r"^[a-z0-9_.-]{3,30}$")
+SCRYPT = dict(n=2 ** 14, r=8, p=1, dklen=32)
+SESSION_TTL = 14 * 24 * 3600
+HOUR_BANDS = (10, 15, 22)                 # 0~23시 → 4개 시간대(출근·점심·저녁·심야), privacy.py의 가명처리와 같은 경계
+EVENT_KINDS = {"complete": dict(complete=1), "save": dict(save=1), "quiz_fail": dict(complete=1, quiz=1),
+               "quiz_pass": dict(complete=1, quiz=1, quiz_pass=1)}
+PROFILE_FIELDS = ("goal", "horizon", "risk", "exp", "interests", "mobile")
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS users(
+  id INTEGER PRIMARY KEY, username TEXT UNIQUE NOT NULL, pw TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0,
+  ref INTEGER UNIQUE NOT NULL, created_at TEXT NOT NULL, consent_version TEXT NOT NULL, consent_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS sessions(
+  token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at REAL NOT NULL, expires_at REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS profiles(
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, data TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS events(
+  id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, item INTEGER NOT NULL, ts REAL NOT NULL,
+  complete INTEGER NOT NULL DEFAULT 0, quiz INTEGER NOT NULL DEFAULT 0, quiz_pass INTEGER NOT NULL DEFAULT 0,
+  save INTEGER NOT NULL DEFAULT 0, source TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS events_user ON events(user_id, ts);
+"""
+
+
+def _b64(b: bytes) -> str:
+    return base64.urlsafe_b64encode(b).decode("ascii").rstrip("=")
+
+
+def _ub64(s: str) -> bytes:
+    return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+
+
+def hash_password(pw: str) -> str:
+    salt = os.urandom(16)
+    h = hashlib.scrypt(pw.encode("utf-8"), salt=salt, **SCRYPT)
+    return f"scrypt${SCRYPT['n']}${SCRYPT['r']}${SCRYPT['p']}${_b64(salt)}${_b64(h)}"
+
+
+def check_password(pw: str, stored: str) -> bool:
+    try:
+        _, n, r, p, salt, h = stored.split("$")
+        want = _ub64(h)
+        got = hashlib.scrypt(pw.encode("utf-8"), salt=_ub64(salt), n=int(n), r=int(r), p=int(p), dklen=len(want))
+    except (ValueError, TypeError):
+        return False
+    return hmac.compare_digest(got, want)
+
+
+_DUMMY = hash_password(secrets.token_hex(8))      # 없는 아이디도 같은 시간만큼 계산해 존재 여부가 응답 시간으로 드러나지 않게
+
+
+def validate_username(u: str) -> str:
+    u = str(u or "").strip().lower()
+    if not USERNAME_RE.match(u):
+        raise ValueError("아이디는 영문 소문자·숫자·._- 3~30자입니다")
+    return u
+
+
+def validate_password(pw: str, username: str = "") -> str:
+    if not isinstance(pw, str) or not 8 <= len(pw) <= 128:
+        raise ValueError("비밀번호는 8자 이상 128자 이하입니다")
+    if username and pw.lower() == username.lower():
+        raise ValueError("아이디와 같은 비밀번호는 쓸 수 없습니다")
+    return pw
+
+
+def validate_profile(d: dict, n_topics: int) -> dict:
+    out = {}
+    if d.get("goal") not in GOALS:
+        raise ValueError(f"투자 목적은 {list(GOALS)} 중 하나입니다")
+    if d.get("horizon") not in HORIZONS:
+        raise ValueError(f"투자 기간은 {list(HORIZONS)} 중 하나입니다")
+    for k in ("risk", "exp"):
+        v = d.get(k)
+        if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 2:
+            raise ValueError(f"{k}는 0~2 정수입니다")
+        out[k] = v
+    mob = d.get("mobile", 1)
+    if isinstance(mob, bool) or mob not in (0, 1):
+        raise ValueError("mobile은 0 또는 1입니다")
+    tops = d.get("interests") or []
+    if not isinstance(tops, list) or len(tops) > 2 or len(set(tops)) != len(tops) or \
+            any(isinstance(t, bool) or not isinstance(t, int) or not 0 <= t < n_topics for t in tops):
+        raise ValueError(f"관심 주제는 0~{n_topics - 1} 가운데 최대 2개입니다")
+    out.update(goal=d["goal"], horizon=d["horizon"], mobile=int(mob), interests=[int(t) for t in tops])
+    return out
+
+
+def _now_iso() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+class WebStore:
+    def __init__(self, path: str):
+        self.path = path
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        with self._tx() as c:
+            c.executescript(SCHEMA)
+
+    @contextlib.contextmanager
+    def _tx(self):
+        c = sqlite3.connect(self.path, timeout=15)
+        c.row_factory = sqlite3.Row
+        try:
+            c.execute("PRAGMA foreign_keys=ON")
+            c.execute("PRAGMA journal_mode=WAL")
+            yield c
+            c.commit()
+        except Exception:
+            c.rollback()
+            raise
+        finally:
+            c.close()
+
+    # ---------- 메타 ----------
+    def meta(self, key: str, default=None):
+        with self._tx() as c:
+            r = c.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        return r["value"] if r else default
+
+    def set_meta(self, key: str, value: str):
+        with self._tx() as c:
+            c.execute("INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
+
+    def service_start(self, configured: str = None) -> date:
+        """주차 계산의 기준일(서비스 시작일). 한 번 정하면 meta에 남겨 재시작해도 주차가 바뀌지 않는다.
+        기본값은 첫 실행 주의 월요일이라 주차가 월~일로 맞는다(주간 작업을 월요일 새벽에 돌리면 막 끝난 주를 판정)."""
+        cur = self.meta("service_start")
+        if cur is None:
+            today = date.today()
+            cur = configured or (today - timedelta(days=today.weekday())).isoformat()
+            date.fromisoformat(cur)
+            self.set_meta("service_start", cur)
+        elif configured and configured != cur:
+            raise ValueError(f"서비스 시작일이 이미 {cur}로 정해져 있습니다(주차 기준을 바꾸면 기록의 주차가 어긋납니다)")
+        return date.fromisoformat(cur)
+
+    # ---------- 계정 ----------
+    def create_user(self, username: str, password: str, consent_version: str = CONSENT_VERSION, is_admin: bool = False) -> dict:
+        u = validate_username(username)
+        validate_password(password, u)
+        pw = hash_password(password)
+        with self._tx() as c:
+            c.execute("BEGIN IMMEDIATE")
+            if c.execute("SELECT 1 FROM users WHERE username=?", (u,)).fetchone():
+                raise FileExistsError("이미 쓰고 있는 아이디입니다")
+            r = c.execute("SELECT value FROM meta WHERE key='next_ref'").fetchone()
+            ref = int(r["value"]) if r else 0
+            c.execute("INSERT INTO meta(key, value) VALUES('next_ref', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(ref + 1),))
+            now = _now_iso()
+            cur = c.execute("INSERT INTO users(username, pw, is_admin, ref, created_at, consent_version, consent_at) VALUES(?,?,?,?,?,?,?)",
+                            (u, pw, int(bool(is_admin)), ref, now, consent_version, now))
+            uid = cur.lastrowid
+        return self.user(uid)
+
+    def user(self, uid: int) -> dict:
+        with self._tx() as c:
+            r = c.execute("SELECT id, username, is_admin, ref, created_at, consent_version, consent_at FROM users WHERE id=?", (uid,)).fetchone()
+        return dict(r) if r else None
+
+    def user_by_name(self, username: str):
+        with self._tx() as c:
+            r = c.execute("SELECT id FROM users WHERE username=?", (validate_username(username),)).fetchone()
+        return self.user(r["id"]) if r else None
+
+    def authenticate(self, username: str, password: str):
+        try:
+            u = validate_username(username)
+        except ValueError:
+            check_password(password or "", _DUMMY)
+            return None
+        with self._tx() as c:
+            r = c.execute("SELECT id, pw FROM users WHERE username=?", (u,)).fetchone()
+        if r is None:
+            check_password(password or "", _DUMMY)
+            return None
+        return self.user(r["id"]) if check_password(password or "", r["pw"]) else None
+
+    def set_password(self, username: str, password: str):
+        u = validate_username(username)
+        validate_password(password, u)
+        with self._tx() as c:
+            n = c.execute("UPDATE users SET pw=? WHERE username=?", (hash_password(password), u)).rowcount
+            uid = c.execute("SELECT id FROM users WHERE username=?", (u,)).fetchone()
+            if uid:
+                c.execute("DELETE FROM sessions WHERE user_id=?", (uid["id"],))      # 비밀번호를 바꾸면 기존 세션은 모두 끊는다
+        if not n:
+            raise KeyError(f"없는 아이디입니다: {u}")
+
+    def set_admin(self, username: str, flag: bool = True):
+        with self._tx() as c:
+            if not c.execute("UPDATE users SET is_admin=? WHERE username=?", (int(bool(flag)), validate_username(username))).rowcount:
+                raise KeyError(f"없는 아이디입니다: {username}")
+
+    def delete_user(self, uid: int) -> int:
+        """탈퇴: 계정·세션·프로필·학습 기록을 모두 지운다(외래 키 CASCADE). 지운 사용자의 ref를 돌려준다."""
+        with self._tx() as c:
+            r = c.execute("SELECT ref FROM users WHERE id=?", (uid,)).fetchone()
+            c.execute("DELETE FROM users WHERE id=?", (uid,))
+        return None if r is None else int(r["ref"])
+
+    # ---------- 세션 ----------
+    def create_session(self, uid: int) -> str:
+        token = secrets.token_urlsafe(32)
+        now = time.time()
+        with self._tx() as c:
+            c.execute("DELETE FROM sessions WHERE expires_at < ?", (now,))
+            c.execute("INSERT INTO sessions(token_hash, user_id, created_at, expires_at) VALUES(?,?,?,?)",
+                      (hashlib.sha256(token.encode()).hexdigest(), uid, now, now + SESSION_TTL))
+        return token
+
+    def session_user(self, token: str):
+        if not token or len(token) > 200:
+            return None
+        th, now = hashlib.sha256(token.encode()).hexdigest(), time.time()
+        with self._tx() as c:
+            r = c.execute("SELECT user_id, expires_at FROM sessions WHERE token_hash=?", (th,)).fetchone()
+            if r is None:
+                return None
+            if r["expires_at"] < now:
+                c.execute("DELETE FROM sessions WHERE token_hash=?", (th,))
+                return None
+            if r["expires_at"] - now < SESSION_TTL / 2:                     # 쓰는 동안은 연장(최대 14일 무활동이면 만료)
+                c.execute("UPDATE sessions SET expires_at=? WHERE token_hash=?", (now + SESSION_TTL, th))
+        return self.user(r["user_id"])
+
+    def delete_session(self, token: str):
+        if token:
+            with self._tx() as c:
+                c.execute("DELETE FROM sessions WHERE token_hash=?", (hashlib.sha256(token.encode()).hexdigest(),))
+
+    # ---------- 프로필·기록 ----------
+    def profile(self, uid: int) -> dict:
+        with self._tx() as c:
+            r = c.execute("SELECT data FROM profiles WHERE user_id=?", (uid,)).fetchone()
+        p = json.loads(r["data"]) if r else {}
+        p.setdefault("placement", 1); p.setdefault("diagnosis", None)
+        p["complete"] = all(p.get(k) is not None for k in ("goal", "horizon", "risk", "exp"))
+        return p
+
+    def save_profile(self, uid: int, data: dict):
+        cur = {k: v for k, v in self.profile(uid).items() if k != "complete"}
+        cur.update(data)
+        with self._tx() as c:
+            c.execute("INSERT INTO profiles(user_id, data, updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET "
+                      "data=excluded.data, updated_at=excluded.updated_at", (uid, json.dumps(cur, ensure_ascii=False), _now_iso()))
+
+    def add_event(self, uid: int, item: int, kind: str, source: str, ts: float = None) -> dict:
+        if kind not in EVENT_KINDS:
+            raise ValueError(f"알 수 없는 기록 종류: {kind}")
+        f = {**dict(complete=0, quiz=0, quiz_pass=0, save=0), **EVENT_KINDS[kind]}
+        ts = time.time() if ts is None else float(ts)
+        with self._tx() as c:
+            c.execute("INSERT INTO events(user_id, item, ts, complete, quiz, quiz_pass, save, source) VALUES(?,?,?,?,?,?,?,?)",
+                      (uid, int(item), ts, f["complete"], f["quiz"], f["quiz_pass"], f["save"], source))
+        return dict(item=int(item), ts=ts, source=source, **f)
+
+    def replace_diagnosis(self, uid: int, items, ts: float = None):
+        ts = time.time() if ts is None else float(ts)
+        with self._tx() as c:
+            c.execute("DELETE FROM events WHERE user_id=? AND source='diagnosis'", (uid,))
+            c.executemany("INSERT INTO events(user_id, item, ts, complete, quiz, quiz_pass, save, source) VALUES(?,?,?,1,1,1,0,'diagnosis')",
+                          [(uid, int(i), ts) for i in items])
+
+    def events(self, uid: int) -> list:
+        with self._tx() as c:
+            rows = c.execute("SELECT item, ts, complete, quiz, quiz_pass, save, source FROM events WHERE user_id=? ORDER BY ts, id", (uid,)).fetchall()
+        return [dict(r) for r in rows]
+
+    def learner_fields(self, uid: int) -> dict:
+        """서비스의 LearnerInput 인자. 연령·성별·소득은 수집하지 않으므로 기본값(운영 순위에 쓰이지 않음)으로 둔다."""
+        p = self.profile(uid)
+        ev = [dict(item=e["item"], week=0, complete=bool(e["complete"]), quiz=bool(e["quiz"]), quiz_pass=bool(e["quiz_pass"]),
+                   save=bool(e["save"]), **({"source": "diagnosis"} if e["source"] == "diagnosis" else {})) for e in self.events(uid)]
+        return dict(label="나", exp=int(p.get("exp") or 0), risk=int(p.get("risk") if p.get("risk") is not None else 1),
+                    mobile=int(p.get("mobile", 1)), interests=list(p.get("interests") or []), placement=int(p.get("placement", 1)),
+                    goal=p.get("goal") or "long_term", horizon=p.get("horizon") or "mid", diagnosis=p.get("diagnosis"), events=ev)
+
+    def export_user(self, uid: int) -> dict:
+        u = self.user(uid)
+        return dict(account={k: u[k] for k in ("username", "created_at", "consent_version", "consent_at")},
+                    profile={k: v for k, v in self.profile(uid).items() if k != "complete"},
+                    events=[dict(e, time=datetime.fromtimestamp(e["ts"]).isoformat(timespec="seconds")) for e in self.events(uid)],
+                    exported_at=_now_iso())
+
+    def backup(self, out_path: str):
+        """실행 중에도 일관된 사본을 만든다(SQLite 온라인 백업). 이미 있는 파일은 덮어쓰지 않는다."""
+        if os.path.exists(out_path):
+            raise FileExistsError(f"이미 있는 파일입니다: {out_path}")
+        os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+        src, dst = sqlite3.connect(self.path), sqlite3.connect(out_path)
+        try:
+            src.backup(dst)
+        finally:
+            dst.close(); src.close()
+
+    def stats(self) -> dict:
+        with self._tx() as c:
+            q = lambda s: c.execute(s).fetchone()[0]
+            return dict(users=q("SELECT COUNT(*) FROM users"), admins=q("SELECT COUNT(*) FROM users WHERE is_admin=1"),
+                        profiles=q("SELECT COUNT(*) FROM profiles"), events=q("SELECT COUNT(*) FROM events"),
+                        active_sessions=c.execute("SELECT COUNT(*) FROM sessions WHERE expires_at > ?", (time.time(),)).fetchone()[0],
+                        last_event=c.execute("SELECT MAX(ts) FROM events").fetchone()[0])
+
+    # ---------- 학습 데이터 내보내기 ----------
+    def export_dataset(self, start: date) -> tuple:
+        """학습 파이프라인 형식(profiles, study_log). user = ref(0..최대 ref, 탈퇴자는 기록 없는 기본 행으로 번호 유지).
+        week = 서비스 시작일부터의 주차, hour = 4개 시간대(privacy.py와 같은 경계), day·minute = 0(시각은 남기지 않고 순서만 유지).
+        source = 기록 출처(web·quiz·self·diagnosis). diagnosis는 진단 퀴즈의 이수 인정이라 특징에는 통과로만 쓰고 정답에서는 뺀다.
+        연령·성별·소득은 수집하지 않아 고정 자리값이다(운영 정책은 이 값을 쓰지 않는다)."""
+        with self._tx() as c:
+            users = [dict(r) for r in c.execute("SELECT u.id, u.ref, p.data FROM users u LEFT JOIN profiles p ON p.user_id=u.id").fetchall()]
+            evs = [dict(r) for r in c.execute("SELECT user_id, item, ts, complete, quiz, quiz_pass, save, source FROM events "
+                                              "ORDER BY ts, id").fetchall()]
+            r = c.execute("SELECT value FROM meta WHERE key='next_ref'").fetchone()
+        n_ref = int(r["value"]) if r else 0
+        ref_of = {u["id"]: u["ref"] for u in users}
+        prof = {u["ref"]: json.loads(u["data"]) if u["data"] else {} for u in users}
+        rows = []
+        for ref in range(n_ref):
+            p = prof.get(ref, {})
+            t = (list(p.get("interests") or []) + [-1, -1])[:2]
+            rows.append(dict(user=ref, gender=0, age=35, income=4000.0, exp=int(p.get("exp") or 0),
+                             risk=int(p["risk"]) if p.get("risk") is not None else 1, mobile=int(p.get("mobile", 1)),
+                             interest1=t[0], interest2=t[1],                     # 고르지 않은 칸은 −1(관심 없음, 학습 코드가 지원)
+                             placement=int(p.get("placement", 1)), goal=p.get("goal") or "long_term", horizon=p.get("horizon") or "mid"))
+        profiles = pd.DataFrame(rows, columns=["user", "gender", "age", "income", "exp", "risk", "mobile", "interest1", "interest2",
+                                               "placement", "goal", "horizon"])
+        log = []
+        for e in evs:
+            dt = datetime.fromtimestamp(e["ts"])
+            days = (dt.date() - start).days
+            if days < 0:
+                continue
+            log.append(dict(user=ref_of[e["user_id"]], item=int(e["item"]), week=days // 7, day=0, hour=int(np.digitize(dt.hour, HOUR_BANDS)),
+                            complete=bool(e["complete"]), quiz=bool(e["quiz"]), quiz_pass=bool(e["quiz_pass"]), save=bool(e["save"]),
+                            drop=False, replay=False, minute=0, source=e["source"]))
+        cols = ["user", "item", "week", "day", "hour", "complete", "quiz", "quiz_pass", "save", "drop", "replay", "minute", "source"]
+        return profiles, pd.DataFrame(log, columns=cols)

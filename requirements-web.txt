@@ -1,0 +1,4 @@
+# 웹 서비스 실행용(학습·평가 + API 서버). torch는 필요 없다: torch로 학습한 번들도 torch 없이 읽고 추천한다.
+-r requirements-core.txt
+fastapi>=0.110
+uvicorn>=0.27

@@ -1,0 +1,6 @@
+# HTTPS 앞단: 인증서 자동 발급·갱신, 압축, 앱으로 전달.
+# Caddy는 사용자가 보낸 X-Forwarded-For를 믿지 않고 실제 접속 주소로 채워 넘긴다(앱의 --trust-proxy가 이 값으로 속도 제한).
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:8000
+}

@@ -167,6 +167,8 @@ def primary_eval(week: int, F: FeatureStore, log: pd.DataFrame, catalog: Catalog
     if F.week != week:
         raise ValueError("특징 스냅샷과 평가 주가 다릅니다")
     wk = log[log.week == week]
+    if "source" in wk.columns:                       # 진단 퀴즈의 이수 인정은 추천에 대한 반응이 아니므로 정답·평가 대상에서 뺀다
+        wk = wk[wk["source"] != "diagnosis"]
     users = np.unique(wk.user.values)
     if len(users) == 0:
         raise ValueError(f"평가 주 {week}에 학습 로그가 없습니다")

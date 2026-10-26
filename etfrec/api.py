@@ -12,8 +12,8 @@ import time
 import uuid
 from typing import Optional, Union
 
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -156,17 +156,23 @@ def _learner_input(req, allow_none: bool = False):
 
 
 def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir: str = None, expose_learners: bool = True,
-               allow_any_config: bool = None, ops_dir: str = None) -> FastAPI:
+               allow_any_config: bool = None, ops_dir: str = None, web=None) -> FastAPI:
     """expose_learners: 기준 학습자 조회(/api/learners, /api/learners/{uid})를 켤지. 학습자 단위 표라 학습 환경 안(로컬 실행)에서만 켠다
-    (cli serve는 로컬 주소가 아니면 --expose-learners를 줄 때만 켠다). allow_any_config: 임의 설정 번호 허용(기본: 환경변수 ETFREC_DEV_CONFIGS=1일 때만)."""
+    (cli serve는 로컬 주소가 아니면 --expose-learners를 줄 때만 켠다). allow_any_config: 임의 설정 번호 허용(기본: 환경변수 ETFREC_DEV_CONFIGS=1일 때만).
+    web(etfrec.web.app.WebConfig): 실사용자 계정·학습자 화면(/learn)을 켠다. web.public이면 학습자 화면이 첫 화면(/)이고
+    스튜디오(/studio)·운영·평가 API는 관리자 로그인이 있어야 하며 기준 학습자 조회는 끈다."""
     bundle = Bundle.load(bundle) if isinstance(bundle, str) else bundle
+    public = bool(web is not None and web.public)
+    if public:
+        expose_learners = False                                   # 공개 운영: 모의 학습자 표 조회는 끈다
     if allow_any_config is None:
         allow_any_config = os.environ.get("ETFREC_DEV_CONFIGS") == "1"
     svc = RecommendationService(bundle, sources_dir=sources_dir, allow_any_config=allow_any_config)
     designs_dir = designs_dir or os.path.join(os.getcwd(), "artifacts", "designs")
     os.makedirs(designs_dir, exist_ok=True)
+    docs = {} if not public else dict(docs_url=None, redoc_url=None, openapi_url=None)     # 공개 운영에서는 API 문서 화면을 열지 않는다
     app = FastAPI(title="ETF 교육 콘텐츠 추천 시스템", version=__version__,
-                  description="교육 콘텐츠 추천 시연기. 특정 ETF의 매수·매도를 권유하지 않습니다.")
+                  description="교육 콘텐츠 추천 시연기. 특정 ETF의 매수·매도를 권유하지 않습니다.", **docs)
     app.state.service = svc
     ops = None
     if ops_dir:                                                       # 운영 루프: 등록부의 현재 정책으로 서빙하고 노출·반응을 기록
@@ -184,6 +190,15 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
             ops["reg"] = PolicyRegistry(ops["dir"]); ops["mtime"] = m
             svc.set_operational_spec(ops["reg"].champion)
         return ops
+
+    web_store = None
+    if web is not None:                                               # 실사용자 계정·학습자 API(/api/auth, /api/me, /api/public)
+        from .web.app import install_web
+        from .web.security import COOKIE, install_admin_gate, install_security
+        web_store = install_web(app, svc, web, ops_get=lambda: ops_sync() if ops is not None else None)
+        if public:                                                    # 나중에 넣은 미들웨어가 바깥: 차단 응답에도 보안 헤더가 붙게 순서를 둔다
+            install_admin_gate(app, lambda request: web_store.session_user(request.cookies.get(COOKIE)))
+        install_security(app, hsts=bool(web.secure_cookies))
 
     def guard(g: Optional[Guardrail]) -> GuardrailConfig:
         """요청의 가드레일. 생략하면 스키마 기본값(화면 기본: 선수 단원 차단 켬)과 같게 처리한다."""
@@ -419,9 +434,23 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
     # ---- 정적 UI ----
     if os.path.isdir(UI_DIR):
         app.mount("/static", StaticFiles(directory=UI_DIR), name="static")
+        learn_page = os.path.join(UI_DIR, "learn", "index.html")
 
         @app.get("/", include_in_schema=False)
         def index():
-            return FileResponse(os.path.join(UI_DIR, "index.html"))
+            return FileResponse(learn_page if public else os.path.join(UI_DIR, "index.html"))
+
+        if web is not None:
+            @app.get("/learn", include_in_schema=False)
+            def learn():
+                return FileResponse(learn_page)
+
+        if public:
+            @app.get("/studio", include_in_schema=False)
+            def studio(request: Request):
+                u = web_store.session_user(request.cookies.get(COOKIE))
+                if not u or not u["is_admin"]:
+                    return RedirectResponse("/?admin=1", status_code=303)
+                return FileResponse(os.path.join(UI_DIR, "index.html"))
 
     return app

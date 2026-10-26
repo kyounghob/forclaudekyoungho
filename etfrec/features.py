@@ -179,8 +179,21 @@ def build_features(profiles: pd.DataFrame, log_before: pd.DataFrame, catalog: Ca
 
 
 def feature_store(profiles: pd.DataFrame, log: pd.DataFrame, catalog: Catalog, week: int) -> FeatureStore:
-    """기준 주 week의 추천·평가를 위한 저장소 = week 이전 로그만 사용."""
-    return build_features(profiles, log[log.week < week], catalog, week)
+    """기준 주 week의 추천·평가를 위한 저장소 = week 이전 로그만 사용.
+
+    source == "diagnosis" 행(웹 진단 퀴즈의 이수 인정)은 시도·선호·행동 통계에 넣지 않고 통과 단원으로만 반영한다(서비스와 같은 규칙).
+    source 열이 없는 로그(모의 데이터·기존 CSV)는 그대로다."""
+    hist = log[log.week < week]
+    if "source" not in hist.columns:
+        return build_features(profiles, hist, catalog, week)
+    diag = (hist["source"] == "diagnosis").to_numpy()
+    F = build_features(profiles, hist[~diag], catalog, week)
+    acc = hist[diag & hist.quiz_pass.to_numpy(bool)]
+    if len(acc):
+        F.und[acc.user.to_numpy(int), acc.item.to_numpy(int)] = True
+        if "통과 단원 수" in F.users:
+            F.users["통과 단원 수"] = F.und.sum(1).astype(int)
+    return F
 
 
 def segment_label(codes_row, var: str) -> str:

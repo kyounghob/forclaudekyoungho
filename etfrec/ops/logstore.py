@@ -115,6 +115,24 @@ class OpsLog:
         return dict(week=int(week), impressions=len(imps), explored=int(sum(bool(r.get("explored")) for r in imps)),
                     feedback=len(self.feedback(week)))
 
+    def purge_user(self, user_ref: int) -> int:
+        """탈퇴한 학습자의 노출·반응 기록을 모든 주차 파일에서 지운다(새로 써서 바꿔치기). 지운 줄 수를 돌려준다."""
+        ref, removed = int(user_ref), 0
+        with _LOCK:
+            for kind in ("impressions", "feedback"):
+                for w in self.weeks(kind):
+                    path = self._path(kind, w)
+                    with open(path, encoding="utf-8") as f:
+                        lines = [ln for ln in f if ln.strip()]
+                    keep = [ln for ln in lines if json.loads(ln).get("user_ref") != ref]
+                    if len(keep) != len(lines):
+                        tmp = path + ".tmp"
+                        with open(tmp, "w", encoding="utf-8") as f:
+                            f.writelines(keep)
+                        os.replace(tmp, path)
+                        removed += len(lines) - len(keep)
+        return removed
+
     def prune(self, keep_weeks: int) -> list:
         """최근 keep_weeks주만 남기고 오래된 주차 파일을 지운다(보존 기간). 지운 파일 목록을 돌려준다."""
         if isinstance(keep_weeks, bool) or int(keep_weeks) < 1:

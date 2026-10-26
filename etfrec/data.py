@@ -202,13 +202,15 @@ class Dataset:
         self.log, self.attempt_grouping = events_to_attempts(self.log)   # 세션 열이 있는 이벤트 스트림이면 시도 단위로 묶는다
         # 학습 스키마 밖 열(외부 회원 ID·분 단위 시각·IP 등)은 학습에도 저장에도 쓰지 않으므로 여기서 버리고 이름만 남긴다
         keep_p = set(PROFILE_COLUMNS) | set(OPTIONAL_PROFILE_COLUMNS)
-        keep_l = set(LOG_COLUMNS) | {"score", "understood"}
+        keep_l = set(LOG_COLUMNS) | {"score", "understood", "source"}      # source: 웹 기록의 출처(diagnosis = 진단 이수 인정)
         self.dropped_columns = dict(profiles=[c for c in self.profiles.columns if c not in keep_p],
                                     log=[c for c in self.log.columns if c not in keep_l])
         if self.dropped_columns["profiles"]:
             self.profiles = self.profiles[[c for c in self.profiles.columns if c in keep_p]].copy()
         if self.dropped_columns["log"]:
             self.log = self.log[[c for c in self.log.columns if c in keep_l]].copy()
+        if "source" in self.log.columns:
+            self.log["source"] = self.log["source"].fillna("").astype(str)
         self.log, self.event_repairs, changed = normalize_event_flags(self.log, return_mask=True)
         if "score" in self.log.columns and "understood" in self.log.columns:   # 입력 점수: CSV의 0/1·'True'/'False'도 받아 형을 맞춘다
             self.log["understood"] = _as_bool(self.log["understood"], "understood")

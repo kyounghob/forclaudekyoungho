@@ -166,7 +166,7 @@ def _summary(m: dict) -> dict:
 
 
 def _data_hash(log_df) -> str:
-    cols = [c for c in ("user", "item", "week", "complete", "quiz", "quiz_pass", "save", "drop", "replay") if c in log_df.columns]
+    cols = [c for c in ("user", "item", "week", "complete", "quiz", "quiz_pass", "save", "drop", "replay", "source") if c in log_df.columns]
     body = log_df[cols].sort_values(cols, kind="stable").to_csv(index=False).encode("utf-8")
     return hashlib.sha256(body).hexdigest()
 
@@ -204,8 +204,9 @@ def run_week(ops_dir: str, dataset: Dataset, week: int, cfg: LoopConfig = None, 
         log_df = dataset.log[dataset.log.week <= week]              # 미래 주 기록은 쓰지 않는다
         if log_df.empty or int(log_df.week.max()) < week:
             raise ValueError(f"{week}주 학습 기록이 없습니다")
-        data = dict(through_week=week, rows=int(len(log_df)), active_users_week=int(log_df[log_df.week == week].user.nunique()),
-                    active_users_selection_week=int(log_df[log_df.week == week - 1].user.nunique()), sha256=_data_hash(log_df))
+        act = log_df if "source" not in log_df.columns else log_df[log_df["source"] != "diagnosis"]     # 진단 인정만 있는 학습자는 활동이 아니다
+        data = dict(through_week=week, rows=int(len(log_df)), active_users_week=int(act[act.week == week].user.nunique()),
+                    active_users_selection_week=int(act[act.week == week - 1].user.nunique()), sha256=_data_hash(log_df))
         if data["active_users_week"] < cfg.gate.min_users or data["active_users_selection_week"] < cfg.gate.min_users:
             rec = reg.append_history(dict(event="skipped", week=week, reason="활동 학습자가 최소 표본보다 적음", data=data,
                                           champion_after=public_spec(reg.champion), code_version=__version__))

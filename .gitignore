@@ -18,3 +18,6 @@ archive/**/report_build/fig/
 archive/**/report_build/report_data.json
 archive/**/report_build/*.docx
 archive/**/report_build/node_modules/
+
+# 배포 설정(도메인·초대 코드)은 저장소에 올리지 않는다
+.env

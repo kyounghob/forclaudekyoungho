@@ -1,0 +1,33 @@
+# 실사용자 웹 서비스: app(내부 8000) + caddy(80·443, 인증서 자동 발급).
+# DOMAIN에 이 서버를 가리키는 도메인을 넣는다(예: DOMAIN=learn.example.com docker compose up -d).
+# 처음 준비(번들 학습·운영 등록부·관리자 계정)는 README의 '웹 서비스로 운영하기'를 따른다.
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      ETFREC_INVITE_CODE: ${ETFREC_INVITE_CODE:-}        # 비우면 누구나 가입, 값을 넣으면 그 초대 코드가 있어야 가입
+    volumes:
+      - runs:/app/runs
+    expose:
+      - "8000"
+
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}                      # localhost면 Caddy 내부 인증서(시험용)
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  runs:
+  caddy_data:
+  caddy_config:

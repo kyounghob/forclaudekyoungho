@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14302A">
+<title>ETF 학습 추천</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/static/learn/learn.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/home"><span class="logo">E</span><span><b>ETF 학습 추천</b><small>목적과 수준에 맞춘 다음 단원</small></span></a>
+  <nav id="nav" class="nav" hidden>
+    <button type="button" data-go="home">홈</button>
+    <button type="button" data-go="roadmap">로드맵</button>
+    <button type="button" data-go="types">ETF 유형</button>
+    <button type="button" data-go="me">내 정보</button>
+  </nav>
+</header>
+<main id="main">
+  <section id="v-loading" class="view"><p class="muted center">불러오는 중…</p></section>
+  <section id="v-auth" class="view" hidden></section>
+  <section id="v-onboard" class="view" hidden></section>
+  <section id="v-quiz" class="view" hidden></section>
+  <section id="v-home" class="view" hidden></section>
+  <section id="v-unit" class="view" hidden></section>
+  <section id="v-roadmap" class="view" hidden></section>
+  <section id="v-types" class="view" hidden></section>
+  <section id="v-me" class="view" hidden></section>
+</main>
+<footer class="foot"><p id="notice"></p><p class="muted small">추천 모델은 아직 모의 데이터로 학습되어 있으며, 실제 이용 기록이 쌓이면 주간 재학습과 검증을 거쳐 바뀝니다.</p></footer>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<script src="/static/learn/learn.js"></script>
+</body>
+</html>
