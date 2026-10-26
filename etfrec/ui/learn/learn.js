@@ -67,11 +67,11 @@
           <button type="button" role="tab" aria-selected="${!signup}" data-mode="login" class="${signup ? "" : "on"}">로그인</button>
           <button type="button" role="tab" aria-selected="${signup}" data-mode="signup" class="${signup ? "on" : ""}">회원가입</button></div>
         <form id="f-auth" novalidate>
-          <label for="a-user">아이디</label><input id="a-user" name="username" autocomplete="username" maxlength="30" required>
+          <label for="a-user">아이디</label><input id="a-user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="30" required>
           ${signup ? `<p class="muted small">영문 소문자·숫자·._- 3~30자. 이메일·전화번호는 받지 않습니다.</p>` : ""}
           <label for="a-pw">비밀번호</label><input id="a-pw" name="password" type="password" autocomplete="${signup ? "new-password" : "current-password"}" maxlength="128" required>
           ${signup ? `<label for="a-pw2">비밀번호 확인 (8자 이상)</label><input id="a-pw2" name="password2" type="password" autocomplete="new-password" maxlength="128" required>
-            ${CFG.invite_required ? `<label for="a-inv">초대 코드</label><input id="a-inv" name="invite_code" maxlength="64" required>` : ""}
+            ${CFG.invite_required ? `<label for="a-inv">초대 코드</label><input id="a-inv" name="invite_code" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="64" required>` : ""}
             <details class="consent"><summary>개인정보 수집·이용 안내 (필수)</summary><p>${esc(CFG.consent_text).replace(/\n/g, "<br>")}</p></details>
             <label class="check"><input type="checkbox" name="consent"> 안내를 읽었고 수집·이용에 동의합니다</label>` : ""}
           <div class="btn-row"><button class="btn primary" type="submit">${signup ? "가입하고 시작하기" : "로그인"}</button></div>

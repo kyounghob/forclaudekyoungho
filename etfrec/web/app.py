@@ -180,7 +180,7 @@ def install_web(app, svc, cfg: WebConfig, ops_get=None) -> WebStore:
             raise HTTPException(403, "요청 머리글이 없습니다")
         if not limiter.take("signup:" + client_ip(request, cfg.trust_proxy), *SIGNUP_PER_IP):
             raise HTTPException(429, "가입 시도가 너무 많습니다. 잠시 뒤에 다시 시도하세요")
-        if cfg.invite_code and body.invite_code != cfg.invite_code:
+        if cfg.invite_code and (body.invite_code or "").strip().casefold() != cfg.invite_code.strip().casefold():   # 휴대폰 자동 대문자·공백 허용
             raise HTTPException(403, "초대 코드가 맞지 않습니다")
         if not body.consent:
             raise HTTPException(422, "개인정보 수집·이용에 동의해야 가입할 수 있습니다")

@@ -102,7 +102,10 @@ def test_login_rate_limit_and_invite_code(small_bundle, tmp_path):
     assert c.get("/api/public/config").json()["invite_required"] is True
     body = dict(username="learner1", password="correct-horse-1", consent=True)
     assert c.post("/api/auth/signup", json=body, headers=H).status_code == 403
+    assert c.post("/api/auth/signup", json={**body, "invite_code": "class-2025"}, headers=H).status_code == 403
     assert c.post("/api/auth/signup", json={**body, "invite_code": "class-2026"}, headers=H).status_code == 200
+    other = dict(body, username="learner2", invite_code=" Class-2026 ")                 # 휴대폰 키보드의 첫 글자 대문자·공백
+    assert c.post("/api/auth/signup", json=other, headers=H).status_code == 200
     for _ in range(8):
         assert c.post("/api/auth/login", json=dict(username="learner1", password="bad-guess-00"), headers=H).status_code == 401
     r = c.post("/api/auth/login", json=dict(username="learner1", password="correct-horse-1"), headers=H)

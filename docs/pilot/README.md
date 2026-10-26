@@ -57,6 +57,7 @@
   - `deploy/desktop/start-windows.bat`(맥은 `start-mac.command`)을 더블클릭하면 서버와 터널이 함께 켜진다.
   - 멈추면 다시 켜고, 절전을 막고, 매일 백업한다.
   - 리허설은 임시 주소로, 본 기간은 고정 주소(도메인과 Cloudflare 터널 토큰)로 연다.
+  - 초대 코드는 `runs/desktop/invite_code.txt`에 적는다.
   - 11/9~11/29 동안 24시간 켜 두어야 한다.
 - **자체 서버**: `.env`에 도메인과 관리자 비밀번호를 적고 `docker compose up -d`를 실행한다.
 

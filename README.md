@@ -228,6 +228,7 @@ python -m etfrec serve --public --ops-dir runs/ops                # http://127.0
 - 처음 실행할 때 가상환경을 만들고 패키지를 설치한 뒤 `python -m etfrec desktop`을 띄운다.
 - 서버와 Cloudflare 터널(고정 주소 토큰 또는 임시 주소)을 함께 켜고, 멈추면 다시 켠다.
 - 켜져 있는 동안 절전을 막고, 시작할 때와 매일 백업한다.
+- 초대 코드는 `runs/desktop/invite_code.txt`(또는 환경변수 `ETFREC_INVITE_CODE`)에 적는다. 대소문자와 앞뒤 공백은 가리지 않는다.
 - 설치와 고정 주소 만들기, 자동 시작 등록은 [`docs/pilot/desktop.md`](docs/pilot/desktop.md)에 있다.
 
 **자체 서버에 배포하기(Docker + HTTPS):**

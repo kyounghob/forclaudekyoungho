@@ -6,8 +6,8 @@ from datetime import datetime
 
 import pytest
 
-from etfrec.desktop import (QUICK_URL_RE, Proc, Supervisor, backup_due, find_cloudflared, prune_backups, server_command, tunnel_command,
-                            tunnel_mode, tunnel_token)
+from etfrec.desktop import (QUICK_URL_RE, Proc, Supervisor, backup_due, find_cloudflared, invite_code, prune_backups, server_command,
+                            tunnel_command, tunnel_mode, tunnel_token)
 
 
 def test_tunnel_mode_and_commands(tmp_path, monkeypatch):
@@ -33,6 +33,21 @@ def test_tunnel_mode_and_commands(tmp_path, monkeypatch):
     assert tunnel_token(str(tmp_path)) == "envtok"
     line = "2026-11-02T00:00:00Z INF |  https://gentle-river-1234.trycloudflare.com                    |"
     assert QUICK_URL_RE.search(line).group(0) == "https://gentle-river-1234.trycloudflare.com"
+
+
+def test_invite_code(tmp_path, monkeypatch):
+    monkeypatch.delenv("ETFREC_INVITE_CODE", raising=False)
+    assert invite_code(str(tmp_path)) is None
+    (tmp_path / "invite_code.txt").write_bytes("﻿etf2026 \r\n".encode("utf-8"))     # 메모장 저장: BOM과 CRLF
+    assert invite_code(str(tmp_path)) == "etf2026"
+    (tmp_path / "invite_code.txt").write_bytes("수업".encode("cp949"))                   # 명령 창 echo로 만든 한글(UTF-8 아님)
+    with pytest.raises(ValueError, match="UTF-8"):
+        invite_code(str(tmp_path))
+    monkeypatch.setenv("ETFREC_INVITE_CODE", "envcode")
+    assert invite_code(str(tmp_path)) == "envcode"
+    monkeypatch.setenv("ETFREC_INVITE_CODE", "x" * 65)
+    with pytest.raises(ValueError, match="64자"):
+        invite_code(str(tmp_path))
 
 
 def test_find_cloudflared(tmp_path, monkeypatch):

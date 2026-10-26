@@ -7,6 +7,7 @@
    - 고정 주소: 터널 토큰(환경변수 ETFREC_TUNNEL_TOKEN 또는 runs/desktop/tunnel_token.txt)
    - 임시 주소: 토큰이 없으면 trycloudflare.com 주소를 받는다. 다시 켤 때마다 주소가 바뀐다(리허설용).
    - 같은 와이파이: cloudflared가 없거나 --tunnel none이면 같은 망에서만 접속(HTTP)
+   - 초대 코드(환경변수 ETFREC_INVITE_CODE 또는 runs/desktop/invite_code.txt)가 있으면 그 코드를 아는 사람만 가입한다.
 3. 서버나 터널이 죽거나 상태 확인(/api/health)이 3번 연속 실패하면 다시 켠다.
 4. 켜져 있는 동안 컴퓨터가 절전으로 들어가지 않게 한다(윈도우·맥).
 5. 시작할 때와 매일 정한 시각에 계정·기록 DB를 백업하고 최근 N개만 남긴다.
@@ -29,14 +30,30 @@ HEALTH_EVERY = 60          # 초
 HEALTH_FAILS = 3           # 연속 실패 횟수 → 서버 재시작
 
 
+def _setting(desktop_dir: str, env_name: str, file_name: str):
+    """환경변수가 있으면 그 값, 없으면 runs/desktop/<file_name>의 내용(앞뒤 공백 제거). 명령줄 인자로는 받지 않는다."""
+    val = os.environ.get(env_name, "").strip()
+    path = os.path.join(desktop_dir, file_name)
+    if not val and os.path.exists(path):
+        try:
+            with open(path, encoding="utf-8-sig") as f:                  # 메모장이 붙이는 BOM을 떼어 낸다
+                val = f.read().strip()
+        except UnicodeDecodeError:
+            raise ValueError(f"{path}를 UTF-8로 읽지 못했습니다. 영문·숫자로 다시 적거나 메모장에서 UTF-8로 저장하세요") from None
+    return val or None
+
+
 def tunnel_token(desktop_dir: str):
-    """고정 주소 터널 토큰: 환경변수 ETFREC_TUNNEL_TOKEN 또는 runs/desktop/tunnel_token.txt(명령줄 인자로는 받지 않는다)."""
-    tok = os.environ.get("ETFREC_TUNNEL_TOKEN", "").strip()
-    path = os.path.join(desktop_dir, "tunnel_token.txt")
-    if not tok and os.path.exists(path):
-        with open(path, encoding="utf-8") as f:
-            tok = f.read().strip()
-    return tok or None
+    """고정 주소 터널 토큰: 환경변수 ETFREC_TUNNEL_TOKEN 또는 runs/desktop/tunnel_token.txt."""
+    return _setting(desktop_dir, "ETFREC_TUNNEL_TOKEN", "tunnel_token.txt")
+
+
+def invite_code(desktop_dir: str):
+    """가입 초대 코드: 환경변수 ETFREC_INVITE_CODE 또는 runs/desktop/invite_code.txt. 없으면 누구나 가입한다."""
+    code = _setting(desktop_dir, "ETFREC_INVITE_CODE", "invite_code.txt")
+    if code and len(code) > 64:
+        raise ValueError("초대 코드는 64자 이하로 정해 주세요(가입 화면의 입력 한도)")
+    return code
 
 
 WINDOWS_CLOUDFLARED = (r"C:\Program Files (x86)\cloudflared\cloudflared.exe", r"C:\Program Files\cloudflared\cloudflared.exe")
@@ -270,8 +287,9 @@ def run_desktop(a, store_factory, bootstrap) -> int:
     if port_in_use(a.port):
         raise ValueError(f"포트 {a.port}을(를) 이미 다른 프로그램이 쓰고 있습니다. 이전에 켠 서버가 남아 있으면 끄고(작업 관리자·활동 모니터에서 python) "
                          "다시 실행하거나 --port로 다른 번호를 주세요")
+    code = invite_code(desktop_dir)
     server = Proc("서버", server_command(sys.executable, a.port, mode, a.db, a.ops_dir, a.bundle, a.designs),
-                  os.path.join(desktop_dir, "server.log"), subject="서버가")
+                  os.path.join(desktop_dir, "server.log"), env={"ETFREC_INVITE_CODE": code} if code else None, subject="서버가")
     address_file = os.path.join(desktop_dir, "address.txt")
 
     def on_tunnel_line(line):
@@ -303,6 +321,8 @@ def run_desktop(a, store_factory, bootstrap) -> int:
     log({"token": "고정 주소 터널(토큰)로 공개합니다. 주소는 Cloudflare에서 정한 도메인입니다",
          "quick": "임시 주소 터널로 공개합니다. 주소는 잠시 뒤 표시됩니다(다시 켜면 바뀌므로 리허설용)",
          "none": "터널 없이 같은 와이파이에서만 접속합니다: " + ", ".join(f"http://{ip}:{a.port}" for ip in lan_addresses() or ["이 컴퓨터의 IP"])}[mode])
+    log(f"가입: 초대 코드 '{code}'가 있어야 합니다" if code else
+        f"가입: 누구나 할 수 있습니다. 참가자만 받으려면 {os.path.join(desktop_dir, 'invite_code.txt')}에 초대 코드를 적고 다시 켜세요")
     log(f"관리자 메뉴: 접속 주소 뒤에 /?admin=1 · 로그 폴더 {desktop_dir} · 백업 폴더 {a.backup_dir}(매일 {a.backup_hour}시, 최근 {a.keep_backups}개)")
     log("끄려면 이 창에서 Ctrl+C")
     graceful_signals()
