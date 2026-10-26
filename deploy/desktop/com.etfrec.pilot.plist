@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 맥 자동 시작(로그인할 때 켜고, 꺼지면 다시 켠다). REPO_PATH를 저장소 경로로 바꿔 ~/Library/LaunchAgents/에 복사한다.
+     sed "s#REPO_PATH#$(pwd)#g" deploy/desktop/com.etfrec.pilot.plist > ~/Library/LaunchAgents/com.etfrec.pilot.plist
+     launchctl load ~/Library/LaunchAgents/com.etfrec.pilot.plist -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.etfrec.pilot</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>REPO_PATH/deploy/desktop/start-mac.command</string>
+    <string>--no-prompt</string>
+  </array>
+  <key>WorkingDirectory</key><string>REPO_PATH</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>REPO_PATH/runs/desktop/launchd.log</string>
+  <key>StandardErrorPath</key><string>REPO_PATH/runs/desktop/launchd.log</string>
+</dict>
+</plist>

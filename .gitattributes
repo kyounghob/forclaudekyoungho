@@ -1,0 +1,4 @@
+# 윈도우 실행 파일은 CRLF, 맥·리눅스 스크립트는 LF로 받는다
+*.bat text eol=crlf
+*.command text eol=lf
+*.sh text eol=lf

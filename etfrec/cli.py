@@ -26,6 +26,7 @@
     python -m etfrec web backup --out runs/web/backup.db | stats [--db ...]
     python -m etfrec web pilot-report [--db ...] [--out results/pilot] [--bundle runs/seed42]   # 파일럿 지표·기법 비교
     python -m etfrec web bootstrap [--db ...] [--bundle runs/seed42] [--ops-dir runs/ops]   # 컨테이너 첫 실행 준비(멱등)
+    python -m etfrec desktop [--tunnel auto|token|quick|none] [--port 8000]   # 내 컴퓨터를 파일럿 서버로(자동 재시작·백업·절전 방지)
 """
 from __future__ import annotations
 
@@ -357,7 +358,7 @@ def _bootstrap_scale(n=None, limit=None) -> tuple:
     return 3000, 1, f"메모리 한도 {gib:.1f}GB라 학습자 3,000명으로 축소, 보고서 번들은 15,000명"
 
 
-def _web_bootstrap(a, store):
+def _web_bootstrap(a, store, admin_hint: bool = True):
     """컨테이너 첫 실행 준비(여러 번 실행해도 안전): 번들이 없으면 학습 → 운영 등록부가 없으면 생성 →
     ETFREC_ADMIN_PASSWORD가 있고 그 계정(ETFREC_ADMIN_USERNAME, 기본 admin)이 없으면 관리자 생성."""
     if not os.path.exists(os.path.join(a.bundle, "bundle.pkl")):
@@ -381,9 +382,32 @@ def _web_bootstrap(a, store):
             print(f"관리자 계정을 만들었습니다: {name}")
         elif not u["is_admin"]:
             print(f"경고: {name}은 일반 학습자 계정이라 관리자 권한을 자동으로 주지 않습니다(web create-admin으로 직접 부여)", file=sys.stderr)
-    if not store.stats()["admins"]:
+    if admin_hint and not store.stats()["admins"]:
         print("관리자 계정이 없습니다. 환경변수 ETFREC_ADMIN_PASSWORD(아이디는 ETFREC_ADMIN_USERNAME, 기본 admin)를 넣고 다시 시작하면 만듭니다",
               file=sys.stderr)
+
+
+def _desktop_bootstrap(a, store):
+    """데스크탑 첫 실행: 공통 준비 뒤 관리자 계정이 없으면 이 창에서 입력받아 만든다."""
+    _web_bootstrap(a, store, admin_hint=False)
+    if store.stats()["admins"]:
+        return
+    if a.no_prompt or not sys.stdin.isatty():
+        print("관리자 계정이 없습니다. 이 창에서 직접 실행하거나 python -m etfrec web create-admin --username admin으로 만드세요", file=sys.stderr)
+        return
+    print("관리자 계정을 만듭니다. 관리자 메뉴에서 파일럿 보고서와 분석 자료를 받습니다.")
+    name = input("관리자 아이디 [admin]: ").strip() or "admin"
+    store.create_user(name, _admin_password(), consent_version="admin-desktop", is_admin=True)
+    print(f"관리자 계정을 만들었습니다: {name}")
+
+
+def cmd_desktop(a):
+    from .desktop import run_desktop
+    from .web.store import WebStore
+    try:
+        sys.exit(run_desktop(a, WebStore, _desktop_bootstrap))
+    except (FileExistsError, KeyError, ValueError) as e:
+        sys.exit(f"데스크탑 운영: {e.args[0] if e.args else e}")
 
 
 def _cmd_web(a):
@@ -572,6 +596,21 @@ def main(argv=None):
             q.add_argument("--no-compare", action="store_true", help="기법 비교를 건너뛴다(번들 없이 빠르게)")
             q.add_argument("--as-of", default=None, help="분석 기준일 YYYY-MM-DD(그날까지의 기록만, 기본: 지금)")
     w.set_defaults(fn=cmd_web)
+    dk = sub.add_parser("desktop", help="내 컴퓨터를 파일럿 서버로: 서버+터널, 자동 재시작, 절전 방지, 매일 백업")
+    dk.add_argument("--port", type=int, default=8000)
+    dk.add_argument("--tunnel", choices=("auto", "token", "quick", "none"), default="auto",
+                    help="auto: 토큰이 있으면 고정 주소, 없으면 임시 주소, cloudflared가 없으면 같은 와이파이(none)")
+    dk.add_argument("--db", default=web_db)
+    dk.add_argument("--ops-dir", default="runs/ops", help="운영 루프 폴더(빈 문자열이면 끔)")
+    dk.add_argument("--bundle", default="runs/seed42", help="번들 폴더(없으면 첫 실행 때 학습)")
+    dk.add_argument("--designs", default="runs/designs")
+    dk.add_argument("--backup-dir", default="runs/web/backups", help="백업 폴더(OneDrive·iCloud 같은 동기화 폴더를 주면 다른 곳에도 남는다)")
+    dk.add_argument("--backup-hour", type=int, default=4, help="매일 백업할 시각(0~23시, 기본 4시)")
+    dk.add_argument("--keep-backups", type=int, default=14, help="남길 백업 개수(기본 14)")
+    dk.add_argument("--desktop-dir", default=None, help="로그·주소·터널 토큰 폴더(기본 runs/desktop)")
+    dk.add_argument("--n", type=int, default=None, help="번들을 새로 학습할 때 모의 학습자 수(기본: 메모리에 맞춰 자동)")
+    dk.add_argument("--no-prompt", action="store_true", help="관리자 계정을 묻지 않는다(자동 시작용)")
+    dk.set_defaults(fn=cmd_desktop)
     a = p.parse_args(argv)
     get_logger()
     a.fn(a)
