@@ -366,7 +366,7 @@
     $("#rec-status").textContent = `${r.learner.label} · ${r.learner.goal_label || ""} · ${r.latency_ms ?? "–"} ms · 스냅샷 ${r.snapshot_week}주차`;
     $("#rec-view").hidden = false;
     const allOk = r.checks.every(c => c.passed); const rm = r.roadmap || {};
-    $("#rec-badges").innerHTML = `<span class="badge ${allOk ? "ok" : "bad"}">${allOk ? "가드레일 검사 통과" : "검사 실패 있음"}</span><span class="badge">후보 ${r.candidates ?? 0}개</span><span class="badge">추정 수준 ${r.level} · ${LEVEL_NAME[r.level]}</span><span class="badge">${r.router ? "라우터 " + r.router : "설정 강제"}</span><span class="badge">#${r.algorithm_id} ${esc(r.family_label)}</span>` +
+    $("#rec-badges").innerHTML = `<span class="badge ${allOk ? "ok" : "bad"}">${allOk ? "가드레일 검사 통과" : "검사 실패 있음"}</span><span class="badge">후보 ${r.candidates ?? 0}개</span><span class="badge">추정 수준 ${r.level} · ${LEVEL_NAME[r.level]}</span>${r.router === "PurposeStageRule" ? `<span class="badge">운영 정책 · ${esc(r.family_label)}</span>` : `<span class="badge">${r.router ? "라우터 " + r.router : "설정 강제"}</span><span class="badge">#${r.algorithm_id} ${esc(r.family_label)}</span>`}` +
       (rm.current_stage_name ? `<span class="badge">로드맵 ${esc(rm.current_stage_name)} · ${pct(rm.progress)}</span>` : "") + (r.shortfall ? `<span class="badge warn">${(r.candidates ?? 0) < r.k ? `가드레일 통과 후보 ${r.candidates}개뿐 · ` : ""}${r.shortfall}개 부족</span>` : "");
     $("#rec-roadmap").innerHTML = rm.next_unit ? `<b>로드맵</b> ${esc(rm.goal_label)} · 현재 단계 <b>${esc(rm.current_stage_name)}</b> · 진행률 ${pct(rm.progress)} (${rm.units_passed}/${rm.units_total}) · 남은 학습 약 ${rm.minutes_left}분 · 다음 단원: ${esc(rm.next_unit.title)}<span class="muted small"> · 연결 유형: ${(rm.types || []).map(k => esc(META.type_names[k] || k)).join(", ")}</span>`
       : `<b>로드맵</b> ${esc(rm.goal_label || "")} · 로드맵 단원을 모두 통과했습니다. 연결 유형: ${(rm.types || []).map(k => esc(META.type_names[k] || k)).join(", ")}`;
@@ -438,7 +438,7 @@
     $("#sim-status").textContent = `${state.simResult.latency_ms} ms`; $("#sim-view").hidden = false;
     $("#sim-badges").innerHTML = `<span class="badge ${same ? "ok" : ""}">${same ? "추천 목록 동일" : "추천 목록 변화"}</span>` + genderBadge +
       (sim.assume.length ? `<span class="badge">통과 가정 ${sim.assume.length}개</span>` : "") + `<span class="badge">추정 수준 ${state.result.level} → ${state.simResult.level}</span>` +
-      (rm0.progress != null ? `<span class="badge">로드맵 진행 ${pct(rm0.progress)} → ${pct(rm1.progress)} · ${esc(rm1.current_stage_name || "")}</span>` : "") + `<span class="badge">#${state.simResult.algorithm_id}</span>`;
+      (rm0.progress != null ? `<span class="badge">로드맵 진행 ${pct(rm0.progress)} → ${pct(rm1.progress)} · ${esc(rm1.current_stage_name || "")}</span>` : "") + `<span class="badge">${state.simResult.algorithm_id < 0 ? "운영 정책 · " + esc(state.simResult.family_label) : "#" + state.simResult.algorithm_id}</span>`;
     $("#sim-base").innerHTML = state.result.items.map(i => `<li class="${now.includes(i.item_id) ? "" : "gone"}">${esc(i.title)} <span class="muted small">수준 ${i.level}</span></li>`).join("");
     $("#sim-new").innerHTML = state.simResult.items.map(i => `<li class="${base.includes(i.item_id) ? "" : "new"}">${esc(i.title)} <span class="muted small">수준 ${i.level}</span></li>`).join("");
     state.typesResult = null; save();
@@ -496,7 +496,7 @@
     const c = state.compare; const opIds = (c.methods[0] ? c.methods[0].items : []).map(i => i.item_id);
     $("#compare-view").innerHTML = `<table class="table"><tr><th>설정</th><th>테스트 NDCG@5</th><th>Top-${state.settings.k}</th><th>운영과 겹침</th></tr>` + c.methods.map(m => {
       const ids = m.items.map(i => i.item_id); const ov = ids.filter(i => opIds.includes(i)).length;
-      return `<tr><td>${esc(META.methods.find(x => x.key === m.key)?.label || m.key)}<br><span class="muted small">#${m.algorithm_id} ${esc(m.family_label)}</span></td><td class="num">${fmt(m.test_ndcg, 4)}</td><td>${m.items.map(i => `<span title="${esc(i.title)}">${i.item_id}<sub>${i.level}</sub></span>`).join(" · ")}</td><td class="num">${ov}/${ids.length}</td></tr>`;
+      return `<tr><td>${esc(META.methods.find(x => x.key === m.key)?.label || m.key)}<br><span class="muted small">${m.algorithm_id < 0 ? "" : "#" + m.algorithm_id + " "}${esc(m.family_label)}</span></td><td class="num">${fmt(m.test_ndcg, 4)}</td><td>${m.items.map(i => `<span title="${esc(i.title)}">${i.item_id}<sub>${i.level}</sub></span>`).join(" · ")}</td><td class="num">${ov}/${ids.length}</td></tr>`;
     }).join("") + `</table><p class="muted small">후보 ${c.candidates}개 · 같은 가드레일 · 아이템 번호 옆 작은 숫자는 수준</p>`;
   }
   function groupLabel(variable, group) {
@@ -516,7 +516,7 @@
     const hasAct = res.some(r => r.ndcg_active != null);
     html += `<div class="table-wrap"><table class="table"><tr><th>방법</th><th>NDCG@5 (전체)</th>${hasAct ? "<th>NDCG@5 (활성 사용자)</th>" : ""}<th>Diversity@5</th><th>Hit@5</th>${hasAct ? "<th>Hit@5 (활성)</th>" : ""}${hasPre ? "<th>선수 미이수 비율</th>" : ""}<th>전역 1위 대비 차이 [95% 구간]</th></tr>` + res.map(r => `<tr><td>${esc(r.method)}</td><td class="num">${fmt(r.ndcg)}</td>${hasAct ? `<td class="num">${fmt(r.ndcg_active)}</td>` : ""}<td class="num">${fmt(r.diversity, 3)}</td><td class="num">${fmt(r.hit_diagnostic, 3)}</td>${hasAct ? `<td class="num">${fmt(r.hit_active, 3)}</td>` : ""}${hasPre ? `<td class="num">${r.prereq_violation_rate != null ? fmt(r.prereq_violation_rate, 3) : "–"}</td>` : ""}<td class="num">${fmt(r.difference_vs_global)} [${fmt(r.ci_low)}, ${fmt(r.ci_high)}]</td></tr>`).join("") + `</table></div>`;
     if (hasAct) html += `<p class="muted small">전체 = 다음 주 정답이 없는 사용자도 NDCG 0으로 평균에 포함(노트북 규칙). 활성 사용자 = 후보 안에 정답이 1개 이상인 사용자만 평균(추천 시스템 평가에서 흔한 관행, ${(res[0] && res[0].active_users) ? res[0].active_users.toLocaleString() : "–"}명). 모든 방법이 같은 활성 집합으로 평가되므로 두 값의 비가 같고 방법 순위도 같습니다(학습 QA에서 확인). 절대 차이는 활성 기준에서 그 비만큼 커집니다. 집단 비교는 다릅니다: 집단마다 활성 비율이 달라 기준에 따라 집단 순서가 바뀔 수 있습니다(아래 표).</p>`;
-    if (hasPre) html += `<p class="muted small">선수 미이수 비율 = Top-5 중 선수 단원을 아직 통과하지 않은 단원의 비율. '+prereq' 행은 같은 운영 라우터에 선수 단원 가드레일을 켠 결과입니다.</p>`;
+    if (hasPre) html += `<p class="muted small">선수 미이수 비율 = Top-5 중 선수 단원을 아직 통과하지 않은 단원의 비율. '+prereq' 행은 비교용 성별 제외 라우터에 선수 단원 가드레일을 켠 결과입니다. 선수 조건을 모든 방법에 적용한 번들에서는 그 라우터 행과 같은 값입니다.</p>`;
     if (res.some(r => r.method === "ABControl")) html += `<p class="muted small">'ABControl' 행은 온라인 A/B 실험 대조군 A(성별을 쓰지 않는 세그먼트 인기 설정 중 검증 1위)를 같은 테스트 주차에서 잰 오프라인 값입니다. 평가 전용이라 추천 화면의 기법 선택에는 없습니다.</p>`;
     const g = EVAL.group_results.filter(x => x.method === "Global");
     const vars = { gender: "성별", age_band: "연령대", income_q: "소득분위", click_tier: "학습활동", goal: "투자 목적" };
@@ -524,9 +524,9 @@
     html += `<h4>전역 1위 설정의 집단별 NDCG@5 (진단용, 동등 대우의 증거가 아님)</h4><div class="table-wrap"><table class="table"><tr><th>변수</th><th>집단</th><th>사용자</th><th>NDCG@5 전체</th><th>95% 구간</th>${gAct ? "<th>활성 비율</th><th>NDCG@5 활성</th><th>95% 구간</th>" : ""}</tr>` + g.map(x => `<tr><td>${vars[x.variable] || esc(x.variable)}</td><td>${esc(groupLabel(x.variable, x.group))}</td><td class="num">${x.users.toLocaleString()}</td><td class="num">${fmt(x.ndcg)}</td><td class="num">[${fmt(x.ci_low)}, ${fmt(x.ci_high)}]</td>${gAct ? `<td class="num">${fmt(x.active_share, 2)}</td><td class="num">${fmt(x.ndcg_active)}</td><td class="num">[${fmt(x.ci_low_active)}, ${fmt(x.ci_high_active)}]</td>` : ""}</tr>`).join("") + `</table></div>`;
     if (gAct) html += `<p class="muted small">활성 비율(다음 주 정답이 있는 사용자 비율)이 집단마다 다르면 전체 기준과 활성 기준의 집단 순서가 달라질 수 있습니다. 예: 학습활동이 적은 집단은 활성 비율이 낮아 전체 기준에서 불리하게 보입니다.</p>`;
     const ex = EVAL.exposure.filter(x => x.method === "RouterNoGender");
-    if (ex.length) html += `<h4>심화·레버리지 콘텐츠 노출 비율 (운영 라우터, 집단별)</h4><div class="table-wrap"><table class="table"><tr><th>변수</th><th>집단</th><th>사용자</th><th>Top-5 중 심화·레버리지 비율</th></tr>` + ex.map(x => `<tr><td>${vars[x.variable] || esc(x.variable)}</td><td>${esc(groupLabel(x.variable, x.group))}</td><td class="num">${x.users.toLocaleString()}</td><td class="num">${fmt(x.advanced_share, 3)}</td></tr>`).join("") + `</table></div>`;
+    if (ex.length) html += `<h4>심화·레버리지 콘텐츠 노출 비율 (비교용 성별 제외 라우터, 집단별)</h4><div class="table-wrap"><table class="table"><tr><th>변수</th><th>집단</th><th>사용자</th><th>Top-5 중 심화·레버리지 비율</th></tr>` + ex.map(x => `<tr><td>${vars[x.variable] || esc(x.variable)}</td><td>${esc(groupLabel(x.variable, x.group))}</td><td class="num">${x.users.toLocaleString()}</td><td class="num">${fmt(x.advanced_share, 3)}</td></tr>`).join("") + `</table></div>`;
     html += `<h4>검증 상위 설정 (${EVAL.validation_audit.week}주차)</h4><div class="table-wrap"><table class="table"><tr><th>#</th><th>기법군</th><th>설정</th><th>검증 NDCG@5</th><th>Diversity</th></tr>` + EVAL.validation_top.slice(0, 10).map(j => `<tr><td>${j.job_id}</td><td>${esc(j.family)}</td><td>${esc(j.name)}</td><td class="num">${fmt(j.ndcg)}</td><td class="num">${fmt(j.diversity, 3)}</td></tr>`).join("") + `</table></div>`;
-    html += `<p class="muted small">번들 생성 ${esc(EVAL.created_at)} · 운영 라우터 ${esc(EVAL.selection.operational)} · λ ${JSON.stringify(EVAL.selection.router_lambdas)} · 모의 데이터이므로 수치는 실제 학습자 성과가 아닙니다.</p>`;
+    html += `<p class="muted small">번들 생성 ${esc(EVAL.created_at)} · ${EVAL.selection.operational === "PurposeStageRule" ? "운영 정책 목적 단계 규칙" : "운영 라우터 " + esc(EVAL.selection.operational)} · 비교 라우터 λ ${JSON.stringify(EVAL.selection.router_lambdas)} · 모의 데이터이므로 수치는 실제 학습자 성과가 아닙니다.</p>`;
     $("#eval-view").innerHTML = html;
   }
 
