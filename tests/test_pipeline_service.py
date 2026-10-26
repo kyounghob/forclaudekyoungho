@@ -175,9 +175,9 @@ NOTEBOOK_V1 = {"RULE": 0.17123, "Global": 0.17123, "RouterNoGender": 0.17119, "R
 def test_committed_v1_results_match_notebook():
     """저장소에 커밋된 v1 결과가 노트북 B의 14개 기록과 5자리까지 같은지(코드 재학습 검사는 ETFREC_FULL=1의 전체 재현)."""
     import pandas as pd
-    path = os.path.join(os.path.dirname(__file__), "..", "artifacts", "bundle_v1", "test_results.csv")
+    path = os.path.join(os.path.dirname(__file__), "..", "archive", "v2_2026-10-20", "bundles", "bundle_v1", "test_results.csv")   # 보관한 v1 결과
     if not os.path.exists(path):
-        pytest.skip("artifacts/bundle_v1 없음")
+        pytest.skip("archive/v2_2026-10-20/bundles/bundle_v1 없음")
     got = pd.read_csv(path, encoding="utf-8-sig").set_index("method").ndcg
     for k, v in NOTEBOOK_V1.items():
         assert abs(got[k] - v) < 5e-5, (k, got[k], v)

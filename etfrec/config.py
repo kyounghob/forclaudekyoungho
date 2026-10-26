@@ -19,7 +19,7 @@ N_CPU = min(2, max(1, os.cpu_count() or 1))
 N_WEEKS = 4                             # 0·1주 학습, 2주 검증, 3주 평가
 VAL_WEEK, TEST_WEEK = 2, 3
 CLICK_CUTS = (1, 10)                    # 학습활동(조회 수): 0 → 신규, 1~9 → 보통, 10+ → 많음
-EFFECT_SCALE = float(os.environ.get("REC_EFFECT", "1.0"))   # 생성기 주제 선호의 인구통계 효과 배율(0이어도 위약 아님: scripts/placebo_check.py)
+EFFECT_SCALE = float(os.environ.get("REC_EFFECT", "1.0"))   # 생성기 주제 선호의 인구통계 효과 배율(0이어도 위약 아님: 이전 개정의 archive/v2_2026-10-20/scripts/placebo_check.py)
 GENDER_EFFECT = 0.3
 
 # [교안 1-3] action_score 예시 2(ETF 교육). 한 학습 시도의 점수는 합이 아니라 최댓값이다.

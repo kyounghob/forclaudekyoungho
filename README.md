@@ -19,6 +19,7 @@
 | `tests/` | pytest 테스트 |
 | `results/` | 실행 결과 요약. 보고서 표별 수치는 `results/report_numbers.md`, MF·MLP와 민감도의 상세 표는 `results/extensions/extension_numbers.md` |
 | `docs/report/` | 중간보고서(docx)와 확인용 PDF(맑은 고딕 대신 Noto Sans CJK KR로 렌더링) |
+| `archive/` | 보관용 이전 개정 자료(실행에 필요 없음). 목록과 원래 이름은 `archive/README.md` |
 
 ## 설치
 
@@ -122,7 +123,7 @@ python scripts/verify_revision.py
 
 torch 없이 FastAPI까지 설치한 환경에서 `pytest`는 176개 통과, 7개 생략이다. 생략된 것은 torch가 필요한 신경망 테스트 5개, `ETFREC_FULL=1`일 때만 실행하는 전체 규모 재현 1개, 이전 버전 번들이 있어야 하는 비교 1개다.
 `verify_revision.py`는 회귀 테스트 63개 중 61개 통과, torch 테스트 2개 생략이다.
-torch 2.14.1을 설치한 환경(2026-10-25 확인)에서는 `pytest` 182개 통과·1개 생략(`ETFREC_FULL=1` 전용), `verify_revision.py` 63개 모두 통과였다. 이 실행에서는 이전 버전 번들(`artifacts/bundle_v2/bundle.pkl`, 저장소에는 올리지 않음)이 있어 그 비교 테스트도 함께 실행됐다.
+torch 2.14.1을 설치한 환경(2026-10-25 확인)에서는 `pytest` 182개 통과·1개 생략(`ETFREC_FULL=1` 전용), `verify_revision.py` 63개 모두 통과였다. torch가 없는 환경보다 torch 테스트 5개와, 보관한 v1 결과(`archive/v2_2026-10-20/bundles/bundle_v1/test_results.csv`)를 노트북 기록과 비교하는 테스트 1개가 더 실행됐다.
 
 ## 확인 범위와 한계
 
@@ -133,15 +134,8 @@ torch 2.14.1을 설치한 환경(2026-10-25 확인)에서는 `pytest` 182개 통
 - 모든 결과는 모의 데이터에서 얻었다. 실제 학습 효과와 진단의 타당성은 파일럿 자료로 평가한다.
 - 자체 진단·퀴즈는 금융투자교육원의 레버리지 상품 사전교육이나 증권사 거래 요건을 대신하지 않는다.
 
-## 이전 개정 자료(참고용)
+## 보관 자료
 
-아래 파일은 이번 개정 전 설계(운영 = 성별 제외 라우터, 선택·평가 단계의 선수 필터 미적용)로 만든 산출물이다.
-현재 코드의 기본값(목적 단계 규칙, 선수 조건 필수)으로 다시 만들면 수치와 화면 문구가 달라지므로 이번 보고서의 근거로 쓰지 않는다.
-
-| 경로 | 내용 |
-| --- | --- |
-| `docs/report/중간보고서_ETF_교육_콘텐츠_추천시스템.docx`, `docs/report/비판검토_보완보고서.docx`, `docs/report/중간보고서_1차본_2026-10-13.docx` | 이전 중간보고서, 비판 대응 보고서, 1차본 |
-| `docs/report/build/`, `docs/report/fig*.png` | 이전 보고서의 빌드 스크립트와 그림 |
-| `artifacts/bundle_v1/`, `artifacts/bundle_v2/` | 이전 번들의 결과 CSV와 manifest |
-| `docs/results/`, `docs/screens/` | 이전 민감도 결과와 화면 캡처 |
-| `scripts/placebo_check.py`, `scripts/prereq_sensitivity.py`, `scripts/regression_check.py`, `scripts/results_table.py`, `scripts/ui_walkthrough.mjs` | 이전 점검 스크립트(현재 기본값에서는 결과가 달라질 수 있음) |
+`archive/`에는 이전 개정의 보고서·그림·빌드 스크립트·번들 결과·화면 캡처·점검 스크립트를 개정별로 모아 두었다(실행에 필요 없음).
+이번 개정 전 설계(운영 = 성별 제외 라우터, 선택·평가 단계의 선수 필터 미적용)로 만든 자료라 이번 보고서의 근거로 쓰지 않는다.
+폴더 구성, 원래 파일 이름, 당시 상태로 다시 실행하는 방법은 `archive/README.md`에 있다.
