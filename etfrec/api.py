@@ -9,6 +9,7 @@ import json
 import os
 import re
 import time
+import uuid
 from typing import Optional, Union
 
 from fastapi import FastAPI, HTTPException, Query
@@ -21,6 +22,11 @@ from .config import GuardrailConfig
 from .data import parse_history_csv
 from .nlparse import EXAMPLES, parse_onboarding
 from .pipeline import Bundle
+from .ops.exploration import ExplorationConfig
+from .ops.logstore import EVENTS, OpsLog
+from .ops.loop import impression_record
+from .ops.policies import public_spec
+from .ops.registry import PolicyRegistry
 from .privacy import strip_outputs
 from .service import LearnerInput, RecommendationService
 from .util import json_safe
@@ -115,6 +121,19 @@ class NewUserRequest(BaseModel):
     risk: int = Field(1, ge=0, le=2)
 
 
+class ServeRequest(BaseModel):
+    learner_id: Optional[int] = None
+    learner: Optional[Learner] = None
+    k: int = Field(5, ge=1, le=20)
+
+
+class FeedbackRequest(BaseModel):
+    item: int = Field(ge=0)
+    event: str
+    learner_id: Optional[int] = None
+    request_id: Optional[str] = Field(None, max_length=80)
+
+
 class LogText(BaseModel):
     csv_text: str
 
@@ -137,7 +156,7 @@ def _learner_input(req, allow_none: bool = False):
 
 
 def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir: str = None, expose_learners: bool = True,
-               allow_any_config: bool = None) -> FastAPI:
+               allow_any_config: bool = None, ops_dir: str = None) -> FastAPI:
     """expose_learners: 기준 학습자 조회(/api/learners, /api/learners/{uid})를 켤지. 학습자 단위 표라 학습 환경 안(로컬 실행)에서만 켠다
     (cli serve는 로컬 주소가 아니면 --expose-learners를 줄 때만 켠다). allow_any_config: 임의 설정 번호 허용(기본: 환경변수 ETFREC_DEV_CONFIGS=1일 때만)."""
     bundle = Bundle.load(bundle) if isinstance(bundle, str) else bundle
@@ -149,6 +168,22 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
     app = FastAPI(title="ETF 교육 콘텐츠 추천 시스템", version=__version__,
                   description="교육 콘텐츠 추천 시연기. 특정 ETF의 매수·매도를 권유하지 않습니다.")
     app.state.service = svc
+    ops = None
+    if ops_dir:                                                       # 운영 루프: 등록부의 현재 정책으로 서빙하고 노출·반응을 기록
+        reg = PolicyRegistry(ops_dir)
+        ops = dict(dir=ops_dir, reg=reg, log=OpsLog(os.path.join(ops_dir, "logs")), mtime=reg.mtime(),
+                   exploration=ExplorationConfig(**reg.settings.get("exploration", {})), k=int(reg.settings.get("k", 5)))
+        svc.set_operational_spec(reg.champion)
+
+    def ops_sync():
+        """주간 작업이 등록부를 바꾸면(교체·되돌림) 다음 요청부터 새 정책을 쓴다(서버 재시작 없이)."""
+        if ops is None:
+            raise HTTPException(503, "운영 루프가 설정되지 않았습니다(serve --ops-dir)")
+        m = os.path.getmtime(ops["reg"].path)
+        if m != ops["mtime"]:
+            ops["reg"] = PolicyRegistry(ops["dir"]); ops["mtime"] = m
+            svc.set_operational_spec(ops["reg"].champion)
+        return ops
 
     def guard(g: Optional[Guardrail]) -> GuardrailConfig:
         """요청의 가드레일. 생략하면 스키마 기본값(화면 기본: 선수 단원 차단 켬)과 같게 처리한다."""
@@ -213,6 +248,57 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
     def recommend(req: RecommendRequest):
         return wrap(lambda: svc.recommend(learner_of(req), k=req.k, algorithm=req.algorithm, guard=guard(req.guardrail),
                                           topic_cap=req.topic_cap, overrides=req.overrides, assume_passed=req.assume_passed))
+
+    @app.post("/api/serve")
+    def serve(req: ServeRequest):
+        """운영 서빙: 현재 운영 정책 + 마지막 칸 탐색. 보인 단원마다 노출 확률을 붙여 기록하고 request_id를 돌려준다.
+        추천 화면의 미리보기·what-if(/api/recommend)는 탐색·기록을 하지 않는다."""
+        o = ops_sync()
+        rid = uuid.uuid4().hex
+        learner = learner_of(req)
+        r = wrap(lambda: svc.recommend(learner, k=req.k, exploration=o["exploration"], request_id=rid))
+        slate = r.pop("exploration", None)
+        if slate and slate["items"]:
+            o["log"].append_impressions([impression_record(slate, svc.serve_week, req.learner_id, o["reg"].champion, req.k,
+                                                            r["candidates"], "api")])
+        r.update(request_id=rid, policy=public_spec(o["reg"].champion),
+                 exploration=dict(epsilon=o["exploration"].epsilon, method=o["exploration"].method,
+                                  explored=bool(slate and slate["explored"]), slot=(slate or {}).get("slot")))
+        return r
+
+    @app.post("/api/feedback")
+    def feedback(req: FeedbackRequest):
+        """학습 반응(view·complete·quiz_pass·save). 같은 주의 노출과 묶여 OPE 보상이 된다."""
+        o = ops_sync()
+        if req.learner_id is not None and not expose_learners:
+            raise HTTPException(status_code=403, detail=LEARNERS_OFF)
+        if req.event not in EVENTS or req.item >= bundle.catalog.n_items:
+            raise HTTPException(422, f"event는 {list(EVENTS)} 중 하나, item은 0~{bundle.catalog.n_items - 1}이어야 합니다")
+        wrap(lambda: o["log"].append_feedback([dict(week=svc.serve_week, user_ref=req.learner_id, item=req.item, event=req.event,
+                                                      request_id=req.request_id, source="api")]))
+        return {"ok": True, "week": svc.serve_week}
+
+    @app.get("/api/ops/status")
+    def ops_status():
+        o = ops_sync()
+        reg = o["reg"]; hist = reg.history()
+        last = next((h for h in reversed(hist) if h.get("week") is not None), None)
+        return json_safe(dict(champion=public_spec(reg.champion), frozen=reg.frozen, freeze_reason=reg.state.get("freeze_reason"),
+                              exploration=o["exploration"].as_dict(), serving_week=svc.serve_week, this_week=o["log"].counts(svc.serve_week),
+                              last_decision=(dict(week=last["week"], event=last["event"], reason=last.get("reason")) if last else None),
+                              history_records=len(hist), history_ok=reg.verify()["ok"]))
+
+    @app.get("/api/ops/history")
+    def ops_history(limit: int = Query(20, ge=1, le=200)):
+        o = ops_sync()
+        keep = ("seq", "ts", "event", "week", "reason", "hash")
+        out = []
+        for h in o["reg"].history()[-limit:]:
+            row = {k: h.get(k) for k in keep}
+            row.update(champion_after=(h.get("champion_after") or {}).get("name"), challenger=(h.get("challenger") or {}).get("name"),
+                       failed=(h.get("gate") or {}).get("failed"))
+            out.append(row)
+        return json_safe(out)
 
     @app.post("/api/compare")
     def compare(req: CompareRequest):

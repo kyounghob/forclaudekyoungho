@@ -28,6 +28,8 @@ from .signals import CandidateBatch, LearnerBatch, SignalBank, build_signals
 from .synth import LOG_COLUMNS
 from .util import json_safe
 from .zoo import FAMILY_KO, decompose, explain, score_algo
+from .ops.exploration import explore_slate
+from .ops.policies import algo_from_spec, public_spec
 
 TYPE_NOTICE = NOTICE + " 유형 안내는 학습 순서를 돕기 위한 분류이며 개별 상품의 적합성 판단이 아닙니다."
 
@@ -71,6 +73,8 @@ class RecommendationService:
         self.operational_router = (POLICY_KEY if getattr(bundle.config, "operational_policy", POLICY_KEY) != "legacy"
                                    else bundle.config.operational_router)
         self.purpose_algorithm = purpose_stage_algorithm()
+        self.operational_spec = None                                  # 운영 루프 등록부의 현재 정책(없으면 선언 정책)
+        self.operational_label = POLICY_LABEL + " · 고정 운영 정책"
         # Old saved bundles may not have built these signals at the test snapshot.
         self.info = dict(self.info)
         for key, label in [("pop", "전체 인기"), ("r:pref", "관심 주제"), ("r:policy_pref", "관심 주제"), ("r:lvl", "수준 일치"),
@@ -268,12 +272,22 @@ class RecommendationService:
             raise ValueError(f"알 수 없는 설정 {algorithm!r}")
         return self.algos[aid], router_name, depth, path
 
+    def set_operational_spec(self, spec: dict):
+        """운영 루프가 교체한 정책을 운영 기본(algorithm 생략·POLICY_KEY)으로 쓴다. 번들에 없는 신호를 쓰는 정책은 거절한다."""
+        algo = algo_from_spec(spec)
+        missing = [s for s in algo.signals if s not in self.info]
+        if missing:
+            raise ValueError(f"이 번들로 계산할 수 없는 신호를 쓰는 정책입니다: {missing}")
+        self.purpose_algorithm, self.operational_spec = algo, spec
+        self.operational_label = (POLICY_LABEL + " · 고정 운영 정책" if spec.get("source") == "declared"
+                                  else f"{spec['name']} · 운영 정책(자동 루프 {spec['version']})")
+
     def method_names(self) -> list:
         names = [dict(key=k, label={"Global": "검증 전역 1위", "NoDemographics": "인구통계 미사용 1위"}.get(k, FAMILY_KO.get(k, k)) + f" (#{v})",
                       aid=int(v)) for k, v in self.selection["families"].items()]
         names += [dict(key=k, label={"RouterFull": "라우터(전체 변수)", "RouterNoGender": "라우터(성별 제외)",
                                      "RouterNoGenderIncome": "라우터(성별·소득 제외)"}[k], aid=None) for k in self.routers]
-        return [dict(key=POLICY_KEY, label=POLICY_LABEL + " · 고정 운영 정책", aid=None,
+        return [dict(key=POLICY_KEY, label=self.operational_label, aid=None,
                      declared_policy=True)] + names
 
     def _service_guard(self, guard):
@@ -286,7 +300,8 @@ class RecommendationService:
 
     # ---------- 추천 ----------
     def recommend(self, learner, k: int = K, algorithm=None, guard: GuardrailConfig = None, topic_cap: int = None,
-                  overrides: dict = None, assume_passed=(), explain_top: int = 3) -> dict:
+                  overrides: dict = None, assume_passed=(), explain_top: int = 3, exploration=None, request_id: str = None) -> dict:
+        """exploration(ops.exploration.ExplorationConfig)을 주면 마지막 칸만 탐색하고 단원마다 노출 확률을 붙인다(운영 서빙 전용)."""
         t0 = time.perf_counter()
         if isinstance(k, bool) or not isinstance(k, (int, np.integer)) or not 1 <= k <= 20:
             raise ValueError("k는 1 이상 20 이하의 정수여야 합니다")
@@ -314,7 +329,15 @@ class RecommendationService:
         bank = SignalBank(cands)
         build_signals(bank, self.ref, lb, self.catalog, self.models, needed=set(algo.signals))
         S = score_algo(algo, bank, lb.nu)
-        sel = choose_items(cands, lb, self.catalog, S, k=int(k), guard=guard, topic_cap=topic_cap)[0]
+        slate = None
+        if exploration is not None:                                    # 전체 적격 순서에서 앞 k−1칸은 그대로, 마지막 칸만 탐색
+            full = choose_items(cands, lb, self.catalog, S, k=len(ca), guard=guard, topic_cap=topic_cap)[0]
+            full = full[full >= 0]
+            slate = explore_slate(ca[full], S[0, full], int(k), exploration, request_id)
+            col_of = {int(ca[j]): int(j) for j in full}
+            sel = np.array([col_of[i] for i in slate["items"]], dtype=int)
+        else:
+            sel = choose_items(cands, lb, self.catalog, S, k=int(k), guard=guard, topic_cap=topic_cap)[0]
         parts = decompose(algo, bank, lb.nu, 0)
         items = []
         for rank, col in enumerate(sel[sel >= 0]):
@@ -328,8 +351,12 @@ class RecommendationService:
                      reason=_reason_sentence(contrib[:explain_top], self.catalog, item, level),
                      missing_prereqs=[self.catalog.item_title[p] for p in missing], in_current_stage=in_stage,
                      sources=sources_for_items(d["sources"]))
+            if slate is not None:
+                d.update(propensity=float(slate["propensity"][rank]), explored=bool(slate["explored"] and rank == slate["slot"]))
             items.append(d)
         checks = self._checks(items, lb, level, guard, k, ca)
+        if slate is not None:
+            base["exploration"] = slate
         base.update(items=items, shortfall=int(k - len(items)), candidates=int(len(ca)), checks=checks,
                     topic_map=self._topic_map(lb, [it["item"] for it in items], ca, guard),
                     latency_ms=round((time.perf_counter() - t0) * 1000, 1))
@@ -482,6 +509,7 @@ class RecommendationService:
                               operational_router=self.operational_router, operational_algorithm=dict(aid=op.aid, family=op.family,
                               family_label=FAMILY_KO.get(op.family, op.family), name=op.name, formula=explain(op, self.info)),
                               operational_policy=(policy_metadata() if self.operational_router == POLICY_KEY else None),
+                              ops_champion=(public_spec(self.operational_spec) if self.operational_spec else None),
                               methods=self.method_names(), neural_enabled=self.models.enable_neural, guardrail=self._service_guard(None).__dict__,
                               configurations=len(self.algos), signal_count=len(self.b.signal_meta), quiz_questions=len(public_questions()),
                               goals=GOALS, horizons=HORIZONS, catalog_version=int(self.catalog.version), universe=self.universe_public,

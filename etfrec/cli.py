@@ -14,6 +14,11 @@
     python -m etfrec sources list|check|sync|stats [--out data/sources] [--krx-csv 내려받은.csv|.xlsx]
         [--krx-csv-date YYYYMMDD] [--date YYYYMMDD] [--no-cross-check]
     (인증키는 환경변수로만 받는다. 명령줄 인자나 'KEY=값 명령' 형식은 ps·셸 기록에 남는다. 스냅샷 폴더 기본값은 ETFREC_SOURCES_DIR, 없으면 data/sources)
+    python -m etfrec ops simulate --ops-dir runs/ops_sim [--n 3000] [--weeks 8] [--start 3]   # 닫힌 고리 모의 운영
+    python -m etfrec ops init --ops-dir runs/ops --bundle runs/seed42 [--epsilon 0.1]
+    python -m etfrec ops run-week --ops-dir runs/ops --data DIR [--week W]   # 주 1회(예: cron 매주 월요일)
+    python -m etfrec ops status|history|rollback|freeze|unfreeze|prune --ops-dir runs/ops
+    python -m etfrec serve --ops-dir runs/ops [--bundle runs/seed42]   # /api/serve·/api/feedback로 탐색·노출 기록
 """
 from __future__ import annotations
 
@@ -98,7 +103,19 @@ def cmd_serve(a):
     from .api import create_app
     local = a.host in LOOPBACK
     expose = local or getattr(a, "expose_learners", False)        # 학습자 단위 조회는 학습 환경 안(로컬)에서만 기본으로 켠다
-    app = create_app(a.bundle, designs_dir=a.designs, sources_dir=getattr(a, "sources_dir", None), expose_learners=expose)
+    ops_dir = getattr(a, "ops_dir", None)
+    if not a.bundle:
+        if not ops_dir:
+            sys.exit("--bundle 또는 --ops-dir가 필요합니다")
+        from .ops.registry import PolicyRegistry
+        st = PolicyRegistry(ops_dir).state
+        a.bundle = st.get("serving_bundle") or st.get("base_bundle")
+        if not a.bundle:
+            sys.exit("운영 등록부에 서빙 번들이 없습니다. --bundle을 주세요")
+        if a.bundle.endswith(".pkl"):
+            a.bundle = os.path.dirname(a.bundle) if os.path.basename(a.bundle) == "bundle.pkl" else a.bundle
+    app = create_app(a.bundle, designs_dir=a.designs, sources_dir=getattr(a, "sources_dir", None), expose_learners=expose,
+                     ops_dir=ops_dir)
     if not local:
         print(f"주의: {a.host}로 열면 같은 망의 누구나 접근할 수 있습니다. 서빙 API에는 인증이 없습니다. "
               f"기준 학습자 조회는 {'켜짐(--expose-learners)' if expose else '꺼짐(--expose-learners로만 켬)'}.", file=sys.stderr)
@@ -195,6 +212,71 @@ def cmd_export_deid(a):
           f"국소 억제 {report['suppressed_rows']}행, 삭제 {report['removed_rows']}행, 최소 셀 {report['final_min_group']}명) → {a.out} · 보고서 {rp}")
 
 
+def cmd_ops(a):
+    try:
+        _cmd_ops(a)
+    except (FileExistsError, FileNotFoundError, RuntimeError, ValueError) as e:      # 예상된 거절(같은 주 재판정·잠금·자료 부족)은 한 줄로
+        sys.exit(f"운영 루프: {e}")
+
+
+def _cmd_ops(a):
+    from .ops.exploration import ExplorationConfig
+    from .ops.loop import LoopConfig, default_settings, run_week, simulate
+    from .ops.logstore import OpsLog
+    from .ops.policies import declared_spec, public_spec
+    from .ops.registry import PolicyRegistry
+    act = a.ops_cmd
+    if act == "simulate":
+        cfg = LoopConfig(exploration=ExplorationConfig(epsilon=a.epsilon, method=a.method), refresh_serving=False,
+                         include_zoo=not a.no_zoo)
+        s = simulate(a.ops_dir, n=a.n, weeks=a.weeks, start=a.start, seed=a.seed, cfg=cfg, force=a.force)
+        print(f"{'주':>3} {'결정':<14} {'탐색/노출':>10} {'OPE 현재':>9} {'실제 현재':>9}  판정 뒤 정책")
+        for r in s["weeks"]:
+            f = lambda v: f"{v:.4f}" if isinstance(v, float) else "–"
+            print(f"{r['week']:>3} {r['event']:<14} {r['explored']:>4}/{r['impressions']:<5} {f(r['ope_champion']):>9} {f(r['true_champion']):>9}  {r['champion_after']}"
+                  + (f"   (미통과: {', '.join(r['failed'])})" if r.get('failed') else ""))
+        print(f"이력 해시 사슬: {'정상' if s['history_ok'] else '손상'} · 보고서: {os.path.join(a.ops_dir, 'reports')}")
+        return
+    if act == "init":
+        cfg = LoopConfig(exploration=ExplorationConfig(epsilon=a.epsilon, method=a.method, temperature=a.temperature))
+        reg = PolicyRegistry.init(a.ops_dir, declared_spec(), default_settings(cfg), base_bundle=os.path.abspath(a.bundle),
+                                  note=a.note or "", force=a.force)
+        print(f"운영 등록부 생성: {reg.path} · 현재 정책 {reg.champion['name']} ({reg.champion['version']})")
+        return
+    reg = PolicyRegistry(a.ops_dir)
+    if act == "run-week":
+        from .data import Dataset
+        ds = Dataset.from_csv(a.data)
+        week = a.week if a.week is not None else int(ds.log.week.max())
+        cfg = LoopConfig.from_settings(reg.settings, refresh_serving=not a.no_serving, full_retrain=a.full_retrain)
+        r = run_week(a.ops_dir, ds, week, cfg, force=a.force)
+        print(f"{week}주 결정: {r['event']} — {r.get('reason', '')}\n보고서: {r['report']}")
+    elif act == "status":
+        ch = reg.champion; log = OpsLog(os.path.join(a.ops_dir, "logs")); weeks = log.weeks()
+        print(json.dumps(dict(champion=public_spec(ch), adopted_week=ch.get("adopted_week"), frozen=reg.frozen,
+                              freeze_reason=reg.state.get("freeze_reason"), last_change_week=reg.state.get("last_change_week"),
+                              serving_bundle=reg.state.get("serving_bundle"), exploration=reg.settings.get("exploration"),
+                              latest_log=log.counts(weeks[-1]) if weeks else None, history=reg.verify()), ensure_ascii=False, indent=2))
+    elif act == "history":
+        if a.verify:
+            v = reg.verify(); print(f"해시 사슬 {'정상' if v['ok'] else '손상(seq ' + str(v['first_bad_seq']) + ')'} · {v['records']}건")
+            if not v["ok"]:
+                sys.exit(1)
+        for h in reg.history()[-a.limit:]:
+            print(f"#{h['seq']:<3} {h['ts']} {h.get('week') if h.get('week') is not None else '-':>3}주 {h['event']:<15} "
+                  f"{(h.get('champion_after') or {}).get('name', '')}  {h.get('reason') or ''}")
+    elif act == "rollback":
+        r = reg.rollback(None, a.reason, manual=True)
+        print(f"되돌림: {r['champion_before']['name']} → {r['champion_after']['name']}")
+    elif act in ("freeze", "unfreeze"):
+        reg.set_frozen(act == "freeze", a.reason)
+        print(f"{'동결' if act == 'freeze' else '동결 해제'}: {a.reason}")
+    elif act == "prune":
+        removed = OpsLog(os.path.join(a.ops_dir, "logs")).prune(a.keep_weeks)
+        reg.append_history(dict(event="pruned", week=None, reason=f"최근 {a.keep_weeks}주만 보존", removed=removed))
+        print(f"삭제 {len(removed)}개: {removed}")
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="etfrec", description="ETF 교육 콘텐츠 개인화·세그먼트 추천 시스템")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -224,7 +306,8 @@ def main(argv=None):
     r = sub.add_parser("recommend", help="번들로 한 학습자 추천"); r.add_argument("--bundle", required=True)
     r.add_argument("--user", type=int, required=True); r.add_argument("--k", type=int, default=5); r.add_argument("--algorithm", default=None)
     r.set_defaults(fn=cmd_recommend)
-    s = sub.add_parser("serve", help="API + UI 서버"); s.add_argument("--bundle", required=True)
+    s = sub.add_parser("serve", help="API + UI 서버"); s.add_argument("--bundle", default=None)
+    s.add_argument("--ops-dir", default=None, help="운영 루프 폴더: 현재 운영 정책으로 /api/serve(탐색·노출 기록)·/api/feedback 사용")
     s.add_argument("--host", default="127.0.0.1"); s.add_argument("--port", type=int, default=8000); s.add_argument("--designs", default=None)
     s.add_argument("--sources-dir", default=None, help="공개 데이터 스냅샷 폴더(기본: ETFREC_SOURCES_DIR, 없으면 data/sources)")
     s.add_argument("--expose-learners", action="store_true",
@@ -242,6 +325,37 @@ def main(argv=None):
     ex = sub.add_parser("export-deid", help="번들 저장 프로필 → k-익명 학습자 표(일반화 → 국소 억제) + 보고서")
     ex.add_argument("--bundle", required=True); ex.add_argument("--k", type=int, default=5); ex.add_argument("--out", required=True)
     ex.add_argument("--report", default=None, help="보고서 JSON 경로(기본: --out 이름 + _report.json)"); ex.set_defaults(fn=cmd_export_deid)
+    o = sub.add_parser("ops", help="자동 운영 루프: 탐색 기록·주간 재학습/재선정·검증 게이트·교체 이력")
+    osub = o.add_subparsers(dest="ops_cmd", required=True)
+    def ops_dir(parser, default="runs/ops"):
+        parser.add_argument("--ops-dir", default=default, help=f"운영 기록 폴더(기본 {default})")
+    oi = osub.add_parser("init", help="등록부 생성(현재 정책 = 선언 정책 PurposeStageRule)"); ops_dir(oi)
+    oi.add_argument("--bundle", required=True, help="기준 번들(후보 설정·신호 설명을 읽는다)")
+    oi.add_argument("--epsilon", type=float, default=0.1); oi.add_argument("--method", choices=("uniform", "softmax"), default="uniform")
+    oi.add_argument("--temperature", type=float, default=0.5); oi.add_argument("--note", default=None)
+    oi.add_argument("--force", action="store_true", help="기존 등록부를 .bak로 옮기고 새로 만든다")
+    ow = osub.add_parser("run-week", help="주간 작업: 재학습·재선정·게이트·결정·이력"); ops_dir(ow)
+    ow.add_argument("--data", required=True, help="profiles.csv·study_log.csv(·catalog.csv) 폴더. 결정할 주까지의 기록")
+    ow.add_argument("--week", type=int, default=None, help="결정할 주(기본: 기록의 마지막 주)")
+    ow.add_argument("--force", action="store_true", help="이미 결정한 주를 다시 판정")
+    ow.add_argument("--full-retrain", action="store_true", help="전체 학습 파이프라인으로 기준 번들도 새로 학습(느림)")
+    ow.add_argument("--no-serving", action="store_true", help="다음 주 서빙 번들을 만들지 않는다")
+    om = osub.add_parser("simulate", help="합성 세계에서 서빙→반응→주간 작업을 반복"); ops_dir(om, "runs/ops_sim")
+    om.add_argument("--n", type=int, default=3000); om.add_argument("--weeks", type=int, default=8)
+    om.add_argument("--start", type=int, default=3); om.add_argument("--seed", type=int, default=TrainConfig().seed)
+    om.add_argument("--epsilon", type=float, default=0.1); om.add_argument("--method", choices=("uniform", "softmax"), default="uniform")
+    om.add_argument("--no-zoo", action="store_true", help="기존 설정은 후보에서 빼고 가중치 변형만 비교")
+    om.add_argument("--force", action="store_true", help="폴더가 있으면 지우고 새로 시작")
+    for name, hp in (("status", "현재 정책·동결·최근 기록"), ("history", "교체 이력"), ("rollback", "직전 정책으로 수동 되돌림"),
+                     ("freeze", "자동 교체 동결"), ("unfreeze", "동결 해제"), ("prune", "오래된 노출·반응 기록 삭제")):
+        q = osub.add_parser(name, help=hp); ops_dir(q)
+        if name == "history":
+            q.add_argument("--limit", type=int, default=20); q.add_argument("--verify", action="store_true", help="해시 사슬 검사")
+        if name in ("rollback", "freeze", "unfreeze"):
+            q.add_argument("--reason", required=True)
+        if name == "prune":
+            q.add_argument("--keep-weeks", type=int, required=True)
+    o.set_defaults(fn=cmd_ops)
     a = p.parse_args(argv)
     get_logger()
     a.fn(a)
