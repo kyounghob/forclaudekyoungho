@@ -291,7 +291,7 @@ python scripts/verify_revision.py
 
 torch 없이 FastAPI까지 설치한 환경에서 `pytest`는 176개 통과, 7개 생략이었다(운영 루프 테스트 추가 전 기준). 생략된 것은 torch가 필요한 신경망 테스트 5개, `ETFREC_FULL=1`일 때만 실행하는 전체 규모 재현 1개, 이전 버전 번들이 있어야 하는 비교 1개다.
 `verify_revision.py`는 회귀 테스트 63개 중 61개 통과, torch 테스트 2개 생략이다.
-torch 2.14.1을 설치한 환경(2026-10-26 확인, 운영 루프 테스트 13개·웹 서비스 테스트 12개·콘텐츠 테스트 2개·데스크탑 실행 테스트 5개 포함)에서는 `pytest` 214개 통과·1개 생략(`ETFREC_FULL=1` 전용), `verify_revision.py` 63개 모두 통과였다. torch가 없는 환경보다 torch 테스트 5개와, 보관한 v1 결과(`archive/v2_2026-10-20/bundles/bundle_v1/test_results.csv`)를 노트북 기록과 비교하는 테스트 1개가 더 실행됐다.
+torch 2.14.1을 설치한 환경(2026-10-26 확인, 운영 루프 테스트 13개·웹 서비스 테스트 12개·콘텐츠 테스트 2개·데스크탑 실행 테스트 6개 포함)에서는 `pytest` 215개 통과·1개 생략(`ETFREC_FULL=1` 전용), `verify_revision.py` 63개 모두 통과였다. torch가 없는 환경보다 torch 테스트 5개와, 보관한 v1 결과(`archive/v2_2026-10-20/bundles/bundle_v1/test_results.csv`)를 노트북 기록과 비교하는 테스트 1개가 더 실행됐다.
 
 ## 확인 범위와 한계
 
