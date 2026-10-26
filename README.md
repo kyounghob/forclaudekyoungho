@@ -226,7 +226,10 @@ python -m etfrec serve --public --ops-dir runs/ops                # http://127.0
 
 **내 컴퓨터를 서버로 쓰기:** `deploy/desktop/start-windows.bat`(맥은 `start-mac.command`)을 더블클릭한다.
 - 처음 실행할 때 가상환경을 만들고 패키지를 설치한 뒤 `python -m etfrec desktop`을 띄운다.
-- 서버와 Cloudflare 터널(고정 주소 토큰 또는 임시 주소)을 함께 켜고, 멈추면 다시 켠다.
+- 서버와 공개 주소를 함께 켜고, 멈추면 다시 켠다. 공개 주소는 다음 순서로 고른다.
+  - 무료 고정 주소: Tailscale Funnel. `tailscale funnel --bg 8000`을 한 번 실행해 두면 `https://PC이름.tailxxxx.ts.net`이 된다.
+  - 내 도메인이 있으면: Cloudflare 터널 토큰
+  - 둘 다 없으면: 임시 주소(trycloudflare, 다시 켤 때마다 바뀜)
 - 켜져 있는 동안 절전을 막고, 시작할 때와 매일 백업한다.
 - 초대 코드는 `runs/desktop/invite_code.txt`(또는 환경변수 `ETFREC_INVITE_CODE`)에 적는다. 대소문자와 앞뒤 공백은 가리지 않는다.
 - 설치와 고정 주소 만들기, 자동 시작 등록은 [`docs/pilot/desktop.md`](docs/pilot/desktop.md)에 있다.
@@ -291,7 +294,7 @@ python scripts/verify_revision.py
 
 torch 없이 FastAPI까지 설치한 환경에서 `pytest`는 176개 통과, 7개 생략이었다(운영 루프 테스트 추가 전 기준). 생략된 것은 torch가 필요한 신경망 테스트 5개, `ETFREC_FULL=1`일 때만 실행하는 전체 규모 재현 1개, 이전 버전 번들이 있어야 하는 비교 1개다.
 `verify_revision.py`는 회귀 테스트 63개 중 61개 통과, torch 테스트 2개 생략이다.
-torch 2.14.1을 설치한 환경(2026-10-26 확인, 운영 루프 테스트 13개·웹 서비스 테스트 12개·콘텐츠 테스트 2개·데스크탑 실행 테스트 6개 포함)에서는 `pytest` 215개 통과·1개 생략(`ETFREC_FULL=1` 전용), `verify_revision.py` 63개 모두 통과였다. torch가 없는 환경보다 torch 테스트 5개와, 보관한 v1 결과(`archive/v2_2026-10-20/bundles/bundle_v1/test_results.csv`)를 노트북 기록과 비교하는 테스트 1개가 더 실행됐다.
+torch 2.14.1을 설치한 환경(2026-10-26 확인, 운영 루프 테스트 13개·웹 서비스 테스트 12개·콘텐츠 테스트 2개·데스크탑 실행 테스트 8개 포함)에서는 `pytest` 217개 통과·1개 생략(`ETFREC_FULL=1` 전용), `verify_revision.py` 63개 모두 통과였다. torch가 없는 환경보다 torch 테스트 5개와, 보관한 v1 결과(`archive/v2_2026-10-20/bundles/bundle_v1/test_results.csv`)를 노트북 기록과 비교하는 테스트 1개가 더 실행됐다.
 
 ## 확인 범위와 한계
 
@@ -308,6 +311,7 @@ torch 2.14.1을 설치한 환경(2026-10-26 확인, 운영 루프 테스트 13�
   - 새 설치: 최신 패키지를 새로 설치한 가상환경에서 전체 테스트를 돌렸다.
   - 줄바꿈: 저장소 줄바꿈을 LF로 고정했다(`.gitattributes`, `.bat`만 CRLF).
   - `start-windows.bat`의 설치·재설치 판단은 같은 로직의 맥·리눅스용 시작 파일을 실제로 돌려 확인했다.
+- Tailscale Funnel(무료 고정 주소)은 실제 계정으로 열어 보지 않았다. Tailscale 소스에서 `tailscale serve status --json`의 형식과 `tailscale funnel --bg` 동작을 확인했고, 그 형식을 내는 가짜 명령으로 실행 도우미가 주소를 찾아 Secure 쿠키로 서버를 띄우는 것까지 돌려 봤다. 실제 Cloudflare 고정 터널도 같은 이유로 확인하지 못했다.
 - KRX·공공데이터포털 시세 연결은 인증키가 필요하다. 테스트는 가짜 응답으로만 확인한다.
 - 모든 결과는 모의 데이터에서 얻었다. 실제 학습 효과와 진단의 타당성은 파일럿 자료로 평가한다.
 - 자체 진단·퀴즈는 금융투자교육원의 레버리지 상품 사전교육이나 증권사 거래 요건을 대신하지 않는다.

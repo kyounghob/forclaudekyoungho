@@ -26,7 +26,7 @@
     python -m etfrec web backup --out runs/web/backup.db | stats [--db ...]
     python -m etfrec web pilot-report [--db ...] [--out results/pilot] [--bundle runs/seed42]   # 파일럿 지표·기법 비교
     python -m etfrec web bootstrap [--db ...] [--bundle runs/seed42] [--ops-dir runs/ops]   # 컨테이너 첫 실행 준비(멱등)
-    python -m etfrec desktop [--tunnel auto|token|quick|none] [--port 8000]   # 내 컴퓨터를 파일럿 서버로(자동 재시작·백업·절전 방지)
+    python -m etfrec desktop [--tunnel auto|token|tailscale|quick|none] [--port 8000]   # 내 컴퓨터를 파일럿 서버로(자동 재시작·백업·절전 방지)
 """
 from __future__ import annotations
 
@@ -599,8 +599,9 @@ def main(argv=None):
     w.set_defaults(fn=cmd_web)
     dk = sub.add_parser("desktop", help="내 컴퓨터를 파일럿 서버로: 서버+터널, 자동 재시작, 절전 방지, 매일 백업")
     dk.add_argument("--port", type=int, default=8000)
-    dk.add_argument("--tunnel", choices=("auto", "token", "quick", "none"), default="auto",
-                    help="auto: 토큰이 있으면 고정 주소, 없으면 임시 주소, cloudflared가 없으면 같은 와이파이(none)")
+    dk.add_argument("--tunnel", choices=("auto", "token", "tailscale", "quick", "none"), default="auto",
+                    help="auto: Cloudflare 토큰이 있으면 그 고정 주소, Tailscale Funnel이 켜져 있으면 그 고정 주소, 아니면 임시 주소, "
+                         "cloudflared도 Funnel도 없으면 같은 와이파이(none)")
     dk.add_argument("--db", default=web_db)
     dk.add_argument("--ops-dir", default="runs/ops", help="운영 루프 폴더(빈 문자열이면 끔)")
     dk.add_argument("--bundle", default="runs/seed42", help="번들 폴더(없으면 첫 실행 때 학습)")
@@ -612,6 +613,7 @@ def main(argv=None):
     dk.add_argument("--n", type=int, default=None, help="번들을 새로 학습할 때 모의 학습자 수(기본: 메모리에 맞춰 자동)")
     dk.add_argument("--no-prompt", action="store_true", help="관리자 계정을 묻지 않는다(자동 시작용)")
     dk.add_argument("--cloudflared", default=None, help="cloudflared 실행 파일 경로(기본: PATH, 윈도우 기본 설치 위치. 환경변수 ETFREC_CLOUDFLARED)")
+    dk.add_argument("--tailscale", default=None, help="tailscale 명령 경로(기본: PATH, 기본 설치 위치. 환경변수 ETFREC_TAILSCALE)")
     dk.set_defaults(fn=cmd_desktop)
     a = p.parse_args(argv)
     get_logger()

@@ -1,4 +1,5 @@
 """데스크탑 운영 도우미: 터널 방식 고르기, 서버·터널 명령, 백업 시각·보관, 프로세스 자동 재시작."""
+import json
 import os
 import sys
 import time
@@ -6,8 +7,8 @@ from datetime import datetime
 
 import pytest
 
-from etfrec.desktop import (QUICK_URL_RE, Proc, Supervisor, backup_due, find_cloudflared, invite_code, prune_backups, server_command,
-                            tunnel_command, tunnel_mode, tunnel_token)
+from etfrec.desktop import (QUICK_URL_RE, Proc, Supervisor, backup_due, find_cloudflared, find_tailscale, funnel_address, invite_code,
+                            prune_backups, server_command, tailscale_funnel, tunnel_command, tunnel_mode, tunnel_token)
 
 
 def test_tunnel_mode_and_commands(tmp_path, monkeypatch):
@@ -33,6 +34,38 @@ def test_tunnel_mode_and_commands(tmp_path, monkeypatch):
     assert tunnel_token(str(tmp_path)) == "envtok"
     line = "2026-11-02T00:00:00Z INF |  https://gentle-river-1234.trycloudflare.com                    |"
     assert QUICK_URL_RE.search(line).group(0) == "https://gentle-river-1234.trycloudflare.com"
+
+
+def test_tailscale_funnel_address_and_mode():
+    host = "etf-learn.tail1234.ts.net"
+    bg = {"TCP": {"443": {"HTTPS": True}}, "Web": {f"{host}:443": {"Handlers": {"/": {"Proxy": "http://127.0.0.1:8000"}}}},
+          "AllowFunnel": {f"{host}:443": True}}                                    # tailscale funnel --bg 8000 뒤의 serve status --json
+    assert funnel_address(bg, 8000) == f"https://{host}"
+    assert funnel_address(bg, 8001) is None                                        # 다른 포트로 이어진 Funnel
+    assert funnel_address({**bg, "AllowFunnel": {}}, 8000) is None                 # serve(내 tailnet 안)만 켜고 Funnel은 꺼짐
+    fg = {"Foreground": {"s1": {"Web": {f"{host}:8443": {"Handlers": {"/": {"Proxy": "http://localhost:8000/"}}}},
+                                "AllowFunnel": {f"{host}:8443": True}}}}           # 다른 창에서 켜 둔 tailscale funnel
+    assert funnel_address(fg, 8000) == f"https://{host}:8443"
+    assert funnel_address(None, 8000) is None and tailscale_funnel(None, 8000) is None
+    url = f"https://{host}"
+    assert tunnel_mode("auto", None, "/bin/cloudflared", url) == "tailscale" and tunnel_mode("auto", None, None, url) == "tailscale"
+    assert tunnel_mode("auto", "tok", "/bin/cloudflared", url) == "token"          # 내 도메인 토큰을 먼저
+    assert tunnel_mode("tailscale", None, None) == "tailscale"                    # Tailscale이 늦게 켜져도 서버는 띄운다
+    s = server_command("py", 8000, "tailscale", "db", "ops", "bundle", "designs")
+    assert s[s.index("--host") + 1] == "127.0.0.1" and "--trust-proxy" in s
+    assert tunnel_command("cf", "tailscale", 8000) == (None, {})                  # Tailscale은 따로 도는 서비스라 띄우지 않는다
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="가짜 tailscale 명령을 셸 스크립트로 만든다")
+def test_tailscale_funnel_reads_serve_status(tmp_path):
+    payload = json.dumps({"Web": {"pc.tail1.ts.net:443": {"Handlers": {"/": {"Proxy": "http://127.0.0.1:8000"}}}},
+                          "AllowFunnel": {"pc.tail1.ts.net:443": True}})
+    exe, broken = tmp_path / "tailscale", tmp_path / "broken"
+    exe.write_text(f"#!/bin/sh\nprintf '%s\\n' '{payload}'\n", encoding="utf-8")
+    broken.write_text("#!/bin/sh\necho 'not json'\n", encoding="utf-8")
+    exe.chmod(0o755); broken.chmod(0o755)
+    assert find_tailscale(str(exe)) == str(exe) and tailscale_funnel(str(exe), 8000) == "https://pc.tail1.ts.net"
+    assert tailscale_funnel(str(broken), 8000) is None and tailscale_funnel(str(tmp_path / "없음"), 8000) is None
 
 
 def test_invite_code(tmp_path, monkeypatch):

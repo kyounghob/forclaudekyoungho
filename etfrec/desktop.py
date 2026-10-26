@@ -3,10 +3,11 @@
     python -m etfrec desktop            # 윈도우는 deploy/desktop/start-windows.bat, 맥은 start-mac.command를 더블클릭
 
 1. 첫 실행 준비: 번들이 없으면 학습, 운영 등록부 생성, 관리자 계정이 없으면 입력받아 만든다.
-2. 서버와 Cloudflare 터널(cloudflared)을 함께 띄운다.
-   - 고정 주소: 터널 토큰(환경변수 ETFREC_TUNNEL_TOKEN 또는 runs/desktop/tunnel_token.txt)
-   - 임시 주소: 토큰이 없으면 trycloudflare.com 주소를 받는다. 다시 켤 때마다 주소가 바뀐다(리허설용).
-   - 같은 와이파이: cloudflared가 없거나 --tunnel none이면 같은 망에서만 접속(HTTP)
+2. 서버와 공개 주소를 함께 띄운다.
+   - 고정 주소(무료): Tailscale Funnel(tailscale funnel --bg 8000을 한 번 실행해 두면 https://이름.tailnet.ts.net)
+   - 고정 주소(내 도메인): Cloudflare 터널 토큰(환경변수 ETFREC_TUNNEL_TOKEN 또는 runs/desktop/tunnel_token.txt)
+   - 임시 주소: 둘 다 없으면 trycloudflare.com 주소를 받는다. 다시 켤 때마다 주소가 바뀐다(리허설용).
+   - 같은 와이파이: cloudflared도 Funnel도 없거나 --tunnel none이면 같은 망에서만 접속(HTTP)
    - 초대 코드(환경변수 ETFREC_INVITE_CODE 또는 runs/desktop/invite_code.txt)가 있으면 그 코드를 아는 사람만 가입한다.
 3. 서버나 터널이 죽거나 상태 확인(/api/health)이 3번 연속 실패하면 다시 켠다.
 4. 켜져 있는 동안 컴퓨터가 절전으로 들어가지 않게 한다(윈도우·맥).
@@ -14,6 +15,7 @@
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -22,6 +24,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.parse
 import urllib.request
 from datetime import datetime
 
@@ -57,28 +60,72 @@ def invite_code(desktop_dir: str):
 
 
 WINDOWS_CLOUDFLARED = (r"C:\Program Files (x86)\cloudflared\cloudflared.exe", r"C:\Program Files\cloudflared\cloudflared.exe")
+TAILSCALE_PATHS = {"win32": (r"C:\Program Files\Tailscale\tailscale.exe",),
+                   "darwin": ("/Applications/Tailscale.app/Contents/MacOS/Tailscale",)}
+
+
+def _find_exe(name: str, explicit: str, fallback) -> str:
+    if explicit:
+        if not os.path.isfile(explicit):
+            raise ValueError(f"{name} 경로가 없습니다: {explicit}")
+        return explicit
+    found = shutil.which(name)
+    if found:
+        return found
+    for path in fallback:
+        if os.path.isfile(path):
+            return path
+    return None
 
 
 def find_cloudflared(explicit: str = None):
     """cloudflared 실행 파일: 지정한 경로 → PATH → 윈도우 기본 설치 위치(winget 설치 직후 PATH가 아직 반영되지 않은 창 대비)."""
-    if explicit:
-        if not os.path.isfile(explicit):
-            raise ValueError(f"cloudflared 경로가 없습니다: {explicit}")
-        return explicit
-    found = shutil.which("cloudflared")
-    if found:
-        return found
-    if sys.platform == "win32":
-        for path in WINDOWS_CLOUDFLARED:
-            if os.path.isfile(path):
-                return path
+    return _find_exe("cloudflared", explicit, WINDOWS_CLOUDFLARED if sys.platform == "win32" else ())
+
+
+def find_tailscale(explicit: str = None):
+    """tailscale 명령: 지정한 경로 → PATH → 기본 설치 위치(윈도우 Program Files, 맥 앱)."""
+    return _find_exe("tailscale", explicit, TAILSCALE_PATHS.get(sys.platform, ()))
+
+
+def funnel_address(serve_config, port: int):
+    """`tailscale serve status --json`(Tailscale의 serve 설정)에서 이 컴퓨터의 port로 이어지는 Funnel 공개 주소. 없으면 None."""
+    configs = [serve_config or {}]
+    configs += [c for c in ((serve_config or {}).get("Foreground") or {}).values() if c]      # 다른 창에서 켜 둔 tailscale funnel
+    for c in configs:
+        allowed = c.get("AllowFunnel") or {}
+        for hostport, web in (c.get("Web") or {}).items():
+            if not allowed.get(hostport):
+                continue
+            for handler in ((web or {}).get("Handlers") or {}).values():
+                target = urllib.parse.urlsplit((handler or {}).get("Proxy") or "")
+                if target.hostname in ("127.0.0.1", "localhost", "::1") and target.port == int(port):
+                    host, _, public_port = hostport.rpartition(":")
+                    return f"https://{host}" + ("" if public_port == "443" else f":{public_port}")
     return None
 
 
-def tunnel_mode(requested: str, token, cloudflared) -> str:
-    """auto: 토큰이 있으면 고정 주소, 없으면 임시 주소, cloudflared가 없으면 같은 와이파이."""
+def tailscale_funnel(tailscale, port: int):
+    """Funnel이 이 포트로 켜져 있으면 고정 공개 주소. Tailscale은 윈도우 서비스·맥 앱으로 따로 돌아 실행 도우미가 켜고 끄지 않는다."""
+    if not tailscale:
+        return None
+    try:
+        out = subprocess.run([tailscale, "serve", "status", "--json"], capture_output=True, text=True, encoding="utf-8",
+                             errors="replace", timeout=15)
+        return funnel_address(json.loads(out.stdout or "null"), port)
+    except (OSError, subprocess.SubprocessError, ValueError, AttributeError):
+        return None
+
+
+def tunnel_mode(requested: str, token, cloudflared, funnel=None) -> str:
+    """auto: Cloudflare 토큰이 있으면 그 고정 주소, Tailscale Funnel이 켜져 있으면 그 고정 주소, 아니면 임시 주소,
+    cloudflared도 Funnel도 없으면 같은 와이파이. tailscale은 Funnel을 확인하지 못해도 그대로 둔다(Tailscale이 늦게 켜진 경우)."""
     if requested == "auto":
-        return "none" if not cloudflared else ("token" if token else "quick")
+        if cloudflared and token:
+            return "token"
+        if funnel:
+            return "tailscale"
+        return "quick" if cloudflared else "none"
     if requested in ("token", "quick") and not cloudflared:
         raise ValueError("cloudflared가 설치되어 있지 않습니다(윈도우: winget install --id Cloudflare.cloudflared, 맥: brew install cloudflared)")
     if requested == "token" and not token:
@@ -283,7 +330,10 @@ def run_desktop(a, store_factory, bootstrap) -> int:
     bootstrap(a, store)
     cloudflared = find_cloudflared(getattr(a, "cloudflared", None) or os.environ.get("ETFREC_CLOUDFLARED") or None)
     token = tunnel_token(desktop_dir)
-    mode = tunnel_mode(a.tunnel, token, cloudflared)
+    funnel = None
+    if a.tunnel == "tailscale" or (a.tunnel == "auto" and not (cloudflared and token)):
+        funnel = tailscale_funnel(find_tailscale(getattr(a, "tailscale", None) or os.environ.get("ETFREC_TAILSCALE") or None), a.port)
+    mode = tunnel_mode(a.tunnel, token, cloudflared, funnel)
     if port_in_use(a.port):
         raise ValueError(f"포트 {a.port}을(를) 이미 다른 프로그램이 쓰고 있습니다. 이전에 켠 서버가 남아 있으면 끄고(작업 관리자·활동 모니터에서 python) "
                          "다시 실행하거나 --port로 다른 번호를 주세요")
@@ -291,6 +341,11 @@ def run_desktop(a, store_factory, bootstrap) -> int:
     server = Proc("서버", server_command(sys.executable, a.port, mode, a.db, a.ops_dir, a.bundle, a.designs),
                   os.path.join(desktop_dir, "server.log"), env={"ETFREC_INVITE_CODE": code} if code else None, subject="서버가")
     address_file = os.path.join(desktop_dir, "address.txt")
+    if os.path.exists(address_file):
+        os.remove(address_file)                                           # 지난번 임시 주소가 남아 헷갈리지 않게
+    if funnel and mode == "tailscale":
+        with open(address_file, "w", encoding="utf-8") as f:
+            f.write(funnel + "\n")
 
     def on_tunnel_line(line):
         m = QUICK_URL_RE.search(line)
@@ -320,6 +375,9 @@ def run_desktop(a, store_factory, bootstrap) -> int:
     prevent_sleep(log)
     log({"token": "고정 주소 터널(토큰)로 공개합니다. 주소는 Cloudflare에서 정한 도메인입니다",
          "quick": "임시 주소 터널로 공개합니다. 주소는 잠시 뒤 표시됩니다(다시 켜면 바뀌므로 리허설용)",
+         "tailscale": f"Tailscale Funnel 고정 주소로 공개합니다: {funnel}" if funnel else
+                      f"Tailscale Funnel로 공개합니다. 설정을 확인하지 못했으니 명령 창에서 'tailscale funnel status'로 확인하고, "
+                      f"꺼져 있으면 'tailscale funnel --bg {a.port}'를 실행하세요",
          "none": "터널 없이 같은 와이파이에서만 접속합니다: " + ", ".join(f"http://{ip}:{a.port}" for ip in lan_addresses() or ["이 컴퓨터의 IP"])}[mode])
     log(f"가입: 초대 코드 '{code}'가 있어야 합니다" if code else
         f"가입: 누구나 할 수 있습니다. 참가자만 받으려면 {os.path.join(desktop_dir, 'invite_code.txt')}에 초대 코드를 적고 다시 켜세요")
