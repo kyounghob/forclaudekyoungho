@@ -80,9 +80,14 @@ LESSONS = {
 }
 
 
+from .lessons_core import LESSONS_CORE  # noqa: E402  나머지 60개 단원(파일럿 전 검수 대상)
+
+LESSONS.update({k: v for k, v in LESSONS_CORE.items() if k not in LESSONS})
+
+
 def lesson(topic: str, level: int, version: int = 2):
     """(주제, 수준)의 학습 요점. 없거나 버전 1이면 None."""
     if int(version) < 2:
         return None
     x = LESSONS.get((topic, int(level)))
-    return None if x is None else dict(points=list(x["points"]), example=x["example"], sources=list(x["sources"]), asof=ASOF)
+    return None if x is None else dict(points=list(x["points"]), example=x["example"], sources=list(x["sources"]), asof=x.get("asof", ASOF))

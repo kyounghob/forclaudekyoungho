@@ -120,7 +120,9 @@ def test_rate_limiter_keeps_no_state_for_lookups_only():
     assert len(rl.hits["signup:1.2.3.4"]) == 3 and len(rl.hits["login-ip:5.6.7.8"]) == 1
 
 
-def test_learner_flow_logs_impressions_and_feedback_then_delete_purges(small_bundle, tmp_path):
+def test_learner_flow_logs_impressions_and_feedback_then_delete_purges(small_bundle, tmp_path, monkeypatch):
+    import etfrec.unit_checks as uc
+    monkeypatch.delitem(uc.UNIT_CHECKS, ("지수", 2))                                # 확인 문항이 없는 단원의 스스로 확인 경로를 시험한다
     ops = str(tmp_path / "ops")
     PolicyRegistry.init(ops, declared_spec(), default_settings())
     c = make_client(small_bundle, tmp_path, ops=ops)
@@ -146,8 +148,9 @@ def test_learner_flow_logs_impressions_and_feedback_then_delete_purges(small_bun
     assert len(imp) == 1 and imp[0]["user_ref"] == 0 and imp[0]["request_id"] == r["request_id"] and imp[0]["source"] == "web"
     assert imp[0]["items"] == items and all(0 < p <= 1 for p in imp[0]["propensity"])
 
-    q2 = next(q for q in QUESTIONS if q["level"] == 2 and q.get("marks_pass", True) and catalog.unit(q["topic"], 2) is not None)
-    unit = int(catalog.unit(q2["topic"], 2))
+    q2 = uc.unit_check("채권 ETF", 2)                                               # 단원 확인 전용 문항(진단 문항과 다름)
+    unit = int(catalog.unit("채권 ETF", 2))
+    assert q2["text"] not in {q["text"] for q in QUESTIONS}
     u = c.get(f"/api/me/units/{unit}").json()
     assert u["check"]["text"] == q2["text"] and "answer" not in u["check"] and u["status"]["passed"] is False
     wrong = (q2["answer"] + 1) % len(q2["options"])
@@ -157,8 +160,7 @@ def test_learner_flow_logs_impressions_and_feedback_then_delete_purges(small_bun
     assert ok["correct"] is True and ok["status"]["passed"] is True
     assert send(dict(action="save")).json()["status"]["saved"] is True
     assert send(dict(action="watch")).status_code == 422
-    with_q = {int(catalog.unit(q["topic"], q["level"])) for q in QUESTIONS if q.get("marks_pass", True) and catalog.unit(q["topic"], q["level"]) is not None}
-    free = next(i for i in range(catalog.n_items) if i not in with_q and i not in known)
+    free = int(catalog.unit("지수", 2))                                               # 위에서 확인 문항을 뺀 단원(진단 문항도 없음)
     assert c.post(f"/api/me/units/{free}/progress", json=dict(action="check"), headers=H).status_code == 422
     sc = c.post(f"/api/me/units/{free}/progress", json=dict(action="check", self_check=True), headers=H).json()
     assert sc["self_check"] is True and sc["status"]["passed"] is True

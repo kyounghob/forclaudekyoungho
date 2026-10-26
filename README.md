@@ -12,7 +12,7 @@
 | `etfrec/ops/` | 자동 운영 루프: 탐색 칸 노출 확률 기록, 주간 재학습·재선정, 검증 게이트, 교체 이력(아래 ‘자동 운영 루프’) |
 | `etfrec/web/`, `etfrec/ui/learn/` | 실사용자 웹 서비스: 계정·세션·학습 기록 저장소(SQLite), 보안 장치, 학습자 화면(아래 ‘웹 서비스로 운영하기’) |
 | `Dockerfile`, `docker-compose.yml`, `render.yaml`, `deploy/` | 서버 배포: 앱 컨테이너(첫 실행 자동 준비) + Caddy(HTTPS) 또는 Render |
-| `docs/pilot/`, `scripts/expert_review_packet.py` | 11월 파일럿 운영 안내, 교육 검토자 평가지(사례 15개)와 요약 도구 |
+| `docs/pilot/`, `scripts/expert_review_packet.py` | 11월 파일럿 운영 안내, 교육 검토자 평가지(사례 15개), 학습 콘텐츠 검수지(단원 66개)와 요약 도구 |
 | `etfrec/factor_models.py` | torch 없이 쓰는 MF(ALS·BPR)·MLP NumPy 구현(표 9의 MF·MLP 행) |
 | `scripts/reproduce_report.py` | 보고서 수치를 한 번에 재현(아래 스크립트를 모두 실행) |
 | `scripts/purpose_stage_evaluation.py` | 표 9: 같은 후보·선수 필터에서 NDCG@5와 목적·현재 단계 정합률 |
@@ -177,7 +177,10 @@ python -m etfrec ops status|history --verify|freeze --reason ...|rollback --reas
 2. 투자 목적·기간·위험성향·경험·관심 주제(최대 2개)를 고른다.
 3. 진단 퀴즈 20문항을 푼다. 맞힌 단원은 이미 아는 단원으로 보고 추천에서 뺀다. 그 가운데 아직 모르는 단원은 체크해서 다시 추천받을 수 있다.
 4. 홈에서 로드맵 진행률과 지금 공부할 단원 5개를 본다. 추천 이유는 쉬운 말로 보여 주고, 점수 근거는 ‘추천 근거 자세히’에 둔다. 하루 한 번 ‘추천 이유가 이해되나요?’(1~5)를 묻는다.
-5. 단원에서 핵심 요점과 학습 자료 링크를 보고 학습 완료·저장·이해 확인을 한다. 확인 문항이 없는 단원은 스스로 확인으로 따로 기록한다.
+5. 단원에서 핵심 요점·예시·학습 자료 링크를 보고 학습 완료·저장·이해 확인을 한다.
+   - 66개 단원 모두 학습 요점과 이해 확인 문항이 있다(`etfrec/lessons.py`·`lessons_core.py`, `etfrec/unit_checks.py`).
+   - 확인 문항은 진단 퀴즈와 따로 둔 계산·적용형이고, 정답 위치를 고르게 섞었다.
+   - 확인 문항이 없는 단원(구버전 카탈로그 등)은 스스로 확인으로 따로 기록한다.
 6. 로드맵, 목적별 ETF 유형 카드, 내 정보(정보 수정, 진단 다시 하기, 마무리 설문, 내 데이터 JSON 내려받기, 로그아웃, 계정 삭제)를 쓴다.
 
 화면은 휴대폰에서 하단 탭, 데스크톱에서 상단 메뉴로 바뀐다.
@@ -281,7 +284,7 @@ python scripts/verify_revision.py
 
 torch 없이 FastAPI까지 설치한 환경에서 `pytest`는 176개 통과, 7개 생략이었다(운영 루프 테스트 추가 전 기준). 생략된 것은 torch가 필요한 신경망 테스트 5개, `ETFREC_FULL=1`일 때만 실행하는 전체 규모 재현 1개, 이전 버전 번들이 있어야 하는 비교 1개다.
 `verify_revision.py`는 회귀 테스트 63개 중 61개 통과, torch 테스트 2개 생략이다.
-torch 2.14.1을 설치한 환경(2026-10-26 확인, 운영 루프 테스트 13개·웹 서비스 테스트 12개 포함)에서는 `pytest` 207개 통과·1개 생략(`ETFREC_FULL=1` 전용), `verify_revision.py` 63개 모두 통과였다. torch가 없는 환경보다 torch 테스트 5개와, 보관한 v1 결과(`archive/v2_2026-10-20/bundles/bundle_v1/test_results.csv`)를 노트북 기록과 비교하는 테스트 1개가 더 실행됐다.
+torch 2.14.1을 설치한 환경(2026-10-26 확인, 운영 루프 테스트 13개·웹 서비스 테스트 12개·콘텐츠 테스트 2개 포함)에서는 `pytest` 209개 통과·1개 생략(`ETFREC_FULL=1` 전용), `verify_revision.py` 63개 모두 통과였다. torch가 없는 환경보다 torch 테스트 5개와, 보관한 v1 결과(`archive/v2_2026-10-20/bundles/bundle_v1/test_results.csv`)를 노트북 기록과 비교하는 테스트 1개가 더 실행됐다.
 
 ## 확인 범위와 한계
 

@@ -6,6 +6,7 @@
 
 실행:
     python scripts/expert_review_packet.py --bundle runs/seed42 --out docs/pilot
+    python scripts/expert_review_packet.py --content --out docs/pilot          # 학습 요점·확인 문항 검수지
     python scripts/expert_review_packet.py --summarize 검토자A.csv 검토자B.csv --out results/pilot
 """
 from __future__ import annotations
@@ -72,6 +73,34 @@ def write_packet(rows: list, out: Path):
     (out / "expert_review_cases.md").write_text("\n".join(L), encoding="utf-8")
 
 
+def write_content_review(out: Path):
+    """단원 66개의 학습 요점·예시·확인 문항을 검수지로 쓴다(사실 오류·고칠 문장·의견 칸)."""
+    from etfrec.catalog import Catalog
+    from etfrec.lessons import lesson
+    from etfrec.unit_checks import unit_check
+    cat = Catalog.default()
+    rows, L = [], ["# 학습 콘텐츠 검수지", "",
+                   "단원마다 학습 요점, 예시, 이해 확인 문항(정답 표시)을 읽고 사실 오류나 오해를 부를 표현을 찾아 주세요. "
+                   "`content_review.csv`의 오른쪽 세 칸(사실 오류 O/X, 고칠 문장, 의견)에 적습니다. "
+                   "세율·한도 같은 제도 수치는 검토 시점의 공식 안내와 대조해 주세요.", ""]
+    for i in range(cat.n_items):
+        topic, level = cat.topics[cat.item_topic[i]], int(cat.item_level[i])
+        x, q = lesson(topic, level), unit_check(topic, level)
+        rows.append({"단원": i, "제목": cat.item_title[i], "주제": topic, "수준": level, "기준일": x["asof"],
+                     "학습 요점": " / ".join(x["points"]), "예시": x["example"], "확인 문항": q["text"],
+                     "보기": " / ".join(f"{n + 1}) {o}" for n, o in enumerate(q["options"])), "정답": q["answer"] + 1, "해설": q["explain"],
+                     "사실 오류(O/X)": "", "고칠 문장": "", "의견": ""})
+        L += [f"## {i}. {cat.item_title[i]} ({topic} · 수준 {level}, 기준일 {x['asof']})", ""] + [f"- {p}" for p in x["points"]]
+        L += ["", f"예시: {x['example']}", "", f"확인 문항: {q['text']}"]
+        L += [f"{n + 1}) {o}{' ← 정답' if n == q['answer'] else ''}" for n, o in enumerate(q["options"])] + ["", f"해설: {q['explain']}", ""]
+    out.mkdir(parents=True, exist_ok=True)
+    with open(out / "content_review.csv", "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(rows[0]))
+        w.writeheader(); w.writerows(rows)
+    (out / "content_review.md").write_text("\n".join(L), encoding="utf-8")
+    print(f"단원 {len(rows)}개 → {out / 'content_review.csv'}")
+
+
 def summarize(paths: list, out: Path):
     import numpy as np
     sheets = []
@@ -117,7 +146,11 @@ def main():
     ap.add_argument("--out", default="docs/pilot")
     ap.add_argument("--k", type=int, default=5)
     ap.add_argument("--summarize", nargs="+", default=None, help="검토자가 채운 CSV들")
+    ap.add_argument("--content", action="store_true", help="학습 요점·확인 문항 검수지(content_review.csv·.md)를 쓴다")
     a = ap.parse_args()
+    if a.content:
+        write_content_review(Path(a.out))
+        return
     if a.summarize:
         summarize(a.summarize, Path(a.out))
         return

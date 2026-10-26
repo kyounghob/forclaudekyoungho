@@ -22,6 +22,7 @@ from ..config import GOALS, HORIZONS, NOTICE
 from ..quiz import QUESTIONS
 from ..service import LearnerInput
 from ..sources.registry import sources_for_items
+from ..unit_checks import unit_check
 from ..util import json_safe
 from .security import COOKIE, CSRF_HEADER, CSRF_VALUE, RateLimiter, client_ip
 from .store import CONSENT_VERSION, SURVEY_ITEMS, WebStore, validate_profile
@@ -121,7 +122,12 @@ def install_web(app, svc, cfg: WebConfig, ops_get=None) -> WebStore:
     limiter = RateLimiter()
     catalog = svc.catalog
     unit_question = {}
-    for q in QUESTIONS:                                        # 단원별 이해 확인 문항(통과 판정 문항만)
+    if getattr(catalog, "version", 2) >= 2:                    # 단원 확인 전용 문항(진단 문항과 따로, unit_checks.py)
+        for i in range(catalog.n_items):
+            q = unit_check(catalog.topics[catalog.item_topic[i]], int(catalog.item_level[i]))
+            if q is not None:
+                unit_question[i] = q
+    for q in QUESTIONS:                                        # 전용 문항이 없는 단원만 진단의 통과 판정 문항으로 대신한다
         if q.get("marks_pass", True):
             it = catalog.unit(q["topic"], q["level"])
             if it is not None:
