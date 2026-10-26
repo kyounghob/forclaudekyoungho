@@ -47,7 +47,24 @@ CREATE TABLE IF NOT EXISTS events(
   complete INTEGER NOT NULL DEFAULT 0, quiz INTEGER NOT NULL DEFAULT 0, quiz_pass INTEGER NOT NULL DEFAULT 0,
   save INTEGER NOT NULL DEFAULT 0, source TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS events_user ON events(user_id, ts);
+CREATE TABLE IF NOT EXISTS recs(
+  id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, ts REAL NOT NULL,
+  request_id TEXT NOT NULL, items TEXT NOT NULL, shortfall INTEGER NOT NULL DEFAULT 0, explored_slot INTEGER, policy TEXT);
+CREATE INDEX IF NOT EXISTS recs_user ON recs(user_id, ts);
+CREATE TABLE IF NOT EXISTS feedback(
+  id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, ts REAL NOT NULL,
+  kind TEXT NOT NULL, item INTEGER, request_id TEXT, value TEXT);
+CREATE INDEX IF NOT EXISTS feedback_user ON feedback(user_id, kind, ts);
 """
+# 파일럿 계측: view = 단원 열람(추천 목록에서 열면 request_id), reason_rating = 추천 목록의 이유 이해도(1~5),
+# diagnosis_review = 진단 면제 단원 가운데 '아직 모름'으로 되돌린 단원, exit_survey = 마무리 설문
+FEEDBACK_KINDS = ("view", "reason_rating", "diagnosis_review", "exit_survey")
+SURVEY_ITEMS = (("fit", "추천된 단원이 내 투자 목적에 맞았다"),            # 마무리 설문(1 전혀 아니다 ~ 5 매우 그렇다)
+                ("order", "추천 순서(로드맵)가 무엇을 먼저 공부할지 정하는 데 도움이 되었다"),
+                ("reason", "추천 이유 설명이 이해하기 쉬웠다"),
+                ("diagnosis", "진단 결과(이미 아는 단원으로 처리된 것)가 실제 내 수준과 맞았다"),
+                ("reuse", "앞으로도 이 서비스로 ETF를 공부하고 싶다"))
+VIEW_DEDUP_SECONDS = 1800
 
 
 def _b64(b: bytes) -> str:
@@ -295,11 +312,84 @@ class WebStore:
             rows = c.execute("SELECT item, ts, complete, quiz, quiz_pass, save, source FROM events WHERE user_id=? ORDER BY ts, id", (uid,)).fetchall()
         return [dict(r) for r in rows]
 
-    def learner_fields(self, uid: int) -> dict:
-        """서비스의 LearnerInput 인자. 연령·성별·소득은 수집하지 않으므로 기본값(운영 순위에 쓰이지 않음)으로 둔다."""
+    # ---------- 파일럿 계측 ----------
+    def record_rec(self, uid: int, request_id: str, items, shortfall: int = 0, explored_slot=None, policy: str = None,
+                   ts: float = None):
+        """학습자에게 실제로 보인 추천 목록(순서 그대로)."""
+        with self._tx() as c:
+            c.execute("INSERT INTO recs(user_id, ts, request_id, items, shortfall, explored_slot, policy) VALUES(?,?,?,?,?,?,?)",
+                      (uid, time.time() if ts is None else float(ts), request_id, json.dumps([int(i) for i in items]), int(shortfall),
+                       None if explored_slot is None else int(explored_slot), policy))
+
+    def rec(self, uid: int, request_id: str):
+        with self._tx() as c:
+            r = c.execute("SELECT ts, request_id, items FROM recs WHERE user_id=? AND request_id=?", (uid, request_id)).fetchone()
+        return None if r is None else dict(ts=r["ts"], request_id=r["request_id"], items=json.loads(r["items"]))
+
+    def add_feedback(self, uid: int, kind: str, item: int = None, request_id: str = None, value=None, ts: float = None):
+        if kind not in FEEDBACK_KINDS:
+            raise ValueError(f"알 수 없는 응답 종류: {kind}")
+        with self._tx() as c:
+            c.execute("INSERT INTO feedback(user_id, ts, kind, item, request_id, value) VALUES(?,?,?,?,?,?)",
+                      (uid, time.time() if ts is None else float(ts), kind, None if item is None else int(item), request_id,
+                       None if value is None else json.dumps(value, ensure_ascii=False)))
+
+    def add_view(self, uid: int, item: int, request_id: str = None) -> bool:
+        """단원 열람. 같은 경로(같은 추천 목록 또는 목록 밖)로 같은 단원을 30분 안에 다시 열면 한 번으로 센다(화면 새로 그리기 포함).
+        기록했으면 True."""
+        now = time.time()
+        with self._tx() as c:
+            r = c.execute("SELECT 1 FROM feedback WHERE user_id=? AND kind='view' AND item=? AND request_id IS ? AND ts > ?",
+                          (uid, int(item), request_id, now - VIEW_DEDUP_SECONDS)).fetchone()
+            if r is not None:
+                return False
+            c.execute("INSERT INTO feedback(user_id, ts, kind, item, request_id) VALUES(?,?,?,?,?)", (uid, now, "view", int(item), request_id))
+        return True
+
+    def feedback(self, uid: int, kind: str = None) -> list:
+        q, args = "SELECT ts, kind, item, request_id, value FROM feedback WHERE user_id=?", [uid]
+        if kind:
+            q += " AND kind=?"; args.append(kind)
+        with self._tx() as c:
+            rows = c.execute(q + " ORDER BY ts, id", args).fetchall()
+        return [dict(r, value=json.loads(r["value"]) if r["value"] is not None else None) for r in rows]
+
+    def unexempt(self, uid: int, items) -> list:
+        """진단으로 이수 인정한 단원 가운데 학습자가 '아직 모름'이라고 고른 단원의 인정을 거둔다(다시 추천 대상). 거둔 단원 목록."""
+        items = sorted({int(i) for i in items})
+        with self._tx() as c:
+            have = {r["item"] for r in c.execute("SELECT item FROM events WHERE user_id=? AND source='diagnosis'", (uid,)).fetchall()}
+            bad = [i for i in items if i not in have]
+            if bad:
+                raise ValueError(f"진단으로 인정한 단원이 아닙니다: {bad}")
+            c.executemany("DELETE FROM events WHERE user_id=? AND source='diagnosis' AND item=?", [(uid, i) for i in items])
+        return items
+
+    def dump(self) -> dict:
+        """파일럿 분석용 전체 자료(비밀번호 해시·세션 제외)."""
+        with self._tx() as c:
+            q = lambda s: [dict(r) for r in c.execute(s).fetchall()]
+            out = dict(users=q("SELECT u.id, u.ref, u.is_admin, u.created_at, p.data AS profile FROM users u "
+                               "LEFT JOIN profiles p ON p.user_id=u.id ORDER BY u.id"),
+                       events=q("SELECT user_id, item, ts, complete, quiz, quiz_pass, save, source FROM events ORDER BY ts, id"),
+                       recs=q("SELECT user_id, ts, request_id, items, shortfall, explored_slot, policy FROM recs ORDER BY ts, id"),
+                       feedback=q("SELECT user_id, ts, kind, item, request_id, value FROM feedback ORDER BY ts, id"),
+                       meta=q("SELECT key, value FROM meta"))
+        for u in out["users"]:
+            u["profile"] = json.loads(u["profile"]) if u["profile"] else {}
+        for r in out["recs"]:
+            r["items"] = json.loads(r["items"])
+        for f in out["feedback"]:
+            f["value"] = json.loads(f["value"]) if f["value"] is not None else None
+        return out
+
+    def learner_fields(self, uid: int, before: float = None) -> dict:
+        """서비스의 LearnerInput 인자. 연령·성별·소득은 수집하지 않으므로 기본값(운영 순위에 쓰이지 않음)으로 둔다.
+        before(시각)를 주면 그 전의 기록만 쓴다(파일럿 분석에서 추천 당시 상태를 다시 만들 때)."""
         p = self.profile(uid)
         ev = [dict(item=e["item"], week=0, complete=bool(e["complete"]), quiz=bool(e["quiz"]), quiz_pass=bool(e["quiz_pass"]),
-                   save=bool(e["save"]), **({"source": "diagnosis"} if e["source"] == "diagnosis" else {})) for e in self.events(uid)]
+                   save=bool(e["save"]), **({"source": "diagnosis"} if e["source"] == "diagnosis" else {}))
+              for e in self.events(uid) if before is None or e["ts"] < before]
         return dict(label="나", exp=int(p.get("exp") or 0), risk=int(p.get("risk") if p.get("risk") is not None else 1),
                     mobile=int(p.get("mobile", 1)), interests=list(p.get("interests") or []), placement=int(p.get("placement", 1)),
                     goal=p.get("goal") or "long_term", horizon=p.get("horizon") or "mid", diagnosis=p.get("diagnosis"), events=ev)
@@ -309,7 +399,14 @@ class WebStore:
         return dict(account={k: u[k] for k in ("username", "created_at", "consent_version", "consent_at")},
                     profile={k: v for k, v in self.profile(uid).items() if k != "complete"},
                     events=[dict(e, time=datetime.fromtimestamp(e["ts"]).isoformat(timespec="seconds")) for e in self.events(uid)],
+                    recommendations=[dict(r, time=datetime.fromtimestamp(r["ts"]).isoformat(timespec="seconds")) for r in self._recs(uid)],
+                    responses=[dict(f, time=datetime.fromtimestamp(f["ts"]).isoformat(timespec="seconds")) for f in self.feedback(uid)],
                     exported_at=_now_iso())
+
+    def _recs(self, uid: int) -> list:
+        with self._tx() as c:
+            rows = c.execute("SELECT ts, request_id, items, shortfall FROM recs WHERE user_id=? ORDER BY ts, id", (uid,)).fetchall()
+        return [dict(r, items=json.loads(r["items"])) for r in rows]
 
     def backup(self, out_path: str):
         """실행 중에도 일관된 사본을 만든다(SQLite 온라인 백업). 이미 있는 파일은 덮어쓰지 않는다."""
@@ -327,6 +424,8 @@ class WebStore:
             q = lambda s: c.execute(s).fetchone()[0]
             return dict(users=q("SELECT COUNT(*) FROM users"), admins=q("SELECT COUNT(*) FROM users WHERE is_admin=1"),
                         profiles=q("SELECT COUNT(*) FROM profiles"), events=q("SELECT COUNT(*) FROM events"),
+                        recommendation_lists=q("SELECT COUNT(*) FROM recs"), responses=q("SELECT COUNT(*) FROM feedback WHERE kind != 'view'"),
+                        unit_views=q("SELECT COUNT(*) FROM feedback WHERE kind = 'view'"),
                         active_sessions=c.execute("SELECT COUNT(*) FROM sessions WHERE expires_at > ?", (time.time(),)).fetchone()[0],
                         last_event=c.execute("SELECT MAX(ts) FROM events").fetchone()[0])
 

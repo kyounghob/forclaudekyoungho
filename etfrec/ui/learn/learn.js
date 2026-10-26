@@ -5,7 +5,7 @@
   const $$ = (s, el = document) => [...el.querySelectorAll(s)];
   const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const pct = x => `${Math.round((x || 0) * 100)}%`;
-  let CFG = null, ME = null, LAST_RID = null;
+  let CFG = null, ME = null, LAST_RID = null, OPEN_FROM_REC = null;
 
   async function api(path, opts = {}) {
     const init = { method: opts.method || "GET", credentials: "same-origin", headers: { "X-Requested-With": "etfrec" } };
@@ -43,7 +43,7 @@
   async function route() {
     const [name, arg] = (location.hash.replace(/^#\/?/, "") || "home").split("/");
     if (!ME) return renderAuth("login");
-    if (!ME.profile_complete && name !== "onboard" && name !== "quiz") return renderOnboard(true);
+    if (!ME.profile_complete && name !== "onboard" && name !== "quiz" && !(ME.is_admin && name === "me")) return renderOnboard(true);
     switch (name) {
       case "onboard": return renderOnboard(!ME.profile_complete);
       case "quiz": return guarded(renderQuiz);
@@ -75,7 +75,7 @@
             <details class="consent"><summary>개인정보 수집·이용 안내 (필수)</summary><p>${esc(CFG.consent_text).replace(/\n/g, "<br>")}</p></details>
             <label class="check"><input type="checkbox" name="consent"> 안내를 읽었고 수집·이용에 동의합니다</label>` : ""}
           <div class="btn-row"><button class="btn primary" type="submit">${signup ? "가입하고 시작하기" : "로그인"}</button></div>
-          ${!signup && new URLSearchParams(location.search).get("admin") ? `<p class="muted small">관리자 계정으로 로그인하면 스튜디오로 이동합니다.</p>` : ""}
+          ${!signup && new URLSearchParams(location.search).get("admin") ? `<p class="muted small">관리자 계정으로 로그인하면 관리자 메뉴(파일럿 보고서·분석 자료·스튜디오)로 이동합니다.</p>` : ""}
           <p class="err" id="auth-err" role="alert">${esc(message)}</p>
         </form></div>`;
     $$("#v-auth [data-mode]").forEach(b => b.addEventListener("click", () => renderAuth(b.dataset.mode)));
@@ -94,7 +94,7 @@
         if (signup) await api("/api/auth/signup", { method: "POST", body: { username, password, consent: true, invite_code: f.invite_code ? f.invite_code.value : null } });
         else await api("/api/auth/login", { method: "POST", body: { username, password } });
         ME = await api("/api/me");
-        if (new URLSearchParams(location.search).get("admin") && ME.is_admin) return void location.assign("/studio");
+        if (new URLSearchParams(location.search).get("admin") && ME.is_admin) return void location.assign("/#/me");   // 관리자 메뉴(보고서·자료·스튜디오)
         history.replaceState(null, "", location.pathname + (ME.profile_complete ? "#/home" : "#/onboard"));
         route();
       } catch (e) { err.textContent = e.message; btn.disabled = false; }
@@ -177,9 +177,20 @@
           const e = box.querySelector(".explain"); e.hidden = false; e.textContent = `정답: ${x.correct_option} — ${x.explain}`;
         });
         ME = await api("/api/me");
+        const known = r.mastered || [];
         $("#q-result").innerHTML = `<div class="card"><div class="eyebrow">진단 결과</div>
-          <h2>수준 ${r.level} · ${esc(CFG.levels[r.level])}</h2><p>정답 ${r.correct}/${r.answered}문항 · 이미 아는 단원으로 인정 ${(r.events || []).length}개</p>
-          <div class="btn-row"><a class="btn primary" href="#/home">추천 받기</a></div></div>`;
+          <h2>수준 ${r.level} · ${esc(CFG.levels[r.level])}</h2><p>정답 ${r.correct}/${r.answered}문항 · 이미 아는 단원으로 인정 ${known.length}개</p>
+          ${known.length ? `<form id="f-review"><p class="muted small">아래 단원은 이미 아는 것으로 보고 추천에서 뺍니다. 아직 잘 모르는 단원이 있으면 체크하세요. 다시 추천에 나옵니다.</p>
+            <div class="opts">${known.map(k => `<label class="check"><input type="checkbox" name="unk" value="${k.item}"> ${esc(k.title)}</label>`).join("")}</div>
+            <div class="btn-row"><button class="btn primary" type="submit">확인하고 추천 받기</button></div></form>`
+          : `<div class="btn-row"><a class="btn primary" href="#/home">추천 받기</a></div>`}</div>`;
+        const fr = $("#f-review");
+        if (fr) fr.addEventListener("submit", ev => { ev.preventDefault(); guarded(async () => {
+          const items = $$("input[name=unk]:checked", fr).map(b => +b.value);
+          await api("/api/me/diagnosis/review", { method: "POST", body: { items } });
+          if (items.length) toast(`${items.length}개 단원을 다시 추천 대상으로 돌렸어요`);
+          go("home");
+        }); });
         $("#q-result").scrollIntoView({ behavior: "smooth" });
       });
     });
@@ -205,18 +216,27 @@
           <div class="chips"><span class="chip">${esc(it.topic)}</span><span class="chip">${esc(it.level_name)}</span><span class="chip">약 ${it.minutes}분</span></div>
           <p class="reason">${esc(it.reason)}</p>
           ${it.detail ? `<details class="why"><summary>추천 근거 자세히</summary><p>${esc(it.detail)}</p></details>` : ""}
-          <a class="btn primary" href="#/unit/${it.item}">학습하기</a></li>`).join("")}</ol>`
+          <a class="btn primary" href="#/unit/${it.item}" data-rec="${it.item}">학습하기</a></li>`).join("")}</ol>`
         : `<div class="card"><p>지금 추천할 단원이 없습니다. 로드맵에서 남은 단원을 확인해 보세요.</p></div>`}
       ${r.shortfall > 0 && r.items.length ? `<p class="muted small">선수 학습을 마친 단원만 추천해서 지금은 ${r.items.length}개입니다.</p>` : ""}
+      ${r.ask_rating ? `<div class="card" id="rate"><p><b>위 추천의 ‘추천 이유’가 이해되나요?</b></p>
+        <div class="seg">${["전혀 아니다", "아니다", "보통", "그렇다", "매우 그렇다"].map((t, i) => `<button class="btn" type="button" data-rate="${i + 1}">${i + 1} ${t}</button>`).join("")}</div></div>` : ""}
       <h3>최근 학습</h3>
       ${hist.length ? `<ul class="card hist">${hist.slice(0, 6).map(h => `<li><a href="#/unit/${h.item}">${esc(h.title)}</a><span class="muted">${esc(h.kind)}${h.self_check ? "(스스로 확인)" : ""}</span></li>`).join("")}</ul>`
         : `<p class="muted">아직 기록이 없습니다. 추천 단원부터 시작해 보세요.</p>`}`;
+    $$("#v-home [data-rec]").forEach(a => a.addEventListener("click", () => { OPEN_FROM_REC = +a.dataset.rec; }));
+    $$("#rate [data-rate]").forEach(b => b.addEventListener("click", () => guarded(async () => {
+      await api("/api/me/rating", { method: "POST", body: { request_id: r.request_id, value: +b.dataset.rate } });
+      $("#rate").innerHTML = `<p class="muted">응답 고마워요. 추천 설명을 고치는 데 씁니다.</p>`;
+    })));
   }
 
   // ---------- 단원 ----------
   async function renderUnit(item) {
     show("unit");
-    const d = await api(`/api/me/units/${item}`);
+    const fromRec = OPEN_FROM_REC === item && LAST_RID;
+    OPEN_FROM_REC = null;
+    const d = await api(`/api/me/units/${item}` + (fromRec ? `?rid=${encodeURIComponent(LAST_RID)}` : ""));
     const st = d.status, L = d.lesson;
     $("#v-unit").innerHTML = `
       <a class="btn" href="#/home">← 추천으로</a>
@@ -297,16 +317,23 @@
     const p = ME.profile, dg = p.diagnosis;
     $("#v-me").innerHTML = `
       <h1>내 정보</h1>
-      <div class="card"><p class="kv"><b>아이디</b> ${esc(ME.username)}${ME.is_admin ? ` <span class="tag">관리자</span> <a href="/studio">스튜디오 열기</a>` : ""}</p>
+      ${ME.is_admin ? `<div class="card"><h3 style="margin-top:0">관리자</h3><div class="btn-row"><a class="btn" href="/studio">스튜디오 열기</a>
+        <a class="btn" href="/api/admin/pilot-report" target="_blank" rel="noopener">파일럿 보고서 보기</a>
+        <a class="btn" href="/api/admin/pilot-data">분석 자료 내려받기(zip)</a></div>
+        <p class="muted small">보고서는 지금까지의 기록으로 계산합니다. 마감일 기준은 주소에 ?as_of=2026-11-29를 붙입니다.</p></div>` : ""}
+      <div class="card"><p class="kv"><b>아이디</b> ${esc(ME.username)}${ME.is_admin ? ` <span class="tag">관리자</span>` : ""}</p>
         <p class="kv"><b>투자 목적</b> ${esc(CFG.goals[p.goal] || "")} · <b>기간</b> ${esc(CFG.horizons[p.horizon] || "")} · <b>위험성향</b> ${esc(CFG.risks[p.risk] || "")} · <b>경험</b> ${esc(CFG.exps[p.exp] || "")}</p>
         <p class="kv"><b>관심 주제</b> ${(p.interests || []).map(i => esc(CFG.topics[i].name)).join(", ") || "없음"}</p>
         <p class="kv"><b>진단</b> ${dg ? `수준 ${dg.level} · 정답 ${dg.correct}/${dg.answered}` : "아직 안 함"}</p>
         <div class="btn-row"><a class="btn" href="#/onboard">정보 수정</a><a class="btn" href="#/quiz">진단 다시 하기</a></div></div>
+      <div class="card" id="survey"></div>
       <div class="card"><h3 style="margin-top:0">내 데이터</h3><p class="muted small">계정·학습 정보·학습 기록을 JSON 파일로 내려받습니다.</p>
         <div class="btn-row"><button class="btn" id="m-export" type="button">내 데이터 내려받기</button><button class="btn" id="m-logout" type="button">로그아웃</button></div></div>
       <div class="card"><h3 style="margin-top:0">계정 삭제</h3><p class="muted small">계정과 학습 기록, 추천 노출 기록을 바로 지웁니다. 되돌릴 수 없습니다.</p>
         <form id="f-del"><label for="d-pw">비밀번호 확인</label><input id="d-pw" name="password" type="password" autocomplete="current-password" required>
         <div class="btn-row"><button class="btn danger" type="submit">계정 삭제</button></div><p class="err" id="d-err" role="alert"></p></form></div>`;
+    if (ME.is_admin) $("#survey").remove();                          // 관리자 응답은 분석에서 빠지므로 설문을 띄우지 않는다
+    else renderSurvey(await api("/api/me/survey"));
     $("#m-export").addEventListener("click", () => guarded(async () => {
       const r = await fetch("/api/me/export", { credentials: "same-origin" });
       if (!r.ok) throw Object.assign(new Error("내려받지 못했습니다"), { status: r.status });
@@ -321,6 +348,24 @@
       try { await api("/api/me", { method: "DELETE", body: { password: ev.target.password.value } }); }
       catch (e) { if (e.status === 401) return void ($("#d-err").textContent = e.message); throw e; }
       ME = null; history.replaceState(null, "", location.pathname); renderAuth("signup", "계정을 삭제했습니다");
+    }); });
+  }
+
+  function renderSurvey(sv) {
+    const box = $("#survey"), prev = (sv.answers && sv.answers.answers) || {};
+    const scale = ["전혀 아니다", "아니다", "보통", "그렇다", "매우 그렇다"];
+    box.innerHTML = `<h3 style="margin-top:0">마무리 설문 ${sv.done ? `<span class="tag">응답함</span>` : sv.suggested ? `<span class="tag warn">응답 부탁드려요</span>` : ""}</h3>
+      <p class="muted small">${sv.suggested ? `가입한 지 ${sv.days}일이 지났어요. ` : ""}1분이면 끝나요. 추천을 고치는 데만 씁니다.${sv.done ? " 다시 제출하면 마지막 응답으로 바뀝니다." : ""}</p>
+      <form id="f-survey">${sv.items.map(q => `<fieldset><legend>${esc(q.text)}</legend><div class="seg">${scale.map((t, i) =>
+        `<label class="opt"><input type="radio" name="${q.key}" value="${i + 1}" ${prev[q.key] === i + 1 ? "checked" : ""}><span>${i + 1} ${t}</span></label>`).join("")}</div></fieldset>`).join("")}
+        <label for="s-comment">불편했던 점이나 바라는 점 (선택, 이름·연락처 같은 개인정보는 적지 마세요)</label>
+        <input id="s-comment" name="comment" maxlength="500" value="${esc((sv.answers && sv.answers.comment) || "")}">
+        <div class="btn-row"><button class="btn primary" type="submit">${sv.done ? "다시 제출" : "제출"}</button></div><p class="err" id="s-err" role="alert"></p></form>`;
+    $("#f-survey").addEventListener("submit", ev => { ev.preventDefault(); guarded(async () => {
+      const f = ev.target, answers = {};
+      for (const q of sv.items) { const x = f.querySelector(`input[name=${q.key}]:checked`); if (!x) return void ($("#s-err").textContent = "모든 문항에 답해 주세요"); answers[q.key] = +x.value; }
+      await api("/api/me/survey", { method: "POST", body: { answers, comment: f.comment.value } });
+      toast("설문에 응답해 주셔서 고마워요"); renderSurvey(await api("/api/me/survey"));
     }); });
   }
 

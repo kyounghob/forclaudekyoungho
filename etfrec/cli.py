@@ -24,6 +24,8 @@
     python -m etfrec web create-admin|reset-password|revoke-admin --username NAME [--db ...]   # 비밀번호: ETFREC_ADMIN_PASSWORD 또는 입력
     python -m etfrec web export-dataset --out runs/web/export [--db ...] [--bundle runs/seed42]   # 주간 작업 입력(끝난 주까지)
     python -m etfrec web backup --out runs/web/backup.db | stats [--db ...]
+    python -m etfrec web pilot-report [--db ...] [--out results/pilot] [--bundle runs/seed42]   # 파일럿 지표·기법 비교
+    python -m etfrec web bootstrap [--db ...] [--bundle runs/seed42] [--ops-dir runs/ops]   # 컨테이너 첫 실행 준비(멱등)
 """
 from __future__ import annotations
 
@@ -112,6 +114,16 @@ def _web_config(a, local: bool):
                      trust_proxy=a.trust_proxy, service_start=a.service_start)
 
 
+def _registry_bundle(ops_dir: str):
+    """운영 등록부가 가리키는 서빙 번들(없으면 기준 번들) 폴더."""
+    from .ops.registry import PolicyRegistry
+    st = PolicyRegistry(ops_dir).state
+    b = st.get("serving_bundle") or st.get("base_bundle")
+    if b and os.path.basename(b) == "bundle.pkl":
+        b = os.path.dirname(b)
+    return b
+
+
 def cmd_serve(a):
     import uvicorn
     from .api import create_app
@@ -122,13 +134,9 @@ def cmd_serve(a):
     if not a.bundle:
         if not ops_dir:
             sys.exit("--bundle 또는 --ops-dir가 필요합니다")
-        from .ops.registry import PolicyRegistry
-        st = PolicyRegistry(ops_dir).state
-        a.bundle = st.get("serving_bundle") or st.get("base_bundle")
+        a.bundle = _registry_bundle(ops_dir)
         if not a.bundle:
             sys.exit("운영 등록부에 서빙 번들이 없습니다. --bundle을 주세요")
-        if a.bundle.endswith(".pkl"):
-            a.bundle = os.path.dirname(a.bundle) if os.path.basename(a.bundle) == "bundle.pkl" else a.bundle
     web = _web_config(a, local) if public else None
     try:
         app = create_app(a.bundle, designs_dir=a.designs, sources_dir=getattr(a, "sources_dir", None), expose_learners=expose,
@@ -325,6 +333,59 @@ def cmd_web(a):
         sys.exit(f"웹 계정: {e.args[0] if e.args else e}")
 
 
+def _memory_limit():
+    """컨테이너 메모리 한도(바이트, cgroup v2·v1). 한도가 없거나 읽을 수 없으면 None."""
+    for path in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            v = open(path).read().strip()
+        except OSError:
+            continue
+        if v.isdigit() and int(v) < 1 << 50:                       # v1의 '한도 없음'은 아주 큰 수로 나온다
+            return int(v)
+    return None
+
+
+def _bootstrap_scale(n=None, limit=None) -> tuple:
+    """첫 실행 학습 규모(학습자 수, 병렬 작업 수, 이유). 측정한 최대 메모리: 15,000명·작업 1개 약 1.1GB, 3,000명 약 0.34GB."""
+    if n:
+        return int(n), (1 if limit and limit < 3 * 2 ** 30 else TrainConfig().n_workers), "지정한 규모"
+    gib = None if limit is None else limit / 2 ** 30
+    if gib is None or gib >= 3:
+        return TrainConfig().n_learners, TrainConfig().n_workers, "메모리 한도 없음 또는 3GB 이상"
+    if gib >= 1.5:
+        return TrainConfig().n_learners, 1, f"메모리 한도 {gib:.1f}GB: 병렬 작업 1개"
+    return 3000, 1, f"메모리 한도 {gib:.1f}GB라 학습자 3,000명으로 축소, 보고서 번들은 15,000명"
+
+
+def _web_bootstrap(a, store):
+    """컨테이너 첫 실행 준비(여러 번 실행해도 안전): 번들이 없으면 학습 → 운영 등록부가 없으면 생성 →
+    ETFREC_ADMIN_PASSWORD가 있고 그 계정(ETFREC_ADMIN_USERNAME, 기본 admin)이 없으면 관리자 생성."""
+    if not os.path.exists(os.path.join(a.bundle, "bundle.pkl")):
+        from .pipeline import train
+        n, workers, why = _bootstrap_scale(a.n or os.environ.get("ETFREC_BOOTSTRAP_N"), _memory_limit())
+        print(f"번들이 없어 학습합니다: 모의 학습자 {n:,}명, 병렬 작업 {workers}개, 신경망 없이({why}) → {a.bundle}", flush=True)
+        cfg = TrainConfig(n_learners=n, n_workers=workers)
+        train(Dataset.synthetic(cfg), cfg, out_dir=a.bundle, enable_neural=False)
+    if a.ops_dir and not os.path.exists(os.path.join(a.ops_dir, "registry.json")):
+        from .ops.loop import LoopConfig, default_settings
+        from .ops.policies import declared_spec
+        from .ops.registry import PolicyRegistry
+        PolicyRegistry.init(a.ops_dir, declared_spec(), default_settings(LoopConfig()), base_bundle=os.path.abspath(a.bundle),
+                            note="첫 실행 자동 준비")
+        print(f"운영 등록부를 만들었습니다: {a.ops_dir}")
+    name, pw = os.environ.get("ETFREC_ADMIN_USERNAME", "").strip() or "admin", os.environ.get("ETFREC_ADMIN_PASSWORD", "")
+    if pw:
+        u = store.user_by_name(name)
+        if u is None:
+            store.create_user(name, pw, consent_version="admin-env", is_admin=True)
+            print(f"관리자 계정을 만들었습니다: {name}")
+        elif not u["is_admin"]:
+            print(f"경고: {name}은 일반 학습자 계정이라 관리자 권한을 자동으로 주지 않습니다(web create-admin으로 직접 부여)", file=sys.stderr)
+    if not store.stats()["admins"]:
+        print("관리자 계정이 없습니다. 환경변수 ETFREC_ADMIN_PASSWORD(아이디는 ETFREC_ADMIN_USERNAME, 기본 admin)를 넣고 다시 시작하면 만듭니다",
+              file=sys.stderr)
+
+
 def _cmd_web(a):
     from datetime import date
     from .web.store import WebStore
@@ -346,6 +407,26 @@ def _cmd_web(a):
     elif act == "backup":
         store.backup(a.out)
         print(f"백업: {os.path.abspath(a.out)} (계정·학습 기록 DB 사본. 운영 기록·번들은 --ops-dir 폴더를 따로 보관)")
+    elif act == "bootstrap":
+        _web_bootstrap(a, store)
+    elif act == "pilot-report":
+        from .web.pilot import pilot_report, write_report
+        svc = None
+        if not a.no_compare:
+            bundle = a.bundle or (_registry_bundle(a.ops_dir) if os.path.exists(os.path.join(a.ops_dir, "registry.json")) else None)
+            if bundle:
+                from .pipeline import Bundle
+                from .service import RecommendationService
+                svc = RecommendationService(Bundle.load(bundle))
+        now = None
+        if a.as_of:
+            from datetime import datetime as _dt
+            now = _dt.fromisoformat(a.as_of + "T23:59:59").timestamp()           # 그날 끝까지의 기록으로 분석
+        rep = pilot_report(store, svc=svc, window_days=a.window_days, k=a.k, now=now)
+        paths = write_report(rep, a.out)
+        rate = rep["primary"]["rate"]
+        print(f"참가자 {rep['participants']}명(7일 관측 완료 {rep['eligible_7d']}명) · 주 지표 7일 통과율 "
+              f"{'–' if rate is None else format(rate * 100, '.1f') + '%'} → {paths['markdown']}")
     elif act == "stats":
         st = store.stats()
         st.update(service_start=store.meta("service_start"))
@@ -465,7 +546,8 @@ def main(argv=None):
     wsub = w.add_subparsers(dest="web_cmd", required=True)
     for name, hp in (("create-admin", "관리자 계정 만들기(있으면 권한만 부여)"), ("reset-password", "비밀번호 재설정(기존 로그인 끊김)"),
                      ("revoke-admin", "관리자 권한 거두기"), ("export-dataset", "학습 데이터 내보내기(주간 작업 입력)"),
-                     ("backup", "계정·기록 DB 백업(실행 중에도 가능)"), ("stats", "가입·기록 통계")):
+                     ("backup", "계정·기록 DB 백업(실행 중에도 가능)"), ("pilot-report", "파일럿 결과 지표·기법 비교 보고서"),
+                     ("bootstrap", "첫 실행 준비: 번들 학습·운영 등록부·환경변수 관리자(이미 있으면 건너뜀)"), ("stats", "가입·기록 통계")):
         q = wsub.add_parser(name, help=hp)
         q.add_argument("--db", default=web_db, help=f"학습자 계정·기록 DB(기본 {web_db})")
         if name in ("create-admin", "reset-password", "revoke-admin"):
@@ -476,6 +558,19 @@ def main(argv=None):
             q.add_argument("--include-current-week", action="store_true", help="진행 중인 주의 기록도 넣는다(기본: 끝난 주까지만)")
         if name == "backup":
             q.add_argument("--out", required=True, help="사본 경로(예: runs/web/backup-20261102.db, 있으면 거절)")
+        if name == "bootstrap":
+            q.add_argument("--bundle", default="runs/seed42", help="번들 폴더(없으면 학습)")
+            q.add_argument("--ops-dir", default="runs/ops", help="운영 등록부 폴더(없으면 생성, 빈 문자열이면 건너뜀)")
+            q.add_argument("--n", type=int, default=None,
+                           help="번들을 새로 학습할 때 모의 학습자 수(기본: 컨테이너 메모리에 맞춰 15,000 또는 3,000, 환경변수 ETFREC_BOOTSTRAP_N)")
+        if name == "pilot-report":
+            q.add_argument("--out", default="results/pilot", help="보고서 폴더(기본 results/pilot)")
+            q.add_argument("--bundle", default=None, help="기법 비교에 쓸 번들(기본: --ops-dir 등록부의 서빙 번들)")
+            q.add_argument("--ops-dir", default="runs/ops")
+            q.add_argument("--window-days", type=int, default=7, help="통과를 세는 관측 창(일, 기본 7)")
+            q.add_argument("--k", type=int, default=5)
+            q.add_argument("--no-compare", action="store_true", help="기법 비교를 건너뛴다(번들 없이 빠르게)")
+            q.add_argument("--as-of", default=None, help="분석 기준일 YYYY-MM-DD(그날까지의 기록만, 기본: 지금)")
     w.set_defaults(fn=cmd_web)
     a = p.parse_args(argv)
     get_logger()

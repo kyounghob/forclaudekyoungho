@@ -1,11 +1,13 @@
 # 실사용자 웹 서비스: app(내부 8000) + caddy(80·443, 인증서 자동 발급).
-# DOMAIN에 이 서버를 가리키는 도메인을 넣는다(예: DOMAIN=learn.example.com docker compose up -d).
-# 처음 준비(번들 학습·운영 등록부·관리자 계정)는 README의 '웹 서비스로 운영하기'를 따른다.
+# 같은 폴더의 .env에 DOMAIN(이 서버를 가리키는 도메인)과 ETFREC_ADMIN_PASSWORD를 적고 docker compose up -d.
+# 첫 실행 때 번들 학습(약 1분)·운영 등록부·관리자 계정을 자동으로 준비한다.
 services:
   app:
     build: .
     restart: unless-stopped
     environment:
+      ETFREC_ADMIN_USERNAME: ${ETFREC_ADMIN_USERNAME:-admin}
+      ETFREC_ADMIN_PASSWORD: ${ETFREC_ADMIN_PASSWORD:-}  # 첫 실행 때 관리자 계정을 만든다(이미 있으면 쓰지 않음)
       ETFREC_INVITE_CODE: ${ETFREC_INVITE_CODE:-}        # 비우면 누구나 가입, 값을 넣으면 그 초대 코드가 있어야 가입
     volumes:
       - runs:/app/runs

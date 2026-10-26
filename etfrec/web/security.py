@@ -13,7 +13,7 @@ CSRF_VALUE = "etfrec"
 # 공개 모드에서 관리자만 쓰는 API(스튜디오·운영·평가). 학습자 화면은 /api/me·/api/auth·/api/public만 쓴다.
 ADMIN_PREFIXES = ("/api/meta", "/api/learners", "/api/recommend", "/api/compare", "/api/roadmap", "/api/types", "/api/parse",
                   "/api/examples", "/api/quiz/score", "/api/evaluation", "/api/designs", "/api/serve", "/api/feedback", "/api/ops",
-                  "/api/sources", "/api/goals")
+                  "/api/sources", "/api/goals", "/api/admin")
 
 
 class RateLimiter:

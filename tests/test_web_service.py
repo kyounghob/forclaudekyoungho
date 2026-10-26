@@ -163,7 +163,7 @@ def test_learner_flow_logs_impressions_and_feedback_then_delete_purges(small_bun
     sc = c.post(f"/api/me/units/{free}/progress", json=dict(action="check", self_check=True), headers=H).json()
     assert sc["self_check"] is True and sc["status"]["passed"] is True
     assert c.get("/api/me/units/999").status_code == 404
-    fb = log.feedback(0)
+    fb = [f for f in log.feedback(0) if f["event"] != "view"]                       # 단원 열람(view)은 따로 확인한다
     assert [(f["item"], f["event"]) for f in fb] == [(unit, "quiz_pass"), (unit, "save"), (free, "quiz_pass")]
     assert fb[0]["request_id"] == r["request_id"] and all(f["user_ref"] == 0 for f in fb)       # 오답은 반응으로 남기지 않는다
     hist = c.get("/api/me/history").json()
@@ -183,6 +183,62 @@ def test_learner_flow_logs_impressions_and_feedback_then_delete_purges(small_bun
     assert c.get("/api/me").status_code == 401
     assert log.impressions(0) == [] and log.feedback(0) == []                     # 탈퇴하면 운영 기록도 지운다
     assert c.app.state.web_store.stats()["users"] == 0
+
+
+def test_pilot_instrumentation_records_lists_views_ratings_review_and_survey(small_bundle, tmp_path):
+    ops = str(tmp_path / "ops")
+    PolicyRegistry.init(ops, declared_spec(), default_settings())
+    c = make_client(small_bundle, tmp_path, ops=ops)
+    store = c.app.state.web_store
+    signup(c)
+    c.put("/api/me/profile", json=PROFILE, headers=H)
+    l1 = {q["id"]: q["answer"] for q in QUESTIONS if q["level"] == 1}
+    d = c.post("/api/me/diagnosis", json=dict(answers=l1), headers=H).json()
+    known = [m["item"] for m in d["mastered"]]
+    assert len(known) >= 2
+    assert c.post("/api/me/diagnosis/review", json=dict(items=[999]), headers=H).status_code == 422
+    rv = c.post("/api/me/diagnosis/review", json=dict(items=[known[0]]), headers=H).json()
+    assert rv == dict(ok=True, exempted=len(known), flagged=1, remaining=len(known) - 1)
+    st = c.get(f"/api/me/units/{known[0]}").json()["status"]
+    assert st["passed"] is False and st["by_diagnosis"] is False                    # 되돌린 단원은 다시 학습 대상
+    assert c.get(f"/api/me/units/{known[1]}").json()["status"]["by_diagnosis"] is True
+
+    r = c.get("/api/me/recommendations").json()
+    assert r["ask_rating"] is True
+    uid = store.user_by_name("learner1")["id"]
+    assert store.rec(uid, r["request_id"])["items"] == [it["item"] for it in r["items"]]
+    assert c.post("/api/me/rating", json=dict(request_id="nope", value=4), headers=H).status_code == 404
+    assert c.post("/api/me/rating", json=dict(request_id=r["request_id"], value=6), headers=H).status_code == 422
+    assert c.post("/api/me/rating", json=dict(request_id=r["request_id"], value=4), headers=H).json() == {"ok": True}
+    r2 = c.get("/api/me/recommendations").json()
+    assert r2["ask_rating"] is False                                                # 하루에 한 번만 묻는다
+
+    first = r2["items"][0]["item"]
+    c.get(f"/api/me/units/{first}?rid={r2['request_id']}")
+    c.get(f"/api/me/units/{first}?rid={r2['request_id']}")                          # 다시 그려도 한 번으로 센다
+    other = next(i for i in range(small_bundle.catalog.n_items) if i not in [it["item"] for it in r2["items"]] and i not in known)
+    c.get(f"/api/me/units/{other}?rid={r2['request_id']}")                          # 목록에 없던 단원은 추천 열람이 아니다
+    views = store.feedback(uid, "view")
+    assert [f["item"] for f in views if f["request_id"] == r2["request_id"]] == [first]   # 목록에서 연 단원만, 한 번
+    assert any(f["item"] == other and f["request_id"] is None for f in views)
+    fb = OpsLog(os.path.join(ops, "logs")).feedback(0)
+    assert (first, "view", r2["request_id"]) in [(f["item"], f["event"], f["request_id"]) for f in fb]
+
+    sv = c.get("/api/me/survey").json()
+    assert sv["done"] is False and sv["suggested"] is False and len(sv["items"]) == 5
+    answers = {q["key"]: 4 for q in sv["items"]}
+    assert c.post("/api/me/survey", json=dict(answers={**answers, "fit": 0}), headers=H).status_code == 422
+    assert c.post("/api/me/survey", json=dict(answers={"fit": 5}), headers=H).status_code == 422
+    assert c.post("/api/me/survey", json=dict(answers=answers, comment=" 좋아요 "), headers=H).json() == {"ok": True}
+    sv = c.get("/api/me/survey").json()
+    assert sv["done"] is True and sv["answers"]["comment"] == "좋아요" and sv["answers"]["days"] == 0
+    ex = c.get("/api/me/export").json()
+    assert len(ex["recommendations"]) == 2 and {x["kind"] for x in ex["responses"]} == {"view", "reason_rating", "diagnosis_review", "exit_survey"}
+    stt = store.stats()
+    assert stt["recommendation_lists"] == 2 and stt["responses"] == 3 and stt["unit_views"] >= 4
+    c.request("DELETE", "/api/me", json=dict(password="correct-horse-1"), headers=H)
+    dump = store.dump()
+    assert dump["recs"] == [] and dump["feedback"] == []                            # 탈퇴하면 계측 기록도 지운다
 
 
 def _ts(day: date, hour: int) -> float:
@@ -261,3 +317,97 @@ def test_cli_web_commands(tmp_path, monkeypatch, capsys):
     main(["web", "stats", "--db", db])
     st = json.loads(capsys.readouterr().out)
     assert st["users"] == 2 and st["service_start"] == start.isoformat()
+
+
+def test_pilot_report_computes_plan_metrics_and_technique_comparison(small_bundle, tmp_path, capsys):
+    from etfrec.cli import main
+    from etfrec.service import RecommendationService
+    from etfrec.web.pilot import pilot_report, wilson, write_report
+    db = str(tmp_path / "web.db")
+    store = WebStore(db)
+    store.service_start(date.today().isoformat())
+    a, b, c = (store.create_user(n, n + "-pass-1") for n in ("alpha", "bravo", "charlie"))
+    store.create_user("teacher", "teacher-pass-1", is_admin=True)                       # 관리자는 참가자에서 빠진다
+    t0 = time.time()
+    for u in (a, b):
+        store.save_profile(u["id"], PROFILE)
+    store.save_profile(a["id"], dict(diagnosis=dict(level=1, correct=5, answered=8, total=20, units=2)))
+    store.replace_diagnosis(a["id"], [0, 1], ts=t0 + 60)
+    store.unexempt(a["id"], [1])
+    store.add_feedback(a["id"], "diagnosis_review", value=dict(exempted=[0, 1], flagged=[1]), ts=t0 + 70)
+    store.record_rec(a["id"], "ra", [5, 6, 7, 8, 9], shortfall=0, ts=t0 + 3600)
+    store.add_feedback(a["id"], "view", item=5, request_id="ra", ts=t0 + 3700)
+    store.add_event(a["id"], 5, "quiz_pass", "quiz", ts=t0 + 86400)
+    store.add_feedback(a["id"], "reason_rating", request_id="ra", value=4, ts=t0 + 3800)
+    store.record_rec(b["id"], "rb", [10, 11, 12, 13], shortfall=1, ts=t0 + 7200)
+    store.add_event(b["id"], 20, "quiz_pass", "self", ts=t0 + 2 * 86400)
+    store.add_feedback(b["id"], "reason_rating", request_id="rb", value=2, ts=t0 + 7300)
+    store.add_feedback(b["id"], "exit_survey", value=dict(answers=dict(fit=4, order=4, reason=4, diagnosis=4, reuse=5),
+                                                          comment="예시가 더 있으면 좋겠어요", days=8), ts=t0 + 8 * 86400)
+    rep = pilot_report(store, svc=RecommendationService(small_bundle), now=t0 + 9 * 86400, boot=200)
+    assert rep["participants"] == 3 and rep["eligible_7d"] == 3
+    assert dict(rep["funnel"])["목적·성향 입력"] == 2 and dict(rep["funnel"])["추천 단원 열람"] == 1
+    assert (rep["primary"]["k"], rep["primary"]["n"]) == (1, 3) and (rep["lenient"]["k"], rep["lenient"]["n"]) == (2, 3)
+    assert rep["primary"]["lo"] == pytest.approx(wilson(1, 3)["lo"]) and 0 < rep["primary"]["lo"] < 1 / 3 < rep["primary"]["hi"] < 1
+    assert (rep["diagnosis"]["over_exemption"]["k"], rep["diagnosis"]["over_exemption"]["n"]) == (1, 2)
+    assert rep["reason_rating"]["n"] == 2 and rep["reason_rating"]["mean"] == 3.0
+    assert (rep["shortfall"]["short"]["k"], rep["shortfall"]["short"]["n"]) == (1, 2)
+    assert (rep["engagement"]["list_ctr"]["k"], rep["engagement"]["item_ctr"]["k"], rep["engagement"]["item_ctr"]["n"]) == (1, 1, 9)
+    assert (rep["engagement"]["hit_at_k"]["k"], rep["engagement"]["hit_at_k"]["n"]) == (1, 2)
+    shown = next(x for x in rep["comparison"] if x["method"] == "__shown__")
+    assert shown["lists"] == 2 and shown["hit"] == 0.5 and len(rep["comparison"]) > 3
+    assert rep["survey"]["reuse"]["mean"] == 5.0 and rep["comments"][0]["text"].startswith("예시")
+    paths = write_report(rep, str(tmp_path / "pilot"))
+    md = open(paths["markdown"], encoding="utf-8").read()
+    assert "주 지표" in md and "33.3% (1/3" in md and "기법 비교" in md
+    capsys.readouterr()
+    main(["web", "pilot-report", "--db", db, "--out", str(tmp_path / "pilot2"), "--no-compare"])
+    assert "참가자 3명" in capsys.readouterr().out
+
+
+def test_bootstrap_scale_and_idempotent_first_run(small_bundle, tmp_path, monkeypatch, capsys):
+    from etfrec.cli import _bootstrap_scale, main
+    gib = 2 ** 30
+    assert _bootstrap_scale(None, None)[:2] == (15000, 2) and _bootstrap_scale(None, 4 * gib)[:2] == (15000, 2)
+    assert _bootstrap_scale(None, 2 * gib)[:2] == (15000, 1)
+    assert _bootstrap_scale(None, gib // 2)[:2] == (3000, 1)                       # 512MB 서버(Render starter)
+    assert _bootstrap_scale("6000", gib // 2)[:2] == (6000, 1)
+    bundle, ops, db = str(tmp_path / "bundle"), str(tmp_path / "ops"), str(tmp_path / "web.db")
+    small_bundle.save(bundle)                                                       # 번들이 있으면 학습을 건너뛴다
+    monkeypatch.setenv("ETFREC_ADMIN_USERNAME", "teacher")
+    monkeypatch.setenv("ETFREC_ADMIN_PASSWORD", "admin-pass-123")
+    args = ["web", "bootstrap", "--db", db, "--bundle", bundle, "--ops-dir", ops]
+    main(args)
+    out = capsys.readouterr().out
+    assert "번들이 없어" not in out and "운영 등록부를 만들었습니다" in out and "관리자 계정을 만들었습니다: teacher" in out
+    assert PolicyRegistry(ops).champion["key"] == "PurposeStageRule" and WebStore(db).user_by_name("teacher")["is_admin"] == 1
+    main(args)                                                                      # 두 번째 실행은 아무것도 바꾸지 않는다
+    assert capsys.readouterr().out == "" and len(PolicyRegistry(ops).history()) == 1
+
+
+def test_admin_pilot_report_and_data_download(small_bundle, tmp_path):
+    import io
+    import zipfile
+    c = make_client(small_bundle, tmp_path)
+    signup(c)
+    c.put("/api/me/profile", json=PROFILE, headers=H)
+    r = c.get("/api/me/recommendations").json()
+    c.get(f"/api/me/units/{r['items'][0]['item']}?rid={r['request_id']}")
+    assert c.get("/api/admin/pilot-report").status_code == 403                     # 학습자는 못 본다
+    c.post("/api/auth/logout", headers=H)
+    assert c.get("/api/admin/pilot-data").status_code == 401
+    c.app.state.web_store.create_user("teacher", "admin-pass-123", is_admin=True)
+    c.post("/api/auth/login", json=dict(username="teacher", password="admin-pass-123"), headers=H)
+    md = c.get("/api/admin/pilot-report?compare=false")
+    assert md.status_code == 200 and md.text.startswith("# 파일럿 결과") and "| 추천 단원 열람 | 1 |" in md.text
+    assert c.get("/api/admin/pilot-report?as_of=2026-13-01").status_code == 422
+    z = c.get("/api/admin/pilot-data?compare=false")
+    assert z.status_code == 200 and "attachment" in z.headers["content-disposition"]
+    zf = zipfile.ZipFile(io.BytesIO(z.content))
+    names = set(zf.namelist())
+    assert {"pilot_report.md", "pilot_metrics.json", "dataset/profiles.csv", "dataset/catalog.csv", "recommendation_lists.csv",
+            "responses.csv"} <= names
+    allt = "".join(zf.read(n).decode("utf-8-sig") for n in names)
+    assert "learner1" not in allt and "teacher" not in allt and "scrypt" not in allt      # 아이디·해시는 나가지 않는다
+    rows = zf.read("recommendation_lists.csv").decode("utf-8-sig").splitlines()
+    assert rows[0].startswith("ref,ts,request_id") and rows[1].startswith("0,")

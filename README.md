@@ -11,7 +11,8 @@
 | `etfrec/sources/` | 공개 ETF 시세 데이터 연결(선택 기능, 인증키 필요) |
 | `etfrec/ops/` | 자동 운영 루프: 탐색 칸 노출 확률 기록, 주간 재학습·재선정, 검증 게이트, 교체 이력(아래 ‘자동 운영 루프’) |
 | `etfrec/web/`, `etfrec/ui/learn/` | 실사용자 웹 서비스: 계정·세션·학습 기록 저장소(SQLite), 보안 장치, 학습자 화면(아래 ‘웹 서비스로 운영하기’) |
-| `Dockerfile`, `docker-compose.yml`, `deploy/` | 서버 배포: 앱 컨테이너 + Caddy(HTTPS 인증서 자동 발급) |
+| `Dockerfile`, `docker-compose.yml`, `render.yaml`, `deploy/` | 서버 배포: 앱 컨테이너(첫 실행 자동 준비) + Caddy(HTTPS) 또는 Render |
+| `docs/pilot/`, `scripts/expert_review_packet.py` | 11월 파일럿 운영 안내, 교육 검토자 평가지(사례 15개)와 요약 도구 |
 | `etfrec/factor_models.py` | torch 없이 쓰는 MF(ALS·BPR)·MLP NumPy 구현(표 9의 MF·MLP 행) |
 | `scripts/reproduce_report.py` | 보고서 수치를 한 번에 재현(아래 스크립트를 모두 실행) |
 | `scripts/purpose_stage_evaluation.py` | 표 9: 같은 후보·선수 필터에서 NDCG@5와 목적·현재 단계 정합률 |
@@ -174,14 +175,27 @@ python -m etfrec ops status|history --verify|freeze --reason ...|rollback --reas
 학습자가 하는 일:
 1. 아이디·비밀번호로 가입한다. 개인정보 수집·이용 동의가 필수이고, 이메일·연락처·연령·성별·소득은 받지 않는다.
 2. 투자 목적·기간·위험성향·경험·관심 주제(최대 2개)를 고른다.
-3. 진단 퀴즈 20문항을 푼다. 맞힌 단원은 이미 아는 단원으로 보고 추천에서 뺀다.
-4. 홈에서 로드맵 진행률과 지금 공부할 단원 5개를 본다. 추천 이유는 쉬운 말로 보여 주고, 점수 근거는 ‘추천 근거 자세히’에 둔다.
+3. 진단 퀴즈 20문항을 푼다. 맞힌 단원은 이미 아는 단원으로 보고 추천에서 뺀다. 그 가운데 아직 모르는 단원은 체크해서 다시 추천받을 수 있다.
+4. 홈에서 로드맵 진행률과 지금 공부할 단원 5개를 본다. 추천 이유는 쉬운 말로 보여 주고, 점수 근거는 ‘추천 근거 자세히’에 둔다. 하루 한 번 ‘추천 이유가 이해되나요?’(1~5)를 묻는다.
 5. 단원에서 핵심 요점과 학습 자료 링크를 보고 학습 완료·저장·이해 확인을 한다. 확인 문항이 없는 단원은 스스로 확인으로 따로 기록한다.
-6. 로드맵, 목적별 ETF 유형 카드, 내 정보(정보 수정, 진단 다시 하기, 내 데이터 JSON 내려받기, 로그아웃, 계정 삭제)를 쓴다.
+6. 로드맵, 목적별 ETF 유형 카드, 내 정보(정보 수정, 진단 다시 하기, 마무리 설문, 내 데이터 JSON 내려받기, 로그아웃, 계정 삭제)를 쓴다.
 
 화면은 휴대폰에서 하단 탭, 데스크톱에서 상단 메뉴로 바뀐다.
 
-운영 루프(`--ops-dir`)를 켜면 학습자 화면의 추천도 `/api/serve`처럼 마지막 칸을 탐색하고 노출 확률을 기록한다. 학습 완료·저장·이해 확인은 같은 주의 반응 기록이 된다. 기록의 학습자 번호는 가입 순서로 매긴 가명 번호(ref)이며 아이디는 남지 않는다. 주차는 서비스 시작 주의 월요일부터 센다.
+운영 루프(`--ops-dir`)를 켜면 학습자 화면의 추천도 `/api/serve`처럼 마지막 칸을 탐색하고 노출 확률을 기록한다. 단원 열람·학습 완료·저장·이해 확인은 같은 주의 반응 기록이 된다. 기록의 학습자 번호는 가입 순서로 매긴 가명 번호(ref)이며 아이디는 남지 않는다. 주차는 서비스 시작 주의 월요일부터 센다.
+
+파일럿 평가를 위해 저장하는 것:
+- 실제로 보인 추천 목록(순서 그대로)과 추천 목록에서 연 단원
+- 추천 이유 이해도
+- 진단 면제 확인(되돌린 단원)
+- 마무리 설문(1~5점 5문항과 자유 의견)
+
+관리자는 `/?admin=1`로 로그인하면 열리는 관리자 메뉴(내 정보)에서 ‘파일럿 보고서 보기’, ‘분석 자료 내려받기(zip)’, ‘스튜디오 열기’를 쓴다.
+- 보고서는 중간보고서 7절의 지표를 계산한다: 7일 이해 확인 통과율(Wilson 95% 구간), 이용 흐름, 과도한 면제, 이유 이해도, 후보 부족, 추천 반응, 마무리 설문.
+- 실데이터 기법 비교도 함께 낸다. 추천 시점의 학습자 상태로 기법마다 Top-5를 다시 계산해 그 뒤 7일 안의 통과를 맞혔는지 보고, 구간은 참가자 단위 부트스트랩이다.
+- 같은 보고서를 `web pilot-report --as-of YYYY-MM-DD` 명령으로도 만든다.
+
+운영 일정, 모집 문구, 교육 검토자 평가 절차는 [`docs/pilot/README.md`](docs/pilot/README.md)에 있다.
 
 로컬에서 시험하기:
 
@@ -193,21 +207,35 @@ python -m etfrec web create-admin --username admin                # 비밀번호
 python -m etfrec serve --public --ops-dir runs/ops                # http://127.0.0.1:8000 (관리자는 /?admin=1)
 ```
 
-서버에 배포하기(Docker + HTTPS):
+배포하면 컨테이너가 첫 실행 때 스스로 준비한다(`deploy/start.sh`, 이미 있으면 건너뜀).
+1. 번들이 없으면 학습한다. 규모는 컨테이너 메모리 한도에 맞춘다.
+   - 3GB 이상이면 15,000명, 1.5GB 이상이면 15,000명을 병렬 작업 1개로 학습한다.
+   - 그보다 작으면 3,000명으로 학습한다(측정한 최대 메모리 약 0.34GB).
+2. 운영 등록부를 만든다.
+3. `ETFREC_ADMIN_PASSWORD`가 있으면 관리자 계정(아이디 `ETFREC_ADMIN_USERNAME`, 기본 admin)을 만든다.
+4. 공개 모드 서버를 `$PORT`(기본 8000)에 띄운다.
 
-도메인 하나와 Docker가 설치된 Linux 서버가 필요하다. 도메인의 DNS가 서버를 가리키고 80·443 포트가 열려 있어야 Caddy가 인증서를 받는다. 저장소 폴더에 `.env`를 만들어 `DOMAIN=learn.example.com`을 적고, 초대받은 사람만 가입하게 하려면 `ETFREC_INVITE_CODE=수업코드`도 적는다. `.env`는 저장소에 올리지 않는다.
+**Render에 배포하기(가장 간단):**
+- Render 대시보드 → New → Blueprint에서 이 저장소와 브랜치를 고른다. 저장소의 `render.yaml`대로 웹 서비스와 1GB 디스크(`/app/runs`)가 만들어진다.
+- 만들 때 `ETFREC_ADMIN_PASSWORD`와 `ETFREC_INVITE_CODE`(비우면 누구나 가입)를 입력한다.
+- 몇 분 뒤 `https://서비스이름.onrender.com` 주소가 생긴다.
+- 디스크는 유료 플랜(starter, 메모리 512MB)부터 붙는다. 이 플랜에서는 첫 번들을 3,000명 규모로 학습한다.
+
+**자체 서버에 배포하기(Docker + HTTPS):**
+- 도메인 하나와 Docker가 설치된 Linux 서버가 필요하다. 도메인의 DNS가 서버를 가리키고 80·443 포트가 열려 있어야 Caddy가 인증서를 받는다.
+- 저장소 폴더의 `.env`에 아래 값을 적고 실행한다. `.env`는 저장소에 올리지 않는다.
+  - `DOMAIN=learn.example.com`
+  - `ETFREC_ADMIN_PASSWORD=관리자비밀번호`
+  - 초대받은 사람만 가입하게 하려면 `ETFREC_INVITE_CODE=수업코드`
 
 ```bash
-docker compose build
-docker compose run --rm app python -m etfrec train --out runs/seed42 --no-neural    # 약 1분(학습자 15,000명 모의 데이터)
-docker compose run --rm app python -m etfrec ops init --ops-dir runs/ops --bundle runs/seed42
-docker compose run --rm app python -m etfrec web create-admin --username admin     # 비밀번호 입력
-docker compose up -d                                                               # https://도메인/
+docker compose up -d --build                                                       # https://도메인/ (첫 실행 약 1분)
+docker compose exec app python -m etfrec web stats                                 # 상태 확인
 ```
 
-- 번들, 계정 DB, 운영 기록은 모두 `runs` 볼륨에 있다.
-- 백업은 `docker compose exec -T app python -m etfrec web backup --out runs/web/backup-YYYYMMDD.db`로 하고, 운영 기록은 `runs/ops` 폴더를 함께 보관한다.
-- 앱 컨테이너는 root가 아닌 사용자로 돈다. 확인한 메모리 사용량은 약 210MB였다.
+- 번들, 계정 DB, 운영 기록은 모두 `runs` 볼륨(Render는 디스크)에 있다.
+- 백업은 관리자 화면의 분석 자료 내려받기 또는 `docker compose exec -T app python -m etfrec web backup --out runs/web/backup-YYYYMMDD.db`로 한다.
+- 앱은 root가 아닌 사용자로 돈다. 확인한 메모리 사용량은 약 170~210MB였다.
 
 주간 작업(cron 예: 매주 월요일 03:20):
 
@@ -230,11 +258,12 @@ docker compose up -d                                                            
 | --- | --- |
 | 비밀번호·세션 | 비밀번호는 scrypt 해시로만 저장한다. 세션 쿠키는 HttpOnly·SameSite=Lax이고, HTTPS에서는 Secure를 붙인다. 14일 동안 쓰지 않으면 만료되고, 비밀번호를 바꾸면 기존 세션이 끊긴다 |
 | 요청 위조 방지 | 상태를 바꾸는 요청은 같은 화면이 붙이는 `X-Requested-With` 머리글이 있어야 처리한다 |
-| 시도 횟수 제한 | 로그인 실패는 아이디별 15분에 8회, IP별 20회까지다. 가입은 IP별 시간당 10회까지다. 프록시 뒤에서는 Caddy가 채운 실제 접속 주소를 쓴다 |
+| 시도 횟수 제한 | 로그인 실패는 아이디별 15분에 8회까지다. 강의실처럼 여러 사람이 같은 공인 IP를 쓰는 경우를 고려해 IP별로는 넉넉히 둔다(실패 15분에 100회, 가입 시간당 60회). 프록시 뒤에서는 앞단이 채운 실제 접속 주소를 쓴다 |
 | 보안 헤더 | CSP(같은 출처 스크립트만), 프레임 금지, nosniff, HSTS(HTTPS), API 응답 캐시 금지 |
 | 관리자 경로 | 공개 모드에서는 스튜디오·평가·운영·미리보기 API를 관리자 세션만 쓴다. 모의 학습자 표 조회는 관리자에게도 닫는다 |
 | 데이터 최소화·삭제 | 연령·성별·소득·연락처는 받지 않는다. 탈퇴하면 계정, 학습 기록, 해당 학습자의 노출·반응 기록을 바로 지운다. 내 데이터는 JSON으로 내려받을 수 있다 |
-| 관리 명령 | `web create-admin`, `reset-password`, `revoke-admin`, `export-dataset`, `backup`, `stats`. 비밀번호는 환경변수 `ETFREC_ADMIN_PASSWORD` 또는 입력 창으로만 받는다 |
+| 관리 명령 | `web create-admin`, `reset-password`, `revoke-admin`, `export-dataset`, `backup`, `pilot-report`, `bootstrap`, `stats`. 비밀번호는 환경변수 `ETFREC_ADMIN_PASSWORD` 또는 입력 창으로만 받는다 |
+| 분석 자료 | 관리자 보고서·zip에는 가명 번호(ref)만 나오고 아이디·비밀번호 해시는 들어가지 않는다 |
 
 실사용 전에 알아 둘 한계:
 - **모델**: 추천 모델은 모의 데이터로 학습되어 있다(화면 아래에 고지). 실제 효과는 파일럿 기록이 쌓인 뒤 주간 작업과 별도 평가로 확인해야 한다.
@@ -252,7 +281,7 @@ python scripts/verify_revision.py
 
 torch 없이 FastAPI까지 설치한 환경에서 `pytest`는 176개 통과, 7개 생략이었다(운영 루프 테스트 추가 전 기준). 생략된 것은 torch가 필요한 신경망 테스트 5개, `ETFREC_FULL=1`일 때만 실행하는 전체 규모 재현 1개, 이전 버전 번들이 있어야 하는 비교 1개다.
 `verify_revision.py`는 회귀 테스트 63개 중 61개 통과, torch 테스트 2개 생략이다.
-torch 2.14.1을 설치한 환경(2026-10-26 확인, 운영 루프 테스트 13개·웹 서비스 테스트 8개 포함)에서는 `pytest` 203개 통과·1개 생략(`ETFREC_FULL=1` 전용), `verify_revision.py` 63개 모두 통과였다. torch가 없는 환경보다 torch 테스트 5개와, 보관한 v1 결과(`archive/v2_2026-10-20/bundles/bundle_v1/test_results.csv`)를 노트북 기록과 비교하는 테스트 1개가 더 실행됐다.
+torch 2.14.1을 설치한 환경(2026-10-26 확인, 운영 루프 테스트 13개·웹 서비스 테스트 12개 포함)에서는 `pytest` 207개 통과·1개 생략(`ETFREC_FULL=1` 전용), `verify_revision.py` 63개 모두 통과였다. torch가 없는 환경보다 torch 테스트 5개와, 보관한 v1 결과(`archive/v2_2026-10-20/bundles/bundle_v1/test_results.csv`)를 노트북 기록과 비교하는 테스트 1개가 더 실행됐다.
 
 ## 확인 범위와 한계
 

@@ -1,0 +1,21 @@
+# Render 배포 설정(Blueprint). Render 대시보드 → New → Blueprint → 이 저장소와 브랜치를 고르면 아래대로 만든다.
+# 만들 때 ETFREC_ADMIN_PASSWORD(관리자 비밀번호, 8자 이상)와 ETFREC_INVITE_CODE(비우면 누구나 가입)를 입력한다.
+# 계정 DB·운영 기록·번들은 디스크(/app/runs)에 남는다. 디스크는 유료 플랜(starter 이상)에서만 붙는다.
+# starter(메모리 512MB)에서는 첫 실행 번들을 모의 학습자 3,000명으로 학습한다(메모리에 맞춰 자동 선택).
+services:
+  - type: web
+    name: etfrec
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    disk:
+      name: etfrec-runs
+      mountPath: /app/runs
+      sizeGB: 1
+    envVars:
+      - key: ETFREC_ADMIN_USERNAME
+        value: admin
+      - key: ETFREC_ADMIN_PASSWORD
+        sync: false
+      - key: ETFREC_INVITE_CODE
+        sync: false

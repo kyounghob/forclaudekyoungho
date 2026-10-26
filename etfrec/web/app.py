@@ -6,13 +6,15 @@ X-Requested-With 머리글이 있어야 한다(다른 사이트의 폼 제출 �
 """
 from __future__ import annotations
 
+import json
+import time
 import uuid
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 
 from fastapi import HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from pydantic import BaseModel, Field
 
 from ..catalog import EXPS, LEVEL_NAMES, RISKS
@@ -22,7 +24,7 @@ from ..service import LearnerInput
 from ..sources.registry import sources_for_items
 from ..util import json_safe
 from .security import COOKIE, CSRF_HEADER, CSRF_VALUE, RateLimiter, client_ip
-from .store import CONSENT_VERSION, WebStore, validate_profile
+from .store import CONSENT_VERSION, SURVEY_ITEMS, WebStore, validate_profile
 
 CONSENT_TEXT = (
     "수집 항목: 아이디, 비밀번호(복원할 수 없는 해시로만 저장), 투자 목적·기간·위험성향·투자 경험·관심 주제·학습 기기, 진단 퀴즈 결과, "
@@ -31,6 +33,14 @@ CONSENT_TEXT = (
     "더 나은 추천을 찾기 위해 추천 목록의 마지막 칸은 가끔 다른 후보 단원으로 바뀌며, 어떤 단원이 보였는지와 학습 여부를 함께 기록합니다.\n"
     "보관과 권리: 탈퇴하면 계정과 학습 기록을 즉시 지우고, 언제든 내 데이터를 내려받을 수 있습니다.\n"
     "이 서비스는 교육 콘텐츠 추천이며 특정 ETF의 매수·매도를 권유하지 않습니다.")
+
+
+# 시도 횟수 제한. 강의실처럼 여러 사람이 같은 공인 IP를 쓰는 경우를 고려해 IP 기준은 넉넉히, 아이디 기준은 엄격히 둔다.
+SIGNUP_PER_IP = (60, 3600)              # IP당 1시간 60회
+LOGIN_FAIL_PER_IP = (100, 900)          # IP당 15분 실패 100회
+LOGIN_FAIL_PER_USER = (8, 900)          # 아이디당 15분 실패 8회
+RATING_INTERVAL = 20 * 3600             # 추천 이유 이해도는 하루에 한 번 정도만 묻는다
+SURVEY_AFTER_DAYS = 7                   # 마무리 설문을 권하는 시점(가입 뒤 일수)
 
 
 @dataclass
@@ -78,6 +88,20 @@ class ProgressBody(BaseModel):
 
 class DeleteBody(BaseModel):
     password: str = Field(max_length=128)
+
+
+class RatingBody(BaseModel):
+    request_id: str = Field(max_length=80)
+    value: int = Field(ge=1, le=5)
+
+
+class ReviewBody(BaseModel):
+    items: list[int] = Field(default_factory=list, max_length=66)
+
+
+class SurveyBody(BaseModel):
+    answers: dict[str, int]
+    comment: str = Field("", max_length=500)
 
 
 def learner_reason(it: dict, interests: set, stage_name: str) -> str:
@@ -148,7 +172,7 @@ def install_web(app, svc, cfg: WebConfig, ops_get=None) -> WebStore:
     def signup(body: SignupBody, request: Request):
         if request.headers.get(CSRF_HEADER) != CSRF_VALUE:
             raise HTTPException(403, "요청 머리글이 없습니다")
-        if not limiter.take("signup:" + client_ip(request, cfg.trust_proxy), 10, 3600):
+        if not limiter.take("signup:" + client_ip(request, cfg.trust_proxy), *SIGNUP_PER_IP):
             raise HTTPException(429, "가입 시도가 너무 많습니다. 잠시 뒤에 다시 시도하세요")
         if cfg.invite_code and body.invite_code != cfg.invite_code:
             raise HTTPException(403, "초대 코드가 맞지 않습니다")
@@ -169,11 +193,11 @@ def install_web(app, svc, cfg: WebConfig, ops_get=None) -> WebStore:
         if request.headers.get(CSRF_HEADER) != CSRF_VALUE:
             raise HTTPException(403, "요청 머리글이 없습니다")
         ip, name = client_ip(request, cfg.trust_proxy), body.username.strip().lower()
-        if limiter.blocked("login-ip:" + ip, 20, 900) or limiter.blocked("login-user:" + name, 8, 900):
+        if limiter.blocked("login-ip:" + ip, *LOGIN_FAIL_PER_IP) or limiter.blocked("login-user:" + name, *LOGIN_FAIL_PER_USER):
             raise HTTPException(429, "로그인 실패가 많아 15분 동안 막혔습니다")
         u = store.authenticate(body.username, body.password)
         if u is None:
-            limiter.hit("login-ip:" + ip, 900); limiter.hit("login-user:" + name, 900)
+            limiter.hit("login-ip:" + ip, LOGIN_FAIL_PER_IP[1]); limiter.hit("login-user:" + name, LOGIN_FAIL_PER_USER[1])
             raise HTTPException(401, "아이디 또는 비밀번호가 맞지 않습니다")
         limiter.clear("login-user:" + name)
         resp = JSONResponse(dict(username=u["username"], profile_complete=store.profile(u["id"])["complete"], is_admin=bool(u["is_admin"])))
@@ -228,6 +252,15 @@ def install_web(app, svc, cfg: WebConfig, ops_get=None) -> WebStore:
                                                          total=r["total"], summary=r.get("summary", ""), units=len(items))))
         return r
 
+    @app.post("/api/me/diagnosis/review")
+    def diagnosis_review(body: ReviewBody, request: Request):
+        """진단 면제 확인: 학습자가 '아직 잘 모름'으로 고른 단원은 인정을 거두고 다시 추천한다. 빈 목록 = 모두 맞음(이것도 기록)."""
+        u = need_user(request)
+        exempted = sorted({e["item"] for e in store.events(u["id"]) if e["source"] == "diagnosis"})
+        removed = wrap(lambda: store.unexempt(u["id"], body.items))
+        store.add_feedback(u["id"], "diagnosis_review", value=dict(exempted=exempted, flagged=removed))
+        return dict(ok=True, exempted=len(exempted), flagged=len(removed), remaining=len(exempted) - len(removed))
+
     def _need_profile(u):
         if not store.profile(u["id"])["complete"]:
             raise HTTPException(409, "먼저 투자 목적·기간·성향을 입력하세요")
@@ -240,21 +273,55 @@ def install_web(app, svc, cfg: WebConfig, ops_get=None) -> WebStore:
             raise HTTPException(422, "k는 1~10입니다")
         o = ops_get() if ops_get else None
         rid = uuid.uuid4().hex
+        slate, policy = None, getattr(svc, "operational_label", None)
         if o is not None:
             from ..ops.loop import impression_record
             r = wrap(lambda: svc.recommend(learner(u), k=k, exploration=o["exploration"], request_id=rid))
             slate = r.pop("exploration", None)
+            policy = o["reg"].champion.get("hash")
             if slate and slate["items"]:
                 o["log"].append_impressions([impression_record(slate, week_now(), u["ref"], o["reg"].champion, k, r["candidates"], "web")])
         else:
             r = wrap(lambda: svc.recommend(learner(u), k=k))
+        store.record_rec(u["id"], rid, [it["item"] for it in r["items"]], shortfall=r["shortfall"],
+                         explored_slot=(slate["slot"] if slate and slate["explored"] else None), policy=policy)
+        last = store.feedback(u["id"], "reason_rating")
         keep = ("item", "item_id", "title", "topic", "level", "level_name", "short", "minutes", "in_current_stage", "sources")
         interests = set(store.profile(u["id"]).get("interests") or [])
         stage = (r.get("roadmap") or {}).get("current_stage_name") or ""
         items = [{**{key: it.get(key) for key in keep}, "reason": learner_reason(it, interests, stage), "detail": it.get("reason"),
                   "has_check": int(it["item"]) in unit_question} for it in r["items"]]
         return json_safe(dict(request_id=rid, items=items, roadmap=r["roadmap"], candidates=r["candidates"], shortfall=r["shortfall"],
-                              checks_passed=all(c["passed"] for c in r["checks"]), notice=r["notice"], week=week_now()))
+                              checks_passed=all(c["passed"] for c in r["checks"]), notice=r["notice"], week=week_now(),
+                              ask_rating=bool(items) and (not last or time.time() - last[-1]["ts"] > RATING_INTERVAL)))
+
+    @app.post("/api/me/rating")
+    def rating(body: RatingBody, request: Request):
+        """추천 목록 하나의 '추천 이유' 이해도(1 전혀 아니다 ~ 5 매우 그렇다)."""
+        u = need_user(request)
+        if store.rec(u["id"], body.request_id) is None:
+            raise HTTPException(404, "내가 받은 추천 목록이 아닙니다")
+        store.add_feedback(u["id"], "reason_rating", request_id=body.request_id, value=int(body.value))
+        return dict(ok=True)
+
+    @app.get("/api/me/survey")
+    def survey_status(request: Request):
+        u = need_user(request)
+        days = max(0, (date.today() - date.fromisoformat(u["created_at"][:10])).days)
+        done = store.feedback(u["id"], "exit_survey")
+        return dict(items=[dict(key=k, text=t) for k, t in SURVEY_ITEMS], days=days, suggested=days >= SURVEY_AFTER_DAYS,
+                    done=bool(done), answers=(done[-1]["value"] if done else None))
+
+    @app.post("/api/me/survey")
+    def survey(body: SurveyBody, request: Request):
+        u = need_user(request)
+        keys = [k for k, _ in SURVEY_ITEMS]
+        if set(body.answers) != set(keys) or any(isinstance(v, bool) or not 1 <= v <= 5 for v in body.answers.values()):
+            raise HTTPException(422, f"모든 문항({len(keys)}개)에 1~5로 답해 주세요")
+        days = max(0, (date.today() - date.fromisoformat(u["created_at"][:10])).days)
+        store.add_feedback(u["id"], "exit_survey", value=dict(answers={k: int(body.answers[k]) for k in keys},
+                                                              comment=body.comment.strip(), days=days))
+        return dict(ok=True)
 
     def _status(u, item):
         ev = [e for e in store.events(u["id"]) if e["item"] == item]
@@ -267,9 +334,14 @@ def install_web(app, svc, cfg: WebConfig, ops_get=None) -> WebStore:
         return item
 
     @app.get("/api/me/units/{item}")
-    def unit(item: int, request: Request):
+    def unit(item: int, request: Request, rid: Optional[str] = None):
+        """단원 화면. rid(추천 목록 번호)를 주면 그 목록에 있던 단원일 때만 '추천에서 열람'으로 기록한다."""
         u = need_user(request)
         d = catalog.item_info(_item(item))
+        rec = store.rec(u["id"], rid) if rid and len(rid) <= 80 else None
+        from_rec = rec is not None and item in rec["items"]
+        if store.add_view(u["id"], item, rid if from_rec else None):
+            ops_feedback(u, item, "view", rid if from_rec else None)
         q = unit_question.get(item)
         d.update(sources=sources_for_items(d["sources"]), status=_status(u, item),
                  prereq_titles=[catalog.item_title[p] for p in d["prereqs"]],
@@ -341,6 +413,70 @@ def install_web(app, svc, cfg: WebConfig, ops_get=None) -> WebStore:
         resp = JSONResponse({"deleted": True})
         resp.delete_cookie(COOKIE, path="/")
         return resp
+
+    # ---------- 관리자: 파일럿 보고서·분석 자료 ----------
+    def need_admin(request: Request) -> dict:
+        u = need_user(request)
+        if not u["is_admin"]:
+            raise HTTPException(403, "관리자만 쓸 수 있는 기능입니다")
+        return u
+
+    def _pilot(as_of: Optional[str], window_days: int, compare: bool) -> dict:
+        from .pilot import pilot_report
+        now = None
+        if as_of:
+            try:
+                now = datetime.fromisoformat(as_of + "T23:59:59").timestamp()
+            except ValueError:
+                raise HTTPException(422, "as_of는 YYYY-MM-DD입니다")
+        if not 1 <= window_days <= 60:
+            raise HTTPException(422, "window_days는 1~60입니다")
+        return pilot_report(store, svc=svc if compare else None, window_days=window_days, now=now)
+
+    @app.get("/api/admin/pilot-report")
+    def admin_pilot_report(request: Request, as_of: Optional[str] = None, window_days: int = 7, compare: bool = True):
+        """파일럿 지표 보고서(마크다운 글). 브라우저에서 바로 읽는다."""
+        need_admin(request)
+        from .pilot import report_markdown
+        return PlainTextResponse(report_markdown(_pilot(as_of, window_days, compare)))
+
+    @app.get("/api/admin/pilot-data")
+    def admin_pilot_data(request: Request, as_of: Optional[str] = None, window_days: int = 7, compare: bool = True):
+        """분석 자료 묶음(zip): 보고서·지표, 학습 형식 데이터(profiles·study_log·catalog), 추천 목록·응답 기록.
+        학습자는 가명 번호(ref)로만 나오고 아이디·비밀번호 해시는 없다."""
+        need_admin(request)
+        import csv as _csv
+        import io
+        import zipfile
+        from .pilot import report_markdown
+        rep = _pilot(as_of, window_days, compare)
+        D = store.dump()
+        admins = {u["id"] for u in D["users"] if u["is_admin"]}
+        ref = {u["id"]: u["ref"] for u in D["users"]}
+        profiles, log = store.export_dataset(start)
+        keep_refs = {ref[i] for i in ref if i not in admins}
+        log = log[log.user.isin(keep_refs)]
+
+        def table(rows, cols):
+            buf = io.StringIO(); w = _csv.writer(buf); w.writerow(cols); w.writerows(rows)
+            return "\ufeff" + buf.getvalue()
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("pilot_report.md", report_markdown(rep))
+            z.writestr("pilot_metrics.json", json.dumps(json_safe(rep), ensure_ascii=False, indent=2))
+            z.writestr("dataset/profiles.csv", "\ufeff" + profiles.to_csv(index=False))      # 번호가 0부터 이어져야 해서 모든 행을 둔다(관리자 기록은 log에서 뺌)
+            z.writestr("dataset/study_log.csv", "\ufeff" + log.to_csv(index=False))
+            z.writestr("dataset/catalog.csv", "\ufeff" + catalog.to_frame()[["item", "title", "topic", "level", "short", "prereqs", "sources"]].to_csv(index=False))
+            z.writestr("recommendation_lists.csv", table([(ref[r["user_id"]], round(r["ts"]), r["request_id"], " ".join(map(str, r["items"])), r["shortfall"],
+                                                            "" if r["explored_slot"] is None else r["explored_slot"]) for r in D["recs"] if r["user_id"] not in admins],
+                                                          ["ref", "ts", "request_id", "items", "shortfall", "explored_slot"]))
+            z.writestr("responses.csv", table([(ref[f["user_id"]], round(f["ts"]), f["kind"], "" if f["item"] is None else f["item"], f["request_id"] or "",
+                                                 json.dumps(f["value"], ensure_ascii=False) if f["value"] is not None else "") for f in D["feedback"]
+                                                if f["user_id"] not in admins], ["ref", "ts", "kind", "item", "request_id", "value"]))
+            z.writestr("README.txt", "ETF 학습 추천 파일럿 분석 자료. 학습자는 가명 번호(ref)로만 표시한다. ts는 유닉스 시각(초).\n"
+                                     "dataset/은 학습 파이프라인 형식(python -m etfrec ops run-week --data dataset 등)이다.\n")
+        name = f"etfrec-pilot-{(as_of or date.today().isoformat())}.zip"
+        return Response(buf.getvalue(), media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
     app.state.web_store = store
     app.state.web_user_of = user_of
