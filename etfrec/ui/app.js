@@ -531,7 +531,7 @@
   }
 
   // ---------- 11단계 ----------
-  function designPayload() { return { saved_from: "학습 설계 스튜디오", version: META.version, summary: `${isExisting() ? "#" + state.learnerId : state.learner.label || "새 학습자"} · ${META.goals[state.learner.goal] || ""} · k=${state.settings.k} · ${state.settings.algorithm || "운영 라우터"}`, state: { ...state, ...VOLATILE }, memo: state.memo, result: state.result, roadmap: state.roadmap }; }
+  function designPayload() { return { saved_from: "학습 설계 스튜디오", version: META.version, summary: `${isExisting() ? "#" + state.learnerId : state.learner.label || "새 학습자"} · ${META.goals[state.learner.goal] || ""} · k=${state.settings.k} · ${state.settings.algorithm || "운영 정책"}`, state: { ...state, ...VOLATILE }, memo: state.memo, result: state.result, roadmap: state.roadmap }; }
   async function saveDesign() {
     const name = $("#design-name").value.trim(); if (!name) return toast("설계 이름을 적어 주세요");
     state.memo = $("#design-memo").value; const r = await api("/api/designs", { name, payload: designPayload() });
