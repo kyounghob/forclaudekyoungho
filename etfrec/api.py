@@ -32,6 +32,7 @@ from .service import LearnerInput, RecommendationService
 from .util import json_safe
 
 UI_DIR = os.path.join(os.path.dirname(__file__), "ui")
+WINDOWS_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
 
 
 class Guardrail(BaseModel):
@@ -364,6 +365,8 @@ def create_app(bundle: Union[Bundle, str], designs_dir: str = None, sources_dir:
         s = re.sub(r"[^0-9A-Za-z가-힣_\- ]", "", name).strip()[:60]
         if not s:
             raise HTTPException(422, "설계 이름이 비어 있습니다")
+        if s.upper() in WINDOWS_RESERVED:                                 # 윈도우에서 파일 이름으로 쓸 수 없는 장치 이름
+            s = "_" + s
         return s
 
     def _read_design(path: str) -> dict:

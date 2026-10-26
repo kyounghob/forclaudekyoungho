@@ -39,6 +39,25 @@ def tunnel_token(desktop_dir: str):
     return tok or None
 
 
+WINDOWS_CLOUDFLARED = (r"C:\Program Files (x86)\cloudflared\cloudflared.exe", r"C:\Program Files\cloudflared\cloudflared.exe")
+
+
+def find_cloudflared(explicit: str = None):
+    """cloudflared 실행 파일: 지정한 경로 → PATH → 윈도우 기본 설치 위치(winget 설치 직후 PATH가 아직 반영되지 않은 창 대비)."""
+    if explicit:
+        if not os.path.isfile(explicit):
+            raise ValueError(f"cloudflared 경로가 없습니다: {explicit}")
+        return explicit
+    found = shutil.which("cloudflared")
+    if found:
+        return found
+    if sys.platform == "win32":
+        for path in WINDOWS_CLOUDFLARED:
+            if os.path.isfile(path):
+                return path
+    return None
+
+
 def tunnel_mode(requested: str, token, cloudflared) -> str:
     """auto: 토큰이 있으면 고정 주소, 없으면 임시 주소, cloudflared가 없으면 같은 와이파이."""
     if requested == "auto":
@@ -245,7 +264,7 @@ def run_desktop(a, store_factory, bootstrap) -> int:
 
     store = store_factory(a.db)
     bootstrap(a, store)
-    cloudflared = shutil.which("cloudflared")
+    cloudflared = find_cloudflared(getattr(a, "cloudflared", None) or os.environ.get("ETFREC_CLOUDFLARED") or None)
     token = tunnel_token(desktop_dir)
     mode = tunnel_mode(a.tunnel, token, cloudflared)
     if port_in_use(a.port):

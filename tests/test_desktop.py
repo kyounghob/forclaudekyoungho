@@ -6,8 +6,8 @@ from datetime import datetime
 
 import pytest
 
-from etfrec.desktop import (QUICK_URL_RE, Proc, Supervisor, backup_due, prune_backups, server_command, tunnel_command, tunnel_mode,
-                            tunnel_token)
+from etfrec.desktop import (QUICK_URL_RE, Proc, Supervisor, backup_due, find_cloudflared, prune_backups, server_command, tunnel_command,
+                            tunnel_mode, tunnel_token)
 
 
 def test_tunnel_mode_and_commands(tmp_path, monkeypatch):
@@ -35,6 +35,16 @@ def test_tunnel_mode_and_commands(tmp_path, monkeypatch):
     assert QUICK_URL_RE.search(line).group(0) == "https://gentle-river-1234.trycloudflare.com"
 
 
+def test_find_cloudflared(tmp_path, monkeypatch):
+    exe = tmp_path / "cloudflared"
+    exe.write_text("", encoding="utf-8")
+    assert find_cloudflared(str(exe)) == str(exe)                                 # 지정한 경로가 먼저
+    with pytest.raises(ValueError, match="경로가 없습니다"):
+        find_cloudflared(str(tmp_path / "없음"))
+    monkeypatch.setenv("PATH", str(tmp_path / "빈 폴더"))
+    assert find_cloudflared() is None                                              # PATH에도 기본 위치에도 없으면 None(같은 와이파이 방식)
+
+
 def test_port_check(tmp_path):
     import socket
     from etfrec.desktop import port_in_use
@@ -51,7 +61,7 @@ def test_backup_schedule_and_rotation(tmp_path):
     assert not backup_due(d.replace(hour=5), d.date(), 4) and backup_due(d.replace(day=11, hour=4), d.date(), 4)
     for day in range(1, 8):
         (tmp_path / f"etfrec-202611{day:02d}-040000.db").write_bytes(b"x")
-    (tmp_path / "other.txt").write_text("keep")
+    (tmp_path / "other.txt").write_text("keep", encoding="utf-8")
     gone = prune_backups(str(tmp_path), 3)
     assert len(gone) == 4 and sorted(os.listdir(tmp_path)) == ["etfrec-20261105-040000.db", "etfrec-20261106-040000.db",
                                                              "etfrec-20261107-040000.db", "other.txt"]

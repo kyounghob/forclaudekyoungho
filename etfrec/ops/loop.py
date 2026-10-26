@@ -167,7 +167,7 @@ def _summary(m: dict) -> dict:
 
 def _data_hash(log_df) -> str:
     cols = [c for c in ("user", "item", "week", "complete", "quiz", "quiz_pass", "save", "drop", "replay", "source") if c in log_df.columns]
-    body = log_df[cols].sort_values(cols, kind="stable").to_csv(index=False).encode("utf-8")
+    body = log_df[cols].sort_values(cols, kind="stable").to_csv(index=False, lineterminator="\n").encode("utf-8")   # 윈도우에서도 같은 해시
     return hashlib.sha256(body).hexdigest()
 
 

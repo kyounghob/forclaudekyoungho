@@ -1,4 +1,5 @@
-# 윈도우 실행 파일은 CRLF, 맥·리눅스 스크립트는 LF로 받는다
+# 줄바꿈: 텍스트 파일은 모든 운영체제에서 LF로 받는다(윈도우 Git의 자동 CRLF 변환으로 파일 내용·해시가 달라지지 않게).
+# 바이너리(pkl·docx·pdf·png 등)는 Git이 알아서 건드리지 않는다. 윈도우 실행 파일(.bat)만 CRLF.
+* text=auto eol=lf
 *.bat text eol=crlf
-*.command text eol=lf
-*.sh text eol=lf
+*.cmd text eol=crlf

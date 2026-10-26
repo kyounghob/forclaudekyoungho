@@ -456,7 +456,7 @@ def test_sample_snapshot_is_package_data():
     assert any(fnmatch.fnmatch(rel, pat) for pat in pkg), (rel, pkg)
     assert os.path.isfile(SAMPLE_ETF)
     if os.path.isdir(os.path.join(root, ".git")) and shutil.which("git"):        # 저장소에 실제로 커밋되는지(.gitignore에 걸리지 않는지)
-        r = subprocess.run(["git", "ls-files", "--error-unmatch", SAMPLE_ETF], cwd=root, capture_output=True, text=True)
+        r = subprocess.run(["git", "ls-files", "--error-unmatch", SAMPLE_ETF], cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace")
         assert r.returncode == 0, r.stderr
 
 

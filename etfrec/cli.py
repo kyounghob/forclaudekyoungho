@@ -338,7 +338,8 @@ def _memory_limit():
     """컨테이너 메모리 한도(바이트, cgroup v2·v1). 한도가 없거나 읽을 수 없으면 None."""
     for path in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
         try:
-            v = open(path).read().strip()
+            with open(path, encoding="ascii") as f:
+                v = f.read().strip()
         except OSError:
             continue
         if v.isdigit() and int(v) < 1 << 50:                       # v1의 '한도 없음'은 아주 큰 수로 나온다
@@ -610,6 +611,7 @@ def main(argv=None):
     dk.add_argument("--desktop-dir", default=None, help="로그·주소·터널 토큰 폴더(기본 runs/desktop)")
     dk.add_argument("--n", type=int, default=None, help="번들을 새로 학습할 때 모의 학습자 수(기본: 메모리에 맞춰 자동)")
     dk.add_argument("--no-prompt", action="store_true", help="관리자 계정을 묻지 않는다(자동 시작용)")
+    dk.add_argument("--cloudflared", default=None, help="cloudflared 실행 파일 경로(기본: PATH, 윈도우 기본 설치 위치. 환경변수 ETFREC_CLOUDFLARED)")
     dk.set_defaults(fn=cmd_desktop)
     a = p.parse_args(argv)
     get_logger()

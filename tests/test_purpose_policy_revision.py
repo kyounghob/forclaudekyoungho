@@ -143,7 +143,7 @@ class PurposePolicyRevisionTests(unittest.TestCase):
         import ast
         from pathlib import Path
         from pydantic import BaseModel,Field
-        tree=ast.parse((Path(__file__).resolve().parents[1]/'etfrec/api.py').read_text())
+        tree=ast.parse((Path(__file__).resolve().parents[1]/'etfrec/api.py').read_text(encoding='utf-8'))
         node=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='NewUserRequest')
         ns=dict(BaseModel=BaseModel,Field=Field)
         exec(compile(ast.fix_missing_locations(ast.Module(body=[node],type_ignores=[])),'<NewUserRequest AST>','exec'),ns)

@@ -470,9 +470,9 @@ def install_web(app, svc, cfg: WebConfig, ops_get=None) -> WebStore:
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
             z.writestr("pilot_report.md", report_markdown(rep))
             z.writestr("pilot_metrics.json", json.dumps(json_safe(rep), ensure_ascii=False, indent=2))
-            z.writestr("dataset/profiles.csv", "\ufeff" + profiles.to_csv(index=False))      # 번호가 0부터 이어져야 해서 모든 행을 둔다(관리자 기록은 log에서 뺌)
-            z.writestr("dataset/study_log.csv", "\ufeff" + log.to_csv(index=False))
-            z.writestr("dataset/catalog.csv", "\ufeff" + catalog.to_frame()[["item", "title", "topic", "level", "short", "prereqs", "sources"]].to_csv(index=False))
+            z.writestr("dataset/profiles.csv", "\ufeff" + profiles.to_csv(index=False, lineterminator="\n"))      # 번호가 0부터 이어져야 해서 모든 행을 둔다(관리자 기록은 log에서 뺌)
+            z.writestr("dataset/study_log.csv", "\ufeff" + log.to_csv(index=False, lineterminator="\n"))
+            z.writestr("dataset/catalog.csv", "\ufeff" + catalog.to_frame()[["item", "title", "topic", "level", "short", "prereqs", "sources"]].to_csv(index=False, lineterminator="\n"))
             z.writestr("recommendation_lists.csv", table([(ref[r["user_id"]], round(r["ts"]), r["request_id"], " ".join(map(str, r["items"])), r["shortfall"],
                                                             "" if r["explored_slot"] is None else r["explored_slot"]) for r in D["recs"] if r["user_id"] not in admins],
                                                           ["ref", "ts", "request_id", "items", "shortfall", "explored_slot"]))
