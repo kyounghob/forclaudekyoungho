@@ -119,4 +119,4 @@ Funnel은 참가자 브라우저와 내 컴퓨터 사이를 끝까지 암호화�
 | 같은 와이파이로 접속했는데 로그인이 안 된다 | `--tunnel none`으로 켰는지 확인한다. 이 방식에서만 HTTP 로그인이 된다 |
 | 실행 창에 "Python 3.11 or newer is required"가 나온다 | python.org에서 Python 3.12를 설치하면서 "Add python.exe to PATH"를 체크한 뒤 다시 실행한다 |
 | 실행 창에 "Package installation failed"가 나온다 | 인터넷 연결을 확인하고 다시 실행한다. 실행 파일이 설치가 끝났는지 기억하므로 실패한 설치는 다음 실행 때 다시 한다 |
-| 관리자 비밀번호를 잊었다 | 실행 창을 끄고 저장소 폴더에서 `.venv\Scripts\python -m etfrec web reset-password --username admin`(맥: `.venv/bin/python …`)을 실행한다 |
+| 관리자나 참가자가 비밀번호를 잊었다 | 파일 탐색기에서 저장소 폴더를 열고 주소창에 `cmd`를 입력해 명령 창을 연다. `.venv\Scripts\python -m etfrec web reset-password --username 아이디`(맥: `.venv/bin/python …`)를 실행하고 새 비밀번호를 입력한다. 서버는 켜 둔 채로 된다 |

@@ -88,12 +88,13 @@
 ## 4. 운영 중 점검 (매일 1분)
 
 - 관리자 내 정보 → ‘파일럿 보고서 보기’의 1절(이용 흐름)에서 막힌 단계를 확인한다. 예: 진단에서 많이 멈추면 안내를 보낸다.
-- 비밀번호를 잊은 참가자는 관리자가 바꿔 준다.
+- 비밀번호를 잊은 참가자는 관리자가 바꿔 준다. 새 비밀번호는 입력 창으로 넣고, 바꾸면 그 계정의 기존 로그인이 끊긴다.
+  - 내 컴퓨터: 파일 탐색기에서 저장소 폴더(`C:\etf`)를 열고 주소창에 `cmd`를 입력해 명령 창을 연 뒤 `.venv\Scripts\python -m etfrec web reset-password --username 아이디`를 실행한다(맥: `.venv/bin/python …`). 서버는 켜 둔 채로 된다.
   - Render: Shell 탭
-  - 자체 서버: `docker compose exec app python -m etfrec web reset-password --username 아이디` (비밀번호는 입력 창으로)
-- 백업은 주 2회 한다.
-  - 관리자 화면 ‘분석 자료 내려받기(zip)’
-  - 또는 `docker compose exec -T app python -m etfrec web backup --out runs/web/backup-날짜.db`
+  - 자체 서버: `docker compose exec app python -m etfrec web reset-password --username 아이디`
+- 백업
+  - 내 컴퓨터: 실행 도우미가 시작할 때와 매일 4시에 `runs/web/backups`에 자동으로 남긴다(최근 14개). 주 1회 관리자 화면 ‘분석 자료 내려받기(zip)’도 받아 다른 곳에 둔다.
+  - Render·자체 서버: 주 2회 관리자 화면 ‘분석 자료 내려받기(zip)’를 받거나 `docker compose exec -T app python -m etfrec web backup --out runs/web/backup-날짜.db`를 실행한다.
 
 ## 5. 측정 지표와 보고서·채점 항목
 
