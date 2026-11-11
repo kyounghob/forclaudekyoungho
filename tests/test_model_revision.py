@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -39,10 +40,12 @@ class CatalogInputTests(unittest.TestCase):
         np.testing.assert_array_equal(cat.item_short, [False, False])
 
     def test_explicit_true_false_and_missing_optional_flag(self):
-        cat = self.read_catalog("item,title,topic,level,short\n"
-                                "0,One ETF,ETF 구조,1,true\n"
-                                "1,Two ETF,ETF 구조,2,1\n"
-                                "2,Three ETF,ETF 구조,3,\n")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")          # pandas 3.1+: 문자열 열의 빈칸을 bool로 채우면 경고(pandas 4에서는 오류)
+            cat = self.read_catalog("item,title,topic,level,short\n"
+                                    "0,One ETF,ETF 구조,1,true\n"
+                                    "1,Two ETF,ETF 구조,2,1\n"
+                                    "2,Three ETF,ETF 구조,3,\n")
         np.testing.assert_array_equal(cat.item_short, [True, True, False])
 
     def test_invalid_short_is_rejected(self):

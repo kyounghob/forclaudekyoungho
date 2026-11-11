@@ -267,7 +267,7 @@ class Catalog:
         if "short" in df:
             # astype(bool)는 혼합 문자열의 'False'와 '0'도 True로 바꾼다.
             # 빈 선택 플래그는 False, 알 수 없는 표현은 명시적으로 거절한다.
-            flags = df["short"].fillna(False).astype(str).str.strip().str.lower()
+            flags = df["short"].map(lambda v: "" if pd.isna(v) else str(v)).str.strip().str.lower()   # 열 형식(문자·숫자·bool)과 무관
             boolean_values = {"true": True, "1": True, "1.0": True, "yes": True,
                               "false": False, "0": False, "0.0": False, "no": False, "": False}
             bad = ~flags.isin(boolean_values)
